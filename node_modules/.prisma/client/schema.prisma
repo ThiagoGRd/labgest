@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Cliente {
+  id            Int            @id @default(autoincrement())
+  nome          String         @db.VarChar(255)
+  telefone      String         @db.VarChar(20)
+  email         String?        @db.VarChar(255)
+  endereco      String?
+  dentista      String?        @db.VarChar(255)
+  cro           String         @db.VarChar(50)
+  dataCadastro  DateTime?      @default(dbgenerated("CURRENT_DATE")) @map("data_cadastro") @db.Date
+  ativo         Boolean?       @default(true)
+  observacoes   String?
+  totalPedidos  Int?           @default(0) @map("total_pedidos")
+  valorTotal    Decimal?       @default(0.00) @map("valor_total") @db.Decimal(10, 2)
+  createdAt     DateTime?      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  contasReceber ContaReceber[]
+  ordens        Ordem[]
+
+  @@index([ativo], map: "idx_clientes_ativo")
+  @@index([cro], map: "idx_clientes_cro")
+  @@index([email], map: "idx_clientes_email")
+  @@map("clientes")
+}
+
+model Servico {
+  id             Int       @id @default(autoincrement())
+  nome           String    @db.VarChar(255)
+  descricao      String?
+  preco          Decimal   @db.Decimal(10, 2)
+  tempoProducao  Int?      @default(0) @map("tempo_producao")
+  categoria      String?   @default("Geral") @db.VarChar(100)
+  materiais      Json?     @default("[]")
+  custoMateriais Decimal?  @default(0.00) @map("custo_materiais") @db.Decimal(10, 2)
+  margemLucro    Decimal?  @default(0.00) @map("margem_lucro") @db.Decimal(5, 2)
+  ativo          Boolean?  @default(true)
+  dataCriacao    DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  ordens         Ordem[]
+
+  @@map("servicos")
+}
+
+model Ordem {
+  id              Int            @id @default(autoincrement())
+  clienteId       Int?           @map("cliente_id")
+  clienteNome     String         @map("cliente_nome") @db.VarChar(255)
+  servicoId       Int?           @map("servico_id")
+  servicoNome     String         @map("servico_nome") @db.VarChar(255)
+  nomePaciente    String         @map("nome_paciente") @db.VarChar(255)
+  dataPedido      DateTime?      @default(dbgenerated("CURRENT_DATE")) @map("data_pedido") @db.Date
+  dataEntrega     DateTime       @map("data_entrega") @db.Date
+  dataFinalizacao DateTime?      @map("data_finalizacao") @db.Date
+  status          String?        @default("Aguardando") @db.VarChar(20)
+  valor           Decimal        @db.Decimal(10, 2)
+  valorFinal      Decimal        @map("valor_final") @db.Decimal(10, 2)
+  desconto        Decimal?       @default(0.00) @db.Decimal(10, 2)
+  observacoes     String?
+  corDentes       String?        @map("cor_dentes") @db.VarChar(50)
+  material        String?        @db.VarChar(100)
+  marcaDentes     String?        @map("marca_dentes") @db.VarChar(100)
+  prioridade      String?        @default("Normal") @db.VarChar(20)
+  etapaAtual      String?        @default("Recebimento do arquivo STL") @map("etapa_atual") @db.VarChar(255)
+  etapasCompletas String[]       @default([]) @map("etapas_completas")
+  progresso       Int?           @default(0)
+  arquivoStl      Json?          @map("arquivo_stl")
+  createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  contasReceber   ContaReceber[]
+  cliente         Cliente?       @relation(fields: [clienteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  servico         Servico?       @relation(fields: [servicoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([clienteId], map: "idx_ordens_cliente_id")
+  @@index([dataEntrega], map: "idx_ordens_data_entrega")
+  @@index([prioridade], map: "idx_ordens_prioridade")
+  @@index([status], map: "idx_ordens_status")
+  @@map("ordens")
+}
+
+model ItemOrdem {
+  id                   BigInt   @id @default(autoincrement())
+  ordemId              BigInt?  @map("ordem_id")
+  servicoId            BigInt?  @map("servico_id")
+  quantidade           Int?     @default(1)
+  valorUnitario        Decimal  @map("valor_unitario") @db.Decimal(10, 2)
+  valorTotal           Decimal  @map("valor_total") @db.Decimal(10, 2)
+  elementosDentais     Json?    @default("[]") @map("elementos_dentais")
+  especificacaoProtese Json?    @default("{}") @map("especificacao_protese")
+  observacoes          String?
+  createdAt            DateTime @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+
+  @@index([ordemId], map: "idx_itens_ordem_ordem_id")
+  @@map("itens_ordem")
+}
+
+model Estoque {
+  id               Int       @id @default(autoincrement())
+  nome             String    @db.VarChar(255)
+  categoria        String    @db.VarChar(100)
+  quantidade       Decimal   @default(0) @db.Decimal(10, 3)
+  quantidadeMinima Decimal   @default(0) @map("quantidade_minima") @db.Decimal(10, 3)
+  unidade          String    @default("un") @db.VarChar(10)
+  precoUnitario    Decimal   @default(0.00) @map("preco_unitario") @db.Decimal(10, 2)
+  fornecedor       String?   @db.VarChar(255)
+  localizacao      String?   @db.VarChar(255)
+  dataValidade     DateTime? @map("data_validade") @db.Date
+  codigoBarras     String?   @map("codigo_barras") @db.VarChar(100)
+  dataCadastro     DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_cadastro") @db.Date
+  ativo            Boolean?  @default(true)
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([ativo], map: "idx_estoque_ativo")
+  @@index([categoria], map: "idx_estoque_categoria")
+  @@map("estoque")
+}
+
+model Usuario {
+  id            Int            @id @default(autoincrement())
+  nome          String         @db.VarChar(255)
+  email         String         @unique @db.VarChar(255)
+  senha         String         @db.VarChar(255)
+  tipo          String?        @default("operador") @db.VarChar(20)
+  ativo         Boolean?       @default(true)
+  dataCriacao   DateTime?      @default(now()) @map("data_criacao") @db.Timestamp(6)
+  ultimoAcesso  DateTime?      @map("ultimo_acesso") @db.Timestamp(6)
+  permissoes    String[]       @default([])
+  createdAt     DateTime?      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+  notificacoes  Notificacao[]
+
+  @@index([ativo], map: "idx_usuarios_ativo")
+  @@index([email], map: "idx_usuarios_email")
+  @@map("usuarios")
+}
+
+model ContaReceber {
+  id               Int       @id @default(autoincrement())
+  descricao        String    @db.VarChar(255)
+  clienteId        Int?      @map("cliente_id")
+  clienteNome      String?   @map("cliente_nome") @db.VarChar(255)
+  ordemId          Int?      @map("ordem_id")
+  valor            Decimal   @db.Decimal(10, 2)
+  dataVencimento   DateTime  @map("data_vencimento") @db.Date
+  dataRecebimento  DateTime? @map("data_recebimento") @db.Date
+  status           String?   @default("Pendente") @db.VarChar(20)
+  observacoes      String?
+  formaRecebimento String?   @map("forma_recebimento") @db.VarChar(100)
+  dataCriacao      DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
+  usuarioId        Int?      @map("usuario_id")
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cliente          Cliente?  @relation(fields: [clienteId], references: [id], onUpdate: NoAction)
+  ordem            Ordem?    @relation(fields: [ordemId], references: [id], onUpdate: NoAction)
+  usuario          Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status], map: "idx_contas_receber_status")
+  @@index([dataVencimento], map: "idx_contas_receber_vencimento")
+  @@map("contas_receber")
+}
+
+model ContaPagar {
+  id             Int       @id @default(autoincrement())
+  descricao      String    @db.VarChar(255)
+  categoria      String?   @default("Outros") @db.VarChar(50)
+  fornecedor     String?   @db.VarChar(255)
+  valor          Decimal   @db.Decimal(10, 2)
+  dataVencimento DateTime  @map("data_vencimento") @db.Date
+  dataPagamento  DateTime? @map("data_pagamento") @db.Date
+  status         String?   @default("Pendente") @db.VarChar(20)
+  observacoes    String?
+  formaPagamento String?   @map("forma_pagamento") @db.VarChar(100)
+  dataCriacao    DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
+  usuarioId      Int?      @map("usuario_id")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  usuario        Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status], map: "idx_contas_pagar_status")
+  @@index([dataVencimento], map: "idx_contas_pagar_vencimento")
+  @@map("contas_pagar")
+}
+
+model Notificacao {
+  id         Int       @id @default(autoincrement())
+  tipo       String    @db.VarChar(20)
+  titulo     String    @db.VarChar(255)
+  mensagem   String
+  data       DateTime  @db.Timestamp(6)
+  lida       Boolean?  @default(false)
+  usuarioId  Int?      @map("usuario_id")
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+  usuario    Usuario?  @relation(fields: [usuarioId], references: [id], onUpdate: NoAction)
+
+  @@map("notificacoes")
+}
+
+model Configuracao {
+  id               Int       @id @default(autoincrement())
+  nome_laboratorio String    @default("Laboratório de Prótese") @db.VarChar(255)
+  endereco         String?
+  telefone         String?   @db.VarChar(20)
+  email            String?   @db.VarChar(255)
+  cnpj             String?   @db.VarChar(20)
+  logo             String?
+  tema             String?   @default("light") @db.VarChar(10)
+  moeda            String?   @default("BRL") @db.VarChar(10)
+  fuso_horario     String?   @default("America/Sao_Paulo") @db.VarChar(50)
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("configuracoes")
+}

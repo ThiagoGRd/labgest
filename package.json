@@ -1,0 +1,31 @@
+{
+  "name": "labgest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de Gestão para Laboratório de Prótese Dentária",
+  "workspaces": [
+    "web",
+    "portal",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=web",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:portal": "npm run dev --workspace=portal",
+    "dev:all": "concurrently \"npm run dev:web\" \"npm run dev:portal\"",
+    "build": "npm run build --workspaces",
+    "build:web": "npm run build --workspace=web",
+    "build:portal": "npm run build --workspace=portal",
+    "lint": "npm run lint --workspaces",
+    "db:generate": "npm run generate --workspace=@labgest/database",
+    "db:push": "npm run push --workspace=@labgest/database",
+    "db:migrate": "npm run migrate --workspace=@labgest/database",
+    "db:studio": "npm run studio --workspace=@labgest/database"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
