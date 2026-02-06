@@ -1,40 +1,25 @@
 'use server'
 
 import { prisma } from '@labgest/database'
-import { sendWhatsAppMessage } from '@/lib/whatsapp'
-import { requireUser } from '@/lib/auth-utils'
+import { revalidatePath } from 'next/cache'
 
-export async function notificarMudancaStatus(ordemId: number, novoStatus: string) {
-  await requireUser()
-
-  try {
-    const ordem = await prisma.ordem.findUnique({
-      where: { id: ordemId },
-      include: { cliente: true }
-    })
-
-    if (!ordem || !ordem.cliente?.telefone) {
-      return { success: false, error: 'Ordem ou telefone do cliente não encontrado' }
-    }
-
-    const mensagens: Record<string, string> = {
-      'Em Produção': `Olá Dr(a). ${ordem.cliente.nome}, a ordem do paciente *${ordem.nomePaciente}* iniciou a produção! 🦷`,
-      'Finalizado': `Olá Dr(a). ${ordem.cliente.nome}, a ordem do paciente *${ordem.nomePaciente}* foi finalizada e está pronta para entrega! 🎉`,
-      'Entregue': `Olá Dr(a). ${ordem.cliente.nome}, a ordem do paciente *${ordem.nomePaciente}* saiu para entrega. Obrigado! 🛵`,
-    }
-
-    const mensagem = mensagens[novoStatus]
-    
-    if (!mensagem) {
-      return { success: false, error: 'Status sem notificação configurada' }
-    }
-
-    const result = await sendWhatsAppMessage(ordem.cliente.telefone, mensagem)
-    
-    return result
-
-  } catch (error) {
-    console.error('Erro ao notificar:', error)
-    return { success: false, error: 'Erro interno ao notificar' }
+export async function getNotificacoesConfig() {
+  // Por enquanto retorna mock, mas preparado para ler do banco se criarmos tabela de configs de usuário
+  // O ideal seria salvar isso num campo JSON 'preferencias' no modelo Usuario
+  return {
+    novaOrdem: true,
+    atrasos: true,
+    estoqueBaixo: true,
+    ordemFinalizada: false,
+    resumoDiario: false
   }
+}
+
+export async function saveNotificacoesConfig(config: any) {
+  // Aqui implementaríamos o update no banco
+  // Ex: await prisma.usuario.update({ where: { email: user.email }, data: { preferencias: config } })
+  
+  console.log('Salvando preferências:', config)
+  revalidatePath('/configuracoes')
+  return { success: true }
 }
