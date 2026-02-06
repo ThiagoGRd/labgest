@@ -72,7 +72,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
       <NovaContaModal 
         isOpen={modalOpen} 
         onClose={() => setModalOpen(false)}
-        type={modalType}
+        tipoInicial={modalType}
       />
 
       <Header 
