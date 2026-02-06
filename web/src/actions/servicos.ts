@@ -22,10 +22,18 @@ export async function getServicos() {
       // Parse materiais
       let materiais: string[] = []
       if (Array.isArray(s.materiais)) {
-        materiais = s.materiais as string[]
+        // Se for array de objetos, extrair nome ou stringify
+        materiais = s.materiais.map((m: any) => 
+          typeof m === 'string' ? m : (m.nome || m.material_nome || JSON.stringify(m))
+        )
       } else if (typeof s.materiais === 'string') {
         try {
-          materiais = JSON.parse(s.materiais)
+          const parsed = JSON.parse(s.materiais)
+          if (Array.isArray(parsed)) {
+            materiais = parsed.map((m: any) => 
+              typeof m === 'string' ? m : (m.nome || m.material_nome || JSON.stringify(m))
+            )
+          }
         } catch {
           materiais = []
         }
