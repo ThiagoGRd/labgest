@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { gerarRelatorioIA } from '@/actions/relatorios'
 import {
   Sparkles,
   Send,
@@ -19,55 +20,32 @@ import {
   RefreshCw,
   MessageSquare,
   Loader2,
+  AlertTriangle,
+  Lightbulb,
 } from 'lucide-react'
 
 // Relatórios rápidos predefinidos
 const quickReports = [
-  { icon: DollarSign, label: 'Faturamento do mês', query: 'Qual foi o faturamento deste mês?' },
-  { icon: TrendingUp, label: 'Produtividade', query: 'Qual a produtividade dos técnicos esta semana?' },
-  { icon: Users, label: 'Clientes ativos', query: 'Quais dentistas mais pediram no último trimestre?' },
-  { icon: Package, label: 'Estoque crítico', query: 'Quais materiais estão com estoque baixo?' },
-  { icon: Calendar, label: 'Ordens atrasadas', query: 'Quantas ordens estão atrasadas?' },
-  { icon: BarChart3, label: 'Serviços populares', query: 'Quais são os serviços mais realizados?' },
+  { icon: DollarSign, label: 'Análise Geral', query: 'Gere uma análise geral do laboratório' },
+  { icon: TrendingUp, label: 'Tendências', query: 'Quais são as tendências atuais?' },
+  { icon: AlertTriangle, label: 'Alertas de Risco', query: 'Existem riscos ou alertas?' },
 ]
 
-// Mensagens de exemplo
-const exemplosMensagens: Message[] = [
-  {
-    role: 'user' as const,
-    content: 'Qual foi o faturamento de janeiro?',
-  },
-  {
-    role: 'assistant' as const,
-    content: `📊 **Faturamento de Janeiro/2026**
-
-O faturamento total de janeiro foi de **R$ 42.350,00**.
-
-**Detalhamento por categoria:**
-- Próteses Totais: R$ 15.300 (36%)
-- Protocolo: R$ 12.800 (30%)
-- Parciais Removíveis: R$ 8.450 (20%)
-- Provisórios: R$ 3.600 (8.5%)
-- Pontes Adesivas: R$ 2.200 (5.5%)
-
-**Comparativo:**
-- ↑ 12% vs dezembro
-- ↑ 8% vs janeiro/2025
-
-**Top 3 dentistas:**
-1. Dr. João Santos - R$ 12.450
-2. Dra. Ana Lima - R$ 9.800
-3. Dr. Paulo Costa - R$ 7.200`,
-  },
-]
+interface RelatorioData {
+  analiseGeral: string
+  tendencias: string[]
+  sugestoesAcao: string[]
+  alertaRisco: string | null
+}
 
 interface Message {
   role: 'user' | 'assistant'
-  content: string
+  content?: string
+  data?: RelatorioData
 }
 
 export default function RelatoriosPage() {
-  const [messages, setMessages] = useState<Message[]>(exemplosMensagens)
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -89,15 +67,23 @@ export default function RelatoriosPage() {
     setInput('')
     setLoading(true)
 
-    // Simular resposta da IA
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    const aiResponse: Message = {
-      role: 'assistant',
-      content: generateMockResponse(messageText),
+    try {
+      const data = await gerarRelatorioIA()
+      
+      const aiResponse: Message = {
+        role: 'assistant',
+        data: data,
+      }
+      setMessages(prev => [...prev, aiResponse])
+    } catch (error) {
+      console.error(error)
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Desculpe, ocorreu um erro ao gerar o relatório. Tente novamente.' 
+      }])
+    } finally {
+      setLoading(false)
     }
-    setMessages(prev => [...prev, aiResponse])
-    setLoading(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -111,7 +97,7 @@ export default function RelatoriosPage() {
     <DashboardLayout>
       <Header 
         title="Relatórios Inteligentes" 
-        subtitle="Pergunte qualquer coisa sobre seu laboratório"
+        subtitle="Análise automática do seu laboratório com IA"
       />
       
       <div className="p-6 h-[calc(100vh-64px)] flex gap-6">
@@ -139,28 +125,6 @@ export default function RelatoriosPage() {
               ))}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Exemplos de Perguntas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="text-sm text-slate-600 space-y-2">
-                <li className="cursor-pointer hover:text-indigo-600" onClick={() => handleSend('Qual o tempo médio de produção de prótese total?')}>
-                  "Qual o tempo médio de produção?"
-                </li>
-                <li className="cursor-pointer hover:text-indigo-600" onClick={() => handleSend('Quais dentistas não fazem pedidos há mais de 30 dias?')}>
-                  "Dentistas inativos há 30 dias?"
-                </li>
-                <li className="cursor-pointer hover:text-indigo-600" onClick={() => handleSend('Quanto gastei em PMMA este mês?')}>
-                  "Gastos com PMMA este mês?"
-                </li>
-                <li className="cursor-pointer hover:text-indigo-600" onClick={() => handleSend('Qual técnico produziu mais esta semana?')}>
-                  "Técnico mais produtivo?"
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Main Chat Area */}
@@ -173,11 +137,11 @@ export default function RelatoriosPage() {
                   <Sparkles className="h-8 w-8 text-indigo-600" />
                 </div>
                 <h3 className="text-lg font-medium text-slate-900 mb-2">
-                  Olá! Como posso ajudar?
+                  Olá! Eu sou a IA do LabGest.
                 </h3>
                 <p className="text-slate-500 max-w-md">
-                  Faça perguntas sobre seu laboratório em linguagem natural. 
-                  Posso gerar relatórios, analisar dados e fornecer insights.
+                  Estou analisando seus dados financeiros, de produção e clientes em tempo real.
+                  Clique em um dos relatórios rápidos para ver meus insights.
                 </p>
               </div>
             )}
@@ -188,10 +152,10 @@ export default function RelatoriosPage() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-2xl rounded-2xl px-5 py-4 ${
+                  className={`max-w-3xl rounded-2xl px-5 py-4 ${
                     message.role === 'user'
                       ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-900'
+                      : 'bg-slate-100 text-slate-900 w-full'
                   }`}
                 >
                   {message.role === 'assistant' && (
@@ -200,18 +164,82 @@ export default function RelatoriosPage() {
                       <span className="text-sm font-medium text-slate-700">LabGest IA</span>
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {message.content}
-                  </div>
+                  
+                  {message.content && (
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {message.content}
+                    </div>
+                  )}
+
+                  {message.data && (
+                    <div className="space-y-6">
+                      {/* Análise Geral */}
+                      <div>
+                        <h4 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-indigo-600" />
+                          Análise Geral
+                        </h4>
+                        <p className="text-slate-600 text-sm leading-relaxed">
+                          {message.data.analiseGeral}
+                        </p>
+                      </div>
+
+                      {/* Tendências */}
+                      {message.data.tendencias.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-emerald-600" />
+                            Tendências
+                          </h4>
+                          <ul className="space-y-1">
+                            {message.data.tendencias.map((item, i) => (
+                              <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
+                                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Sugestões */}
+                      {message.data.sugestoesAcao.length > 0 && (
+                        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                          <h4 className="font-semibold text-indigo-900 mb-2 flex items-center gap-2">
+                            <Lightbulb className="h-4 w-4 text-indigo-600" />
+                            Sugestões de Ação
+                          </h4>
+                          <ul className="space-y-2">
+                            {message.data.sugestoesAcao.map((item, i) => (
+                              <li key={i} className="text-sm text-indigo-700 flex items-start gap-2">
+                                <span className="font-bold text-indigo-400">{i + 1}.</span>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Alertas */}
+                      {message.data.alertaRisco && (
+                        <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                          <h4 className="font-semibold text-red-900 mb-2 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                            Atenção Necessária
+                          </h4>
+                          <p className="text-sm text-red-700">
+                            {message.data.alertaRisco}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {message.role === 'assistant' && (
                     <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
                       <Button variant="ghost" size="sm" className="text-xs">
                         <Download className="h-3 w-3 mr-1" />
-                        Exportar
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-xs">
-                        <RefreshCw className="h-3 w-3 mr-1" />
-                        Refazer
+                        Salvar Relatório
                       </Button>
                     </div>
                   )}
@@ -223,7 +251,7 @@ export default function RelatoriosPage() {
               <div className="flex justify-start">
                 <div className="bg-slate-100 rounded-2xl px-5 py-4 flex items-center gap-3">
                   <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                  <span className="text-sm text-slate-600">Analisando dados...</span>
+                  <span className="text-sm text-slate-600">Processando dados com IA...</span>
                 </div>
               </div>
             )}
@@ -237,7 +265,7 @@ export default function RelatoriosPage() {
               <div className="relative flex-1">
                 <MessageSquare className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 <Input
-                  placeholder="Pergunte algo sobre seu laboratório..."
+                  placeholder="Peça uma nova análise..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -253,9 +281,6 @@ export default function RelatoriosPage() {
                 <Send className="h-5 w-5" />
               </Button>
             </div>
-            <p className="text-xs text-slate-400 mt-2 text-center">
-              A IA analisa os dados do seu laboratório para gerar insights personalizados
-            </p>
           </div>
         </Card>
       </div>
@@ -263,108 +288,3 @@ export default function RelatoriosPage() {
   )
 }
 
-// Função para gerar respostas mockadas
-function generateMockResponse(query: string): string {
-  const queryLower = query.toLowerCase()
-
-  if (queryLower.includes('atrasad')) {
-    return `⚠️ **Ordens Atrasadas**
-
-Atualmente há **3 ordens atrasadas**:
-
-1. **#002** - Carlos Oliveira
-   - Serviço: Protocolo Inferior
-   - Atraso: 1 dia
-   - Dentista: Dra. Ana Lima
-
-2. **#008** - Roberto Silva  
-   - Serviço: Prótese Total Superior
-   - Atraso: 2 dias
-   - Dentista: Dr. João Santos
-
-3. **#012** - Marina Costa
-   - Serviço: Parcial Removível
-   - Atraso: 1 dia
-   - Dentista: Dr. Paulo Costa
-
-**Recomendação:** Priorize a ordem #008 que tem maior atraso e é de um cliente frequente.`
-  }
-
-  if (queryLower.includes('estoque') || queryLower.includes('material')) {
-    return `📦 **Alerta de Estoque**
-
-**4 itens** estão abaixo do nível mínimo:
-
-| Material | Atual | Mínimo | Status |
-|----------|-------|--------|--------|
-| PMMA Rosa | 2 un | 5 un | 🔴 Crítico |
-| Dentes A2 | 3 cx | 5 cx | 🔴 Crítico |
-| Resina Caracterização | 1 un | 3 un | 🟡 Baixo |
-| Gesso Tipo IV | 4 kg | 10 kg | 🟡 Baixo |
-
-**Previsão de consumo:**
-- PMMA Rosa: ~3 unidades/semana
-- Dentes A2: ~2 caixas/semana
-
-**Sugestão:** Faça pedido de reposição nos próximos 2 dias para evitar paradas na produção.`
-  }
-
-  if (queryLower.includes('produtiv') || queryLower.includes('técnico')) {
-    return `👥 **Produtividade dos Técnicos - Esta Semana**
-
-| Técnico | Ordens | Tempo Médio | Eficiência |
-|---------|--------|-------------|------------|
-| João | 12 | 4.2h | ⭐ 95% |
-| Marcos | 9 | 5.1h | ⭐ 88% |
-
-**Destaques:**
-- João completou 3 protocolos esta semana (recorde!)
-- Tempo médio geral reduziu 15% vs semana passada
-- Nenhum retrabalho registrado
-
-**Distribuição por tipo:**
-- Próteses Totais: 8 (38%)
-- Protocolo: 5 (24%)
-- Parciais: 4 (19%)
-- Outros: 4 (19%)`
-  }
-
-  if (queryLower.includes('dentista') && queryLower.includes('inativ')) {
-    return `👤 **Dentistas Inativos (sem pedidos há 30+ dias)**
-
-Encontrei **2 dentistas** inativos:
-
-1. **Dra. Fernanda Reis** (CRO-AL 1122)
-   - Último pedido: 20/11/2025 (77 dias)
-   - Total histórico: 5 pedidos
-   - Valor total: R$ 4.500
-
-2. **Dr. Ricardo Mendes** (CRO-AL 4455)
-   - Último pedido: 15/12/2025 (52 dias)
-   - Total histórico: 8 pedidos
-   - Valor total: R$ 7.200
-
-**Sugestão:** Considere entrar em contato para:
-- Verificar satisfação com serviços anteriores
-- Informar sobre novos serviços/promoções
-- Atualizar dados cadastrais`
-  }
-
-  // Resposta genérica
-  return `📊 **Análise Concluída**
-
-Com base na sua pergunta, analisei os dados do laboratório.
-
-**Resumo:**
-- Total de ordens este mês: 45
-- Faturamento acumulado: R$ 38.500
-- Taxa de entrega no prazo: 92%
-- Clientes ativos: 6
-
-Para uma análise mais específica, tente perguntas como:
-- "Qual o faturamento por categoria?"
-- "Quais ordens estão atrasadas?"
-- "Qual o tempo médio de produção?"
-
-Posso ajudar com algo mais específico?`
-}

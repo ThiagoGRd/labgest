@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
+import { logout } from '@/actions/auth'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -85,7 +86,10 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
                   <p className="text-xs text-slate-500">{user.cro}</p>
                 </div>
               </div>
-              <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+              <button 
+                onClick={() => logout()}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
                 <LogOut className="h-5 w-5" />
               </button>
               <button 

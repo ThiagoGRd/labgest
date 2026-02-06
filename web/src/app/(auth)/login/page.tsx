@@ -5,27 +5,21 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { login } from '@/actions/auth'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (formData: FormData) => {
     setLoading(true)
     setError('')
 
-    // Simular login
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    // TODO: Implementar autenticação real
-    if (email === 'admin@labgest.com' && password === '123456') {
-      window.location.href = '/dashboard'
-    } else {
-      setError('Email ou senha incorretos')
+    const result = await login(formData)
+    
+    if (result?.error) {
+      setError(result.error)
       setLoading(false)
     }
   }
@@ -52,7 +46,7 @@ export default function LoginPage() {
             <p className="text-slate-500">Entre com suas credenciais para acessar o sistema.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form action={handleSubmit} className="space-y-5">
             {error && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-600">{error}</p>
@@ -65,10 +59,9 @@ export default function LoginPage() {
               </label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
@@ -80,10 +73,9 @@ export default function LoginPage() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   required
                   className="pr-10"
                 />

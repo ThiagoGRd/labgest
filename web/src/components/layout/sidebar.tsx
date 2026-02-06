@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
+import { logout } from '@/actions/auth'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -108,6 +109,7 @@ export function Sidebar({ user }: SidebarProps) {
               <p className="text-xs text-slate-400 truncate">{user.tipo}</p>
             </div>
             <button
+              onClick={() => logout()}
               className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
               title="Sair"
             >

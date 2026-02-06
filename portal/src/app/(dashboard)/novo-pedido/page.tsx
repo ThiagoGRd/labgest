@@ -5,6 +5,7 @@ import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FileUpload } from '@/components/ui/file-upload'
 import {
   Upload,
   FileText,
@@ -42,7 +43,7 @@ export default function NovoPedidoPage() {
     corDentes: '',
     dataEntrega: '',
     observacoes: '',
-    arquivos: [] as File[],
+    arquivos: [] as string[],
   })
 
   const user = {
@@ -51,12 +52,11 @@ export default function NovoPedidoPage() {
     cro: 'CRO-AL 1234',
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files)
+  const handleFileUpload = (path: string) => {
+    if (path) {
       setFormData(prev => ({
         ...prev,
-        arquivos: [...prev.arquivos, ...newFiles]
+        arquivos: [...prev.arquivos, path]
       }))
     }
   }
@@ -238,43 +238,34 @@ export default function NovoPedidoPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Arquivos (STL, ZIP, Fotos)
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-emerald-400 transition-colors">
-                    <input
-                      type="file"
-                      multiple
-                      accept=".stl,.zip,.jpg,.jpeg,.png"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="file-upload"
-                    />
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      <Upload className="h-10 w-10 text-slate-400 mx-auto mb-3" />
-                      <p className="text-slate-600">Clique para selecionar ou arraste arquivos</p>
-                      <p className="text-xs text-slate-400 mt-1">STL, ZIP, JPG, PNG (máx. 50MB cada)</p>
-                    </label>
-                  </div>
+                  
+                  <div className="space-y-4">
+                    <FileUpload onUploadComplete={handleFileUpload} />
 
-                  {formData.arquivos.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      {formData.arquivos.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <FileText className="h-5 w-5 text-slate-400" />
-                            <div>
-                              <p className="text-sm font-medium text-slate-900">{file.name}</p>
-                              <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    {formData.arquivos.length > 0 && (
+                      <div className="space-y-2">
+                        {formData.arquivos.map((path, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-slate-400" />
+                              <div>
+                                <p className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
+                                  {path.split('/').pop()}
+                                </p>
+                                <p className="text-xs text-emerald-600">Enviado</p>
+                              </div>
                             </div>
+                            <button
+                              onClick={() => removeFile(index)}
+                              className="p-1 text-slate-400 hover:text-red-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
-                          <button
-                            onClick={() => removeFile(index)}
-                            className="p-1 text-slate-400 hover:text-red-600"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex justify-between">
