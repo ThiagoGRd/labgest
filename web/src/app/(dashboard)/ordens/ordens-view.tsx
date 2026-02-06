@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useRef } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
