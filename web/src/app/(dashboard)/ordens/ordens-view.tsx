@@ -140,10 +140,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   })
 
   const handleNotify = async (id: number) => {
-    if (confirm('Enviar notificação de conclusão via WhatsApp?')) {
+    if (confirm('Finalizar ordem e notificar dentista via WhatsApp?')) {
       const result = await notificarMudancaStatus(id, 'Finalizado')
-      if (result.success) {
-        alert('Notificação enviada com sucesso!')
+      if (result.success && result.whatsappLink) {
+        window.open(result.whatsappLink, '_blank')
       } else {
         alert('Erro ao enviar: ' + (result.error || 'Verifique o console'))
       }

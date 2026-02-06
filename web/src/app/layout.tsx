@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "sonner";
+import { RealtimeOrders } from "@/components/providers/realtime-orders";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -24,11 +26,13 @@ export default function RootLayout({
       <body className={`${inter.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
           {children}
+          <Toaster position="top-right" richColors />
+          <RealtimeOrders />
         </ThemeProvider>
       </body>
     </html>
