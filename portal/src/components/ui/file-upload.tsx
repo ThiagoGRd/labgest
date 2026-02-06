@@ -30,6 +30,9 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
     maxFiles: 1,
     accept: {
       'model/stl': ['.stl'],
+      'application/vnd.ms-pki.stl': ['.stl'],
+      'application/x-stl': ['.stl'],
+      'application/octet-stream': ['.stl'],
       'application/zip': ['.zip'],
       'application/x-zip-compressed': ['.zip'],
       'model/obj': ['.obj'],
