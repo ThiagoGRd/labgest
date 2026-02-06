@@ -22,8 +22,8 @@ export async function getOrdens() {
       servico: o.servicoNome || o.servico?.nome || 'Serviço',
       status: o.status || 'Aguardando',
       prioridade: o.prioridade || 'Normal',
-      dataEntrada: o.dataPedido ? o.dataPedido.toISOString() : null,
-      dataEntrega: o.dataEntrega.toISOString(),
+      dataEntrada: o.dataPedido && !isNaN(o.dataPedido.getTime()) ? o.dataPedido.toISOString() : null,
+      dataEntrega: o.dataEntrega && !isNaN(o.dataEntrega.getTime()) ? o.dataEntrega.toISOString() : new Date().toISOString(), // Fallback para hoje se inválido
       etapaAtual: o.etapaAtual || 'Recebimento',
       valor: Number(o.valorFinal || o.valor),
       corDentes: o.corDentes || '',
