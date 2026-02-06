@@ -86,10 +86,16 @@ export async function createOrdem(data: {
 
 export async function getDadosNovaOrdem() {
   try {
-    const [clientes, servicos] = await Promise.all([
+    const [clientes, servicosRaw] = await Promise.all([
       prisma.cliente.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
       prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, preco: true } })
     ])
+
+    const servicos = servicosRaw.map(s => ({
+      ...s,
+      preco: Number(s.preco)
+    }))
+
     return { clientes, servicos }
   } catch (error) {
     console.error('Erro ao buscar dados para nova ordem:', error)
