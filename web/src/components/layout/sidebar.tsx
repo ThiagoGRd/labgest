@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Clock,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
