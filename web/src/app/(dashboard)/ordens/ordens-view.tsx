@@ -1,6 +1,5 @@
-'use client'
-
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
+import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
 import {
   Search,
@@ -23,6 +23,7 @@ import {
   FileText,
   Paperclip,
   Bell,
+  Printer,
 } from 'lucide-react'
 
 // Types
@@ -38,6 +39,10 @@ interface Ordem {
   etapaAtual: string
   progresso?: number // Optional/Calculated
   arquivos?: string[]
+  // Campos extras que podem vir do backend ou serem adaptados
+  dataEntrada?: string
+  corDentes?: string
+  observacoes?: string
 }
 
 interface OrdensViewProps {
@@ -96,6 +101,32 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('todos')
   const [modalOpen, setModalOpen] = useState(false)
+  const [printOrdem, setPrintOrdem] = useState<any>(null)
+  
+  const componentRef = useRef<HTMLDivElement>(null)
+  const handlePrint = useReactToPrint({
+    contentRef: componentRef,
+  })
+
+  // Função intermediária para carregar dados e imprimir
+  const onPrintClick = (ordem: Ordem) => {
+    // Adaptar dados para o formato da ficha
+    const dadosImpressao = {
+      id: ordem.id,
+      paciente: ordem.paciente,
+      cliente: { nome: ordem.cliente.nome },
+      servico: { nome: ordem.servico },
+      dataEntrada: ordem.dataEntrada || new Date().toISOString(), // Fallback se não vier
+      dataEntrega: ordem.dataEntrega,
+      corDentes: ordem.corDentes,
+      observacoes: ordem.observacoes,
+    }
+    setPrintOrdem(dadosImpressao)
+    // Pequeno delay para garantir que o state atualizou e o componente renderizou antes de imprimir
+    setTimeout(() => {
+      handlePrint()
+    }, 100)
+  }
 
   const ordens = initialData || []
 
@@ -121,6 +152,11 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
 
   return (
     <DashboardLayout>
+      {/* Hidden Print Component */}
+      <div style={{ display: 'none' }}>
+        {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
+      </div>
+
       <NovaOrdemModal 
         isOpen={modalOpen} 
         onClose={() => setModalOpen(false)}
@@ -272,6 +308,13 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => onPrintClick(ordem)}
+                            className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Imprimir Ficha"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
                           <button 
                             onClick={() => handleNotify(ordem.id)}
                             className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
