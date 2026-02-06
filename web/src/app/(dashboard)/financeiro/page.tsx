@@ -5,6 +5,6 @@ export const dynamic = 'force-dynamic'
 
 export default async function FinanceiroPage() {
   const contas = await getContas()
-  
-  return <FinanceiroView initialData={contas} />
+
+  return <FinanceiroView receber={contas.receber} pagar={contas.pagar} />
 }
