@@ -21,7 +21,8 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    return { error: 'Email ou senha inválidos' }
+    console.error('Login error:', error)
+    return { error: error.message } // Retornando erro real para facilitar debug
   }
 
   redirect('/dashboard')

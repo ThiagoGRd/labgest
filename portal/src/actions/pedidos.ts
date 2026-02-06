@@ -99,6 +99,35 @@ export async function getMeusPedidos() {
   }
 }
 
+export async function getHistoricoPedidos() {
+  const logado = await getClienteLogado()
+  
+  if (!logado?.cliente) return []
+
+  try {
+    const pedidos = await prisma.ordem.findMany({
+      where: { 
+        clienteId: logado.cliente.id,
+        status: { in: ['Finalizado', 'Entregue', 'Cancelado'] }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    return pedidos.map(p => ({
+      id: p.id,
+      paciente: p.nomePaciente,
+      servico: p.servicoNome,
+      status: p.status || 'Finalizado',
+      dataEntrega: p.dataEntrega.toISOString(),
+      dataFinalizacao: p.dataFinalizacao?.toISOString() || p.updatedAt?.toISOString() || new Date().toISOString(),
+      valor: Number(p.valorFinal),
+    }))
+  } catch (error) {
+    console.error('Erro ao buscar histórico:', error)
+    return []
+  }
+}
+
 export async function getDashboardStats() {
   const logado = await getClienteLogado()
   
