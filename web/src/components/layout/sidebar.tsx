@@ -24,6 +24,7 @@ import { logout } from '@/actions/auth'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Prioridades', href: '/prioridades', icon: Clock },
   { name: 'Ordens', href: '/ordens', icon: ClipboardList },
   { name: 'Produção', href: '/producao', icon: Kanban },
   { name: 'Clientes', href: '/clientes', icon: Users },
