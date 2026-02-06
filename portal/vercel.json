@@ -1,0 +1,4 @@
+{
+  "framework": "nextjs",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ../packages"
+}

@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/portal',
-        destination: process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3001',
+        destination: process.env.NEXT_PUBLIC_PORTAL_URL || (process.env.NODE_ENV === 'production' ? 'https://labgest-portal.vercel.app' : 'http://localhost:3001'),
         permanent: false,
       },
     ]

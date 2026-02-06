@@ -137,6 +137,7 @@ export async function getServicosDisponiveis() {
     
     return servicos.map(s => ({
       ...s,
+      categoria: s.categoria || 'Geral',
       preco: Number(s.preco)
     }))
   } catch (error) {
