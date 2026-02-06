@@ -91,7 +91,7 @@ export async function getMeusPedidos() {
       status: p.status || 'Aguardando',
       dataEntrega: p.dataEntrega.toISOString(),
       valor: Number(p.valorFinal),
-      etapa: p.etapaAtual
+      etapa: p.etapaAtual || 'Recebimento'
     }))
   } catch (error) {
     console.error('Erro ao buscar pedidos:', error)
