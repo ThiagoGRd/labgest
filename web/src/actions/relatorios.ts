@@ -6,6 +6,93 @@ import { requireUser } from '@/lib/auth-utils'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
+export async function getRelatorioFinanceiro() {
+  await requireUser()
+
+  try {
+    const hoje = new Date()
+    // Últimos 6 meses
+    const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 5, 1)
+
+    // Agrupar Receitas (Contas Receber Pagas + Pendentes)
+    const receitas = await prisma.contaReceber.findMany({
+      where: {
+        dataVencimento: { gte: inicioPeriodo },
+      },
+      select: {
+        valor: true,
+        dataVencimento: true,
+        status: true
+      }
+    })
+
+    // Agrupar Despesas (Contas Pagar)
+    const despesas = await prisma.contaPagar.findMany({
+      where: {
+        dataVencimento: { gte: inicioPeriodo },
+      },
+      select: {
+        valor: true,
+        dataVencimento: true,
+        status: true
+      }
+    })
+
+    // Processar dados para gráfico mensal
+    const dadosMensais = new Map()
+
+    // Inicializar meses
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      const key = d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+      dadosMensais.set(key, { mes: key, receita: 0, despesa: 0, lucro: 0, ordem: i })
+    }
+
+    receitas.forEach(r => {
+      const key = r.dataVencimento.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+      if (dadosMensais.has(key)) {
+        const dado = dadosMensais.get(key)
+        dado.receita += Number(r.valor)
+        dado.lucro += Number(r.valor)
+      }
+    })
+
+    despesas.forEach(d => {
+      const key = d.dataVencimento.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+      if (dadosMensais.has(key)) {
+        const dado = dadosMensais.get(key)
+        dado.despesa += Number(d.valor)
+        dado.lucro -= Number(d.valor)
+      }
+    })
+
+    const grafico = Array.from(dadosMensais.values()).sort((a, b) => b.ordem - a.ordem)
+
+    // Top Clientes (Ticket Médio)
+    const topClientes = await prisma.ordem.groupBy({
+      by: ['clienteNome'],
+      _sum: { valorFinal: true },
+      _count: { id: true },
+      orderBy: { _sum: { valorFinal: 'desc' } },
+      take: 5,
+    })
+
+    return {
+      grafico,
+      topClientes: topClientes.map(c => ({
+        nome: c.clienteNome,
+        total: Number(c._sum.valorFinal),
+        qtd: c._count.id,
+        ticket: Number(c._sum.valorFinal) / c._count.id
+      }))
+    }
+
+  } catch (error) {
+    console.error('Erro no relatório financeiro:', error)
+    return { grafico: [], topClientes: [] }
+  }
+}
+
 export async function gerarRelatorioIA() {
   await requireUser()
 
