@@ -33,7 +33,7 @@ export function NovoItemEstoqueModal({ isOpen, onClose, onSuccess }: NovoItemEst
     localizacao: '',
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
     if (error) setError('')
   }

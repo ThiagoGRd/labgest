@@ -37,7 +37,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
     if (isOpen) setTipo(tipoInicial)
   }, [isOpen, tipoInicial])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
     if (error) setError('')
   }

@@ -35,7 +35,7 @@ export default function NovaServicoModal({ isOpen, onClose, onSuccess }: NovoSer
     descricao: '',
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
     if (error) setError('')
   }
