@@ -233,7 +233,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Input placeholder="Nome Completo" value={newUser.nome} onChange={e => setNewUser({...newUser, nome: e.target.value})} />
                         <Input placeholder="Email" type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
-                        <Select value={newUser.tipo} onValueChange={v => setNewUser({...newUser, tipo: v})}>
+                        <Select value={newUser.tipo || 'operador'} onValueChange={v => setNewUser({...newUser, tipo: v})}>
                           <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="operador">Operador (Acesso padrão)</SelectItem>
