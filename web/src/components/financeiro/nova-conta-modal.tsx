@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { createConta } from '@/actions/financeiro'
 
@@ -172,13 +172,17 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
             <Select
               name="cliente"
               value={formData.cliente}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, cliente: val }))}
               required
             >
-              <option value="">Selecione...</option>
-              {clientes.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {clientes.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         ) : (
@@ -189,13 +193,17 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
             <Select
               name="categoria"
               value={formData.categoria}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, categoria: val }))}
               required
             >
-              <option value="">Selecione...</option>
-              {categoriasPagar.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {categoriasPagar.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         )}
