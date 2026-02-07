@@ -27,8 +27,10 @@ import {
   Tooltip, 
   ResponsiveContainer,
   LineChart,
-  Line
+  Line,
+  TooltipProps
 } from 'recharts'
+import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 
 interface RelatorioData {
   analiseGeral: string
@@ -75,6 +77,26 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 
+  const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
+          <p className="font-medium text-slate-900 mb-2">{label}</p>
+          {payload.map((entry, index) => (
+            <div key={index} className="flex items-center gap-2 text-sm">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="text-slate-500">{entry.name}:</span>
+              <span className="font-medium text-slate-900">
+                {formatCurrency(Number(entry.value))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return null
+  }
+
   return (
     <DashboardLayout>
       <Header title="Relatórios & Inteligência" subtitle="Análise financeira e operacional" />
@@ -95,7 +117,7 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="mes" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val/1000}k`} />
-                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                  <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="receita" name="Receita" fill="#10b981" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="despesa" name="Despesa" fill="#ef4444" radius={[4, 4, 0, 0]} />
                 </BarChart>
