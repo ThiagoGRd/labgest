@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
+import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
 import {
   Search,
@@ -26,6 +27,7 @@ import {
   Paperclip,
   Bell,
   Printer,
+  Package,
 } from 'lucide-react'
 
 // Types
@@ -104,11 +106,32 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [statusFilter, setStatusFilter] = useState<string>('todos')
   const [modalOpen, setModalOpen] = useState(false)
   const [printOrdem, setPrintOrdem] = useState<any>(null)
+  const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
   
   const componentRef = useRef<HTMLDivElement>(null)
+  const etiquetaRef = useRef<HTMLDivElement>(null)
+
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
   })
+
+  const handlePrintEtiqueta = useReactToPrint({
+    contentRef: etiquetaRef,
+  })
+
+  const onPrintEtiquetaClick = (ordem: Ordem) => {
+    const dadosEtiqueta = {
+      id: ordem.id,
+      paciente: ordem.paciente,
+      cliente: { nome: ordem.cliente.nome },
+      servico: { nome: ordem.servico },
+      dataEntrega: ordem.dataEntrega,
+    }
+    setPrintEtiqueta(dadosEtiqueta)
+    setTimeout(() => {
+      handlePrintEtiqueta()
+    }, 100)
+  }
 
   // Função intermediária para carregar dados e imprimir
   const onPrintClick = (ordem: Ordem) => {
@@ -154,9 +177,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
 
   return (
     <DashboardLayout>
-      {/* Hidden Print Component */}
+      {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
+        {printEtiqueta && <EtiquetaImpressao ref={etiquetaRef} ordem={printEtiqueta} />}
       </div>
 
       <NovaOrdemModal 
@@ -310,6 +334,13 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => onPrintEtiquetaClick(ordem)}
+                            className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Imprimir Etiqueta"
+                          >
+                            <Package className="h-4 w-4" />
+                          </button>
                           <button
                             onClick={() => onPrintClick(ordem)}
                             className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
