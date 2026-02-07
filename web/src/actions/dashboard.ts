@@ -22,10 +22,13 @@ export async function getDashboardData() {
       prisma.ordem.count({
         where: { createdAt: { gte: inicioMes } }
       }),
-      // Faturamento Mês
-      prisma.ordem.aggregate({
-        where: { createdAt: { gte: inicioMes } },
-        _sum: { valorFinal: true }
+      // Faturamento Mês (soma de contas a receber do mês)
+      prisma.contaReceber.aggregate({
+        where: { 
+          createdAt: { gte: inicioMes },
+          // status: 'Pago' // Opcional: considerar só pago ou tudo
+        },
+        _sum: { valor: true }
       }),
       // Atrasadas (não finalizadas e data entrega < hoje)
       prisma.ordem.count({
@@ -52,7 +55,7 @@ export async function getDashboardData() {
 
     return {
       totalOrdens: totalOrdensMes,
-      faturamento: Number(faturamentoMes._sum.valorFinal || 0),
+      faturamento: Number(faturamentoMes._sum.valor || 0),
       atrasadas: ordensAtrasadas,
       emProducao: ordensEmProducao,
       proximasEntregas: proximasEntregas.map(o => ({
