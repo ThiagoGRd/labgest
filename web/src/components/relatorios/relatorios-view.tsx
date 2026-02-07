@@ -27,10 +27,8 @@ import {
   Tooltip, 
   ResponsiveContainer,
   LineChart,
-  Line,
-  TooltipProps
+  Line
 } from 'recharts'
-import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 
 interface RelatorioData {
   analiseGeral: string
@@ -77,7 +75,7 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 
-  const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+  const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
