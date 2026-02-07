@@ -84,6 +84,75 @@ export async function createOrdem(data: {
   }
 }
 
+export async function updateOrdem(id: number, data: {
+  paciente: string
+  dataEntrega: string
+  prioridade: string
+  status: string
+  etapaAtual: string
+  corDentes: string
+  material: string
+  observacoes: string
+}) {
+  await requireUser()
+  try {
+    await prisma.ordem.update({
+      where: { id },
+      data: {
+        nomePaciente: data.paciente,
+        dataEntrega: new Date(data.dataEntrega),
+        prioridade: data.prioridade,
+        status: data.status,
+        etapaAtual: data.etapaAtual,
+        corDentes: data.corDentes,
+        material: data.material,
+        observacoes: data.observacoes,
+      }
+    })
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao atualizar ordem:', error)
+    return { success: false, error: 'Erro ao atualizar ordem' }
+  }
+}
+
+export async function getOrdemById(id: number) {
+  await requireUser()
+  try {
+    const ordem = await prisma.ordem.findUnique({
+      where: { id },
+      include: {
+        cliente: { select: { id: true, nome: true } },
+        servico: { select: { id: true, nome: true } },
+      }
+    })
+
+    if (!ordem) return null
+
+    return {
+      id: ordem.id,
+      paciente: ordem.nomePaciente,
+      cliente: { id: ordem.cliente?.id, nome: ordem.clienteNome || ordem.cliente?.nome || 'Cliente Desconhecido' },
+      clienteId: ordem.clienteId,
+      servico: ordem.servicoNome || ordem.servico?.nome || 'Serviço',
+      servicoId: ordem.servicoId,
+      status: ordem.status || 'Aguardando',
+      prioridade: ordem.prioridade || 'Normal',
+      dataEntrada: ordem.dataPedido ? ordem.dataPedido.toISOString() : new Date().toISOString(),
+      dataEntrega: ordem.dataEntrega?.toISOString() || new Date().toISOString(),
+      etapaAtual: ordem.etapaAtual || 'Recebimento',
+      valor: Number(ordem.valorFinal || ordem.valor),
+      corDentes: ordem.corDentes || '',
+      material: ordem.material || '',
+      observacoes: ordem.observacoes || '',
+    }
+  } catch (error) {
+    console.error('Erro ao buscar ordem:', error)
+    return null
+  }
+}
+
 export async function getDadosNovaOrdem() {
   try {
     const [clientes, servicosRaw] = await Promise.all([

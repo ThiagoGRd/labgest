@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
+import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
+import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
@@ -105,6 +107,9 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('todos')
   const [modalOpen, setModalOpen] = useState(false)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null)
   const [printOrdem, setPrintOrdem] = useState<any>(null)
   const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
   
@@ -164,6 +169,16 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     return matchSearch && matchStatus
   })
 
+  const handleView = (ordem: Ordem) => {
+    setSelectedOrdem(ordem)
+    setViewModalOpen(true)
+  }
+
+  const handleEdit = (ordem: Ordem) => {
+    setSelectedOrdem(ordem)
+    setEditModalOpen(true)
+  }
+
   const handleNotify = async (id: number) => {
     if (confirm('Finalizar ordem e notificar dentista via WhatsApp?')) {
       const result = await notificarMudancaStatus(id, 'Finalizado')
@@ -190,6 +205,23 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         servicos={servicos}
         onSuccess={() => {
           setModalOpen(false)
+        }}
+      />
+
+      <VisualizarOrdemModal
+        isOpen={viewModalOpen}
+        onClose={() => setViewModalOpen(false)}
+        ordem={selectedOrdem}
+      />
+
+      <EditarOrdemModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        ordem={selectedOrdem}
+        clientes={clientes}
+        servicos={servicos}
+        onSuccess={() => {
+          setEditModalOpen(false)
         }}
       />
       
@@ -355,10 +387,18 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                           >
                             <Bell className="h-4 w-4" />
                           </button>
-                          <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={() => handleView(ordem)}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Visualizar Detalhes"
+                          >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={() => handleEdit(ordem)}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Editar Ordem"
+                          >
                             <Edit className="h-4 w-4" />
                           </button>
                         </div>
