@@ -24,6 +24,7 @@ const etapas = [
   { id: 'Recebimento', nome: 'Recebimento', cor: '#6366f1' },
   { id: 'Planejamento', nome: 'Planejamento/CAD', cor: '#8b5cf6' },
   { id: 'Impressão', nome: 'Impressão/Fresagem', cor: '#a855f7' },
+  { id: 'EmProva', nome: 'Em Prova (Externo)', cor: '#f59e0b' }, // Nova Etapa
   { id: 'Acabamento', nome: 'Acabamento', cor: '#d946ef' },
   { id: 'Conferência', nome: 'Conferência', cor: '#ec4899' },
   { id: 'Finalizado', nome: 'Pronto p/ Entrega', cor: '#22c55e' },
@@ -153,7 +154,11 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     e.preventDefault()
     if (!draggedItem || draggedItem.fromEtapa === toEtapa) return
 
-    // Em vez de mover direto, abre o checklist
+    // Se mover para "Em Prova" ou "Retorno", aciona lógica específica
+    // Por enquanto, vamos manter a lógica do Checklist para todas as etapas
+    // Futuramente podemos adicionar condicionais aqui: 
+    // if (toEtapa === 'EmProva') -> Modal de Envio para Prova
+    
     setPendingMove({
       ordem: draggedItem.ordem,
       fromEtapa: draggedItem.fromEtapa,
