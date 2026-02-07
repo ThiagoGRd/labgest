@@ -111,10 +111,16 @@ function KanbanCard({ ordem, onDragStart, etapaId }: KanbanCardProps) {
   )
 }
 
+import { ChecklistModal } from '@/components/producao/checklist-modal'
+
 export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   // Organizar ordens por etapa
   const [ordensPorEtapa, setOrdensPorEtapa] = useState<Record<string, Ordem[]>>({})
   const [draggedItem, setDraggedItem] = useState<{ ordem: Ordem; fromEtapa: string } | null>(null)
+  
+  // Controle do Checklist
+  const [checklistOpen, setChecklistOpen] = useState(false)
+  const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
 
   useEffect(() => {
     const agrupado: Record<string, Ordem[]> = {}
@@ -147,33 +153,57 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     e.preventDefault()
     if (!draggedItem || draggedItem.fromEtapa === toEtapa) return
 
+    // Em vez de mover direto, abre o checklist
+    setPendingMove({
+      ordem: draggedItem.ordem,
+      fromEtapa: draggedItem.fromEtapa,
+      toEtapa: toEtapa
+    })
+    setChecklistOpen(true)
+    setDraggedItem(null)
+  }
+
+  const confirmMove = async () => {
+    if (!pendingMove) return
+
+    const { ordem, fromEtapa, toEtapa } = pendingMove
+
     // Atualização Otimista
     setOrdensPorEtapa(prev => {
       const newOrdens = { ...prev }
-      newOrdens[draggedItem.fromEtapa] = newOrdens[draggedItem.fromEtapa].filter(
-        o => o.id !== draggedItem.ordem.id
-      )
-      // Atualiza a etapa no objeto ordem também
-      const ordemAtualizada = { ...draggedItem.ordem, etapa: toEtapa }
+      newOrdens[fromEtapa] = newOrdens[fromEtapa].filter(o => o.id !== ordem.id)
+      const ordemAtualizada = { ...ordem, etapa: toEtapa }
       newOrdens[toEtapa] = [...(newOrdens[toEtapa] || []), ordemAtualizada]
       return newOrdens
     })
 
     // Chama Server Action
-    const result = await moverOrdem(draggedItem.ordem.id, toEtapa)
+    const result = await moverOrdem(ordem.id, toEtapa)
     
     if (!result.success) {
       alert('Erro ao mover ordem: ' + result.error)
-      // Reverter se necessário (não implementado aqui para simplicidade)
     }
 
-    setDraggedItem(null)
+    setChecklistOpen(false)
+    setPendingMove(null)
   }
 
   const totalOrdens = Object.values(ordensPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
 
   return (
     <DashboardLayout>
+      {pendingMove && (
+        <ChecklistModal
+          isOpen={checklistOpen}
+          onClose={() => {
+            setChecklistOpen(false)
+            setPendingMove(null)
+          }}
+          onConfirm={confirmMove}
+          etapaDestino={pendingMove.toEtapa}
+          ordemId={pendingMove.ordem.id}
+        />
+      )}
       <Header 
         title="Produção" 
         subtitle={`${totalOrdens} ordens em andamento`}
