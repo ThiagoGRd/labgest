@@ -64,3 +64,33 @@ export async function createItemEstoque(data: {
     return { success: false, error: 'Erro ao criar item' }
   }
 }
+
+// Função para abater estoque automaticamente
+export async function abaterEstoquePorServico(servicoId: number) {
+  try {
+    const servico = await prisma.servico.findUnique({
+      where: { id: servicoId },
+      select: { materiais: true }
+    })
+
+    if (!servico || !servico.materiais) return { success: true, message: 'Sem materiais vinculados' }
+
+    const materiais = servico.materiais as Array<{ id: number; quantidade: number }>
+
+    for (const mat of materiais) {
+      if (mat.id && mat.quantidade) {
+        await prisma.estoque.update({
+          where: { id: mat.id },
+          data: { quantidade: { decrement: mat.quantidade } }
+        })
+      }
+    }
+
+    revalidatePath('/estoque')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao abater estoque:', error)
+    // Não deve bloquear o fluxo principal se falhar
+    return { success: false, error: 'Erro ao atualizar estoque' }
+  }
+}

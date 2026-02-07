@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import { abaterEstoquePorServico } from './estoque'
 
 export async function getProducao() {
   await requireUser()
@@ -38,11 +39,24 @@ export async function getProducao() {
 
 export async function moverOrdem(id: number, novaEtapa: string) {
   try {
-    await prisma.ordem.update({
+    const ordem = await prisma.ordem.update({
       where: { id },
-      data: { etapaAtual: novaEtapa }
+      data: { 
+        etapaAtual: novaEtapa,
+        // Se for movido para Finalizado no Kanban, atualiza status também
+        status: novaEtapa === 'Finalizado' ? 'Finalizado' : undefined,
+        dataFinalizacao: novaEtapa === 'Finalizado' ? new Date() : undefined
+      },
+      select: { servicoId: true }
     })
+
+    // Se finalizou, abate estoque
+    if (novaEtapa === 'Finalizado' && ordem.servicoId) {
+      await abaterEstoquePorServico(ordem.servicoId)
+    }
+
     revalidatePath('/producao')
+    revalidatePath('/ordens')
     return { success: true }
   } catch (error) {
     return { success: false, error: 'Erro ao mover ordem' }
