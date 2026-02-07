@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { createOrdem } from '@/actions/ordens'
 
@@ -103,13 +103,17 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             <Select
               name="clienteId"
               value={formData.clienteId}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, clienteId: val }))}
               required
             >
-              <option value="">Selecione...</option>
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {clientes.map(c => (
+                  <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 
@@ -135,13 +139,17 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             <Select
               name="servicoId"
               value={formData.servicoId}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, servicoId: val }))}
               required
             >
-              <option value="">Selecione...</option>
-              {servicos.map(s => (
-                <option key={s.id} value={s.id}>{s.nome} - R$ {Number(s.preco).toFixed(2)}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {servicos.map(s => (
+                  <SelectItem key={s.id} value={s.id.toString()}>{s.nome} - R$ {Number(s.preco).toFixed(2)}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 
@@ -168,12 +176,17 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             <Select
               name="prioridade"
               value={formData.prioridade}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, prioridade: val }))}
             >
-              <option value="Baixa">Baixa</option>
-              <option value="Normal">Normal</option>
-              <option value="Alta">Alta</option>
-              <option value="Urgente">Urgente</option>
+              <SelectTrigger>
+                <SelectValue placeholder="Normal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Baixa">Baixa</SelectItem>
+                <SelectItem value="Normal">Normal</SelectItem>
+                <SelectItem value="Alta">Alta</SelectItem>
+                <SelectItem value="Urgente">Urgente</SelectItem>
+              </SelectContent>
             </Select>
           </div>
 
@@ -185,12 +198,16 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             <Select
               name="corDentes"
               value={formData.corDentes}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, corDentes: val }))}
             >
-              <option value="">Selecione...</option>
-              {cores.map(cor => (
-                <option key={cor} value={cor}>{cor}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {cores.map(cor => (
+                  <SelectItem key={cor} value={cor}>{cor}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 
