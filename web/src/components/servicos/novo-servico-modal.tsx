@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { createServico } from '@/actions/servicos'
 
@@ -109,13 +109,17 @@ export default function NovaServicoModal({ isOpen, onClose, onSuccess }: NovoSer
             <Select
               name="categoria"
               value={formData.categoria}
-              onChange={handleChange}
+              onValueChange={(val) => setFormData(prev => ({ ...prev, categoria: val }))}
               required
             >
-              <option value="">Selecione...</option>
-              {categorias.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {categorias.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div>
