@@ -10,8 +10,7 @@ export async function getProducao() {
   try {
     const ordens = await prisma.ordem.findMany({
       where: {
-        status: { not: 'Finalizado' }, // Apenas ordens ativas
-        // status: { not: 'Entregue' } // Se tiver status entregue
+        status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] },
       },
       orderBy: { prioridade: 'asc' }, // Urgente primeiro (se mapeado corretamente)
       include: {
