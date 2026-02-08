@@ -112,7 +112,7 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Total de Itens</p>
-                <p className="text-2xl font-bold text-slate-900">{estoque.length}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{estoque.length}</p>
               </div>
             </CardContent>
           </Card>
@@ -134,7 +134,7 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Categorias</p>
-                <p className="text-2xl font-bold text-slate-900">-</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">-</p>
               </div>
             </CardContent>
           </Card>
@@ -145,7 +145,7 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Valor Total</p>
-                <p className="text-2xl font-bold text-slate-900">{formatCurrency(totalValor).split(',')[0]}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalValor).split(',')[0]}</p>
               </div>
             </CardContent>
           </Card>
@@ -228,10 +228,10 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
                 {filteredEstoque.map((item) => {
                   const status = getStockStatus(item.quantidade, item.quantidadeMinima)
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors border-b border-slate-200 dark:border-white/5">
                       <td className="px-6 py-4">
                         <div>
-                          <p className="font-medium text-slate-900">{item.nome}</p>
+                          <p className="font-bold text-slate-900 dark:text-white">{item.nome}</p>
                           <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
                             <MapPin className="h-3 w-3" />
                             <span>{item.localizacao}</span>
@@ -244,7 +244,7 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
                       <td className="px-6 py-4 text-center">
                         <div>
                           <span className={`text-lg font-bold ${
-                            item.quantidade <= item.quantidadeMinima ? 'text-red-600' : 'text-slate-900'
+                            item.quantidade <= item.quantidadeMinima ? 'text-red-600' : 'text-slate-900 dark:text-white'
                           }`}>
                             {item.quantidade}
                           </span>
@@ -258,15 +258,15 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-medium text-slate-900">{formatCurrency(item.precoUnitario)}</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(item.precoUnitario)}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-slate-600">{item.fornecedor}</span>
+                        <span className="text-slate-600 dark:text-slate-300">{item.fornecedor}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-600">{formatDate(item.dataValidade)}</span>
+                          <span className="text-slate-600 dark:text-slate-300">{formatDate(item.dataValidade)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">

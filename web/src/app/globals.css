@@ -68,32 +68,32 @@
 }
 
 .dark {
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
+  --background: 222.2 47.4% 5.9%; /* Slightly lighter than 4% */
+  --foreground: 210 40% 98%;
 
-  --card: 224 71% 4%;
-  --card-foreground: 213 31% 91%;
+  --card: 222.2 47.4% 7.9%; /* Cards slightly lighter than background */
+  --card-foreground: 210 40% 98%;
 
-  --popover: 224 71% 4%;
-  --popover-foreground: 213 31% 91%;
+  --popover: 222.2 47.4% 7.9%;
+  --popover-foreground: 210 40% 98%;
 
   --primary: 243 75% 65%;
   --primary-foreground: 222.2 47.4% 11.2%;
 
-  --secondary: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 223 47% 11%;
-  --muted-foreground: 215.4 16.3% 56.9%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 75.1%; /* Much brighter than 56.9% for readability */
 
-  --accent: 216 34% 17%;
+  --accent: 217.2 32.6% 17.5%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 63% 31%;
+  --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 216 34% 17%;
-  --input: 216 34% 17%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
   --ring: 243 75% 65%;
 }
 
@@ -106,6 +106,44 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-outfit), sans-serif;
+}
+
+/* Global Dark Mode Overrides for Legibility */
+.dark .text-slate-900 {
+  color: #f1f5f9 !important; /* text-slate-100 */
+}
+
+.dark .text-slate-700 {
+  color: #e2e8f0 !important; /* text-slate-200 */
+}
+
+.dark .text-slate-600 {
+  color: #cbd5e1 !important; /* text-slate-300 */
+}
+
+.dark .text-slate-500 {
+  color: #94a3b8 !important; /* text-slate-400 */
+}
+
+.dark .text-slate-400 {
+  color: #64748b !important; /* text-slate-500 */
+}
+
+.dark .bg-slate-50 {
+  background-color: rgba(15, 23, 42, 0.6) !important; /* slate-900 with opacity */
+}
+
+.dark .bg-slate-100 {
+  background-color: rgba(30, 41, 59, 0.6) !important; /* slate-800 with opacity */
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .hover\:bg-slate-50:hover {
+  background-color: rgba(30, 41, 59, 0.8) !important;
 }
 
 /* Irresistible Design Utilities */
@@ -133,9 +171,9 @@ h1, h2, h3, h4, h5, h6 {
 .dark .mesh-bg {
   background-color: #020617;
   background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.4) 0, transparent 50%), 
-    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.4) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.4) 0, transparent 50%);
+    radial-gradient(at 0% 0%, hsla(243, 75%, 65%, 0.15) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.2) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.15) 0, transparent 50%);
 }
 
 .animate-in {

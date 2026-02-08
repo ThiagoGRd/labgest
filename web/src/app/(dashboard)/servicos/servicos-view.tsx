@@ -178,7 +178,7 @@ export function ServicosView({ initialData }: ServicosViewProps) {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <Badge variant="secondary" className="mb-2">{servico.categoria}</Badge>
-                    <h3 className="font-semibold text-lg text-slate-900">{servico.nome}</h3>
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">{servico.nome}</h3>
                   </div>
                   <button className={`p-1 rounded-lg ${servico.ativo ? 'text-emerald-600' : 'text-slate-400'}`}>
                     {servico.ativo ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
@@ -212,18 +212,18 @@ export function ServicosView({ initialData }: ServicosViewProps) {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100">
+                <div className="pt-4 border-t border-slate-100 dark:border-white/5">
                   <p className="text-xs text-slate-400 mb-2">Materiais:</p>
                   <div className="flex flex-wrap gap-1">
                     {servico.materiais.length > 0 ? (
                       <>
                         {servico.materiais.slice(0, 3).map((mat, i) => (
-                          <span key={i} className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600">
+                          <span key={i} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs text-slate-600 dark:text-slate-300">
                             {mat}
                           </span>
                         ))}
                         {servico.materiais.length > 3 && (
-                          <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600">
+                          <span key="more" className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs text-slate-600 dark:text-slate-300">
                             +{servico.materiais.length - 3}
                           </span>
                         )}

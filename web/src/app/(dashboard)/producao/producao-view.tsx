@@ -82,27 +82,27 @@ function KanbanCard({ ordem, onDragStart, etapaId }: KanbanCardProps) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`bg-white rounded-lg border border-slate-200 border-l-4 ${getPriorityColor(ordem.prioridade)} p-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow group`}
+      className={`glass rounded-xl border-l-4 ${getPriorityColor(ordem.prioridade)} p-4 cursor-grab active:cursor-grabbing hover:shadow-xl hover:scale-[1.02] transition-all group`}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
-          <GripVertical className="h-4 w-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <span className="text-xs text-slate-400">#{ordem.id}</span>
+          <GripVertical className="h-4 w-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">#{ordem.id}</span>
         </div>
         {ordem.prioridade === 'Urgente' && (
-          <Badge variant="urgente" className="text-xs">Urgente</Badge>
+          <Badge variant="urgente" className="text-[10px]">Urgente</Badge>
         )}
       </div>
 
-      <h4 className="font-medium text-slate-900 mb-1">{ordem.paciente}</h4>
-      <p className="text-sm text-slate-500 mb-3">{ordem.servico}</p>
+      <h4 className="font-bold text-slate-900 dark:text-white mb-1 tracking-tight leading-snug">{ordem.paciente}</h4>
+      <p className="text-xs font-medium text-slate-500 mb-3 line-clamp-1">{ordem.servico}</p>
 
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
         <div className="flex items-center gap-1 text-slate-400">
           <User className="h-3 w-3" />
           <span className="truncate max-w-[80px]">{ordem.dentista.split(' ')[0]}</span>
         </div>
-        <div className={`flex items-center gap-1 ${daysInfo.isLate ? 'text-red-600 font-medium' : daysInfo.isToday ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>
+        <div className={`flex items-center gap-1 ${daysInfo.isLate ? 'text-red-500' : daysInfo.isToday ? 'text-amber-500' : 'text-slate-400'}`}>
           {daysInfo.isLate && <AlertTriangle className="h-3 w-3" />}
           <Calendar className="h-3 w-3" />
           <span>{daysInfo.text}</span>
@@ -247,22 +247,22 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
               onDrop={(e) => handleDrop(e, etapa.id)}
             >
               <div
-                className="rounded-t-xl px-4 py-3 flex items-center justify-between"
-                style={{ backgroundColor: etapa.cor + '20' }}
+                className="rounded-t-2xl px-5 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5"
+                style={{ backgroundColor: etapa.cor + '15', backdropFilter: 'blur(8px)' }}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <div
-                    className="w-3 h-3 rounded-full"
+                    className="w-2.5 h-2.5 rounded-full ring-4 ring-white/10"
                     style={{ backgroundColor: etapa.cor }}
                   />
-                  <h3 className="font-medium text-slate-900">{etapa.nome}</h3>
+                  <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{etapa.nome}</h3>
                 </div>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="bg-white/50 dark:bg-black/20 border-none font-bold">
                   {ordensPorEtapa[etapa.id]?.length || 0}
                 </Badge>
               </div>
 
-              <div className="bg-slate-100 rounded-b-xl p-3 min-h-[500px] space-y-3">
+              <div className="bg-slate-50/50 dark:bg-black/10 rounded-b-2xl p-3 min-h-[600px] space-y-4 border-x border-b border-black/5 dark:border-white/5">
                 {ordensPorEtapa[etapa.id]?.map((ordem) => (
                   <KanbanCard
                     key={ordem.id}
