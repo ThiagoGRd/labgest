@@ -17,9 +17,12 @@ function getStatusVariant(status: string) {
 
 export default async function CheckOrderPage({ params }: { params: { id: string } }) {
   console.log('[CheckOrderPage] Params received:', params)
-  const id = parseInt(params.id)
 
-  if (isNaN(id)) {
+  // Tentar limpar o ID (remover qualquer coisa que não seja número)
+  const cleanIdProp = params.id ? params.id.replace(/\D/g, '') : ''
+  const id = parseInt(cleanIdProp)
+
+  if (isNaN(id) || !cleanIdProp) {
     console.error('[CheckOrderPage] Invalid ID:', params.id)
     return (
       <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
@@ -28,7 +31,10 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
             <Package className="h-10 w-10 text-amber-600" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Código Inválido</h1>
-          <p className="text-slate-500 mb-8">O código da ordem não parece ser válido. Tente digitar manualmente.</p>
+          <p className="text-slate-500 mb-4">O código da ordem não parece ser válido.</p>
+          <div className="bg-slate-100 p-2 rounded mb-6 text-xs font-mono text-slate-600 break-all">
+            Recebido: {JSON.stringify(params)}
+          </div>
           <Link href="/" className="text-indigo-600 font-bold hover:underline">Voltar para o site</Link>
         </Card>
       </div>
@@ -116,8 +122,8 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
                   return (
                     <div key={etapa} className="flex items-center gap-4 relative">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white' :
-                          isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 animate-pulse' :
-                            'bg-slate-100 text-slate-400'
+                        isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 animate-pulse' :
+                          'bg-slate-100 text-slate-400'
                         }`}>
                         {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <span className="text-xs font-bold">{idx + 1}</span>}
                       </div>
