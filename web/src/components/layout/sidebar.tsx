@@ -22,6 +22,7 @@ import {
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
+import { useSidebar } from '@/components/providers/sidebar-provider'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -46,7 +47,7 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
+  const { collapsed, setCollapsed } = useSidebar()
 
   return (
     <aside

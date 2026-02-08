@@ -71,7 +71,7 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
   const estoque = initialData || []
 
   const filteredEstoque = estoque.filter(item => {
-    const matchSearch = 
+    const matchSearch =
       item.nome.toLowerCase().includes(search.toLowerCase()) ||
       item.fornecedor.toLowerCase().includes(search.toLowerCase()) ||
       item.codigoBarras.includes(search)
@@ -85,23 +85,23 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
 
   return (
     <DashboardLayout>
-      <NovoItemEstoqueModal 
-        isOpen={modalOpen} 
+      <NovoItemEstoqueModal
+        isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSuccess={() => {
           setModalOpen(false)
         }}
       />
 
-      <Header 
-        title="Estoque" 
+      <Header
+        title="Estoque"
         subtitle={`${estoque.length} itens cadastrados`}
         action={{
           label: 'Novo Item',
           onClick: () => setModalOpen(true),
         }}
       />
-      
+
       <div className="p-6 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -169,11 +169,10 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
                   <button
                     key={cat}
                     onClick={() => setCategoriaFilter(cat)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      categoriaFilter === cat
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${categoriaFilter === cat
                         ? 'bg-indigo-600 text-white'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                      }`}
                   >
                     {cat}
                   </button>
@@ -197,59 +196,58 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Material
                   </th>
-                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Categoria
                   </th>
-                  <th className="text-center text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Quantidade
                   </th>
-                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Status
                   </th>
-                  <th className="text-right text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Preço Unit.
                   </th>
-                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Fornecedor
                   </th>
-                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Validade
                   </th>
-                  <th className="text-right text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-6 py-4">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-border">
                 {filteredEstoque.map((item) => {
                   const status = getStockStatus(item.quantidade, item.quantidadeMinima)
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors border-b border-slate-200 dark:border-white/5">
+                    <tr key={item.id} className="hover:bg-muted/50 transition-colors border-b border-border">
                       <td className="px-6 py-4">
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{item.nome}</p>
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
+                          <p className="font-bold text-foreground">{item.nome}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                             <MapPin className="h-3 w-3" />
                             <span>{item.localizacao}</span>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant="secondary">{item.categoria}</Badge>
+                        <Badge variant="secondary" className="font-medium">{item.categoria}</Badge>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div>
-                          <span className={`text-lg font-bold ${
-                            item.quantidade <= item.quantidadeMinima ? 'text-red-600' : 'text-slate-900 dark:text-white'
-                          }`}>
+                          <span className={`text-lg font-bold ${item.quantidade <= item.quantidadeMinima ? 'text-destructive' : 'text-foreground'
+                            }`}>
                             {item.quantidade}
                           </span>
-                          <span className="text-slate-400 text-sm ml-1">{item.unidade}</span>
-                          <p className="text-xs text-slate-400">min: {item.quantidadeMinima}</p>
+                          <span className="text-muted-foreground text-sm ml-1">{item.unidade}</span>
+                          <p className="text-xs text-muted-foreground">min: {item.quantidadeMinima}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -258,19 +256,19 @@ export function EstoqueView({ initialData }: EstoqueViewProps) {
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(item.precoUnitario)}</span>
+                        <span className="font-bold text-foreground">{formatCurrency(item.precoUnitario)}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-slate-600 dark:text-slate-300">{item.fornecedor}</span>
+                        <span className="text-muted-foreground font-medium">{item.fornecedor}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-600 dark:text-slate-300">{formatDate(item.dataValidade)}</span>
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">{formatDate(item.dataValidade)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                        <button className="p-2 text-muted-foreground hover:text-primary hover:bg-muted rounded-lg transition-colors">
                           <Edit className="h-4 w-4" />
                         </button>
                       </td>
