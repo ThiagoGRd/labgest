@@ -2,7 +2,13 @@
 
 @plugin "tailwindcss-animate";
 
+/* 1. Tailwind v4 Theme Configuration */
 @theme {
+  /* Fonts */
+  --font-outfit: var(--font-outfit), ui-sans-serif, system-ui;
+  --font-jakarta: var(--font-jakarta), ui-sans-serif, system-ui;
+  
+  /* Standard Colors */
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -30,11 +36,29 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  /* Radius & Shadows */
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  
+  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --shadow-glass-dark: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  /* Native Animations */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  --animate-modal-in: modal-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* 2. Unified CSS Variables */
 :root {
   --background: 210 40% 98%; 
   --foreground: 222.2 84% 4.9%;
@@ -51,11 +75,11 @@
   --secondary: 210 40% 96.1%;
   --secondary-foreground: 222.2 47.4% 11.2%;
 
-  --muted: 210 40% 96.1%;
+  --muted: 215.4 16.3% 46.9%;
   --muted-foreground: 215.4 16.3% 46.9%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 243 75% 59% / 0.1; /* Accent linked to primary */
+  --accent-foreground: 243 75% 59%;
 
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
@@ -97,25 +121,27 @@
   --ring: 243 75% 65%;
 }
 
+/* 3. Base & Typography */
 body {
   @apply bg-background text-foreground;
-  font-family: var(--font-jakarta), sans-serif;
+  font-family: var(--font-jakarta);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-outfit), sans-serif;
+  font-family: var(--font-outfit);
+  @apply font-bold tracking-tight;
 }
 
-/* Glassmorphism System */
+/* 4. Functional Utilities */
 .glass {
-  @apply bg-white/60 border border-black/5 shadow-sm backdrop-blur-md;
-  @apply dark:bg-slate-900/40 dark:border-white/10 dark:shadow-2xl;
+  @apply bg-white/60 border border-black/5 shadow-glass backdrop-blur-md;
+  @apply dark:bg-slate-900/40 dark:border-white/10 dark:shadow-glass-dark;
 }
 
 .mesh-bg {
-  background-color: #f8fafc;
+  background-color: hsl(var(--background));
   background-image: 
     radial-gradient(at 0% 0%, hsla(253,16%,7%,0.03) 0, transparent 50%), 
     radial-gradient(at 50% 0%, hsla(225,39%,30%,0.03) 0, transparent 50%), 
@@ -123,7 +149,6 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .dark .mesh-bg {
-  background-color: #020617;
   background-image: 
     radial-gradient(at 0% 0%, hsla(253,16%,7%,0.4) 0, transparent 50%), 
     radial-gradient(at 50% 0%, hsla(225,39%,30%,0.4) 0, transparent 50%), 
@@ -131,30 +156,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .animate-in {
-  animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-.animate-slide-in {
-  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  @apply animate-fade-up;
 }
 
 /* Scrollbar Customization */
