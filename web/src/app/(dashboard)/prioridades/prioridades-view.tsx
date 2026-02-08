@@ -56,7 +56,7 @@ function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 
           <Badge variant="outline" className="mb-2 bg-white/50 dark:bg-black/20 border-black/5 dark:border-white/10">
             {ordem.etapaAtual || 'Em produção'}
           </Badge>
-          <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">
+          <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400" suppressHydrationWarning>
             Entrega: {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR')}
           </p>
         </div>

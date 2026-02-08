@@ -185,7 +185,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
                             </td>
                             <td className="p-4 text-slate-600 dark:text-slate-300 font-medium">{conta.cliente}</td>
                             <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400" suppressHydrationWarning>
                                 <Calendar className="h-4 w-4" />
                                 {formatDate(conta.vencimento)}
                               </div>
@@ -249,7 +249,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
                               </Badge>
                             </td>
                             <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400" suppressHydrationWarning>
                                 <Calendar className="h-4 w-4" />
                                 {formatDate(conta.vencimento)}
                               </div>

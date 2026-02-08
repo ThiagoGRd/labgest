@@ -363,7 +363,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                           <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800">
                             <Calendar className="h-4 w-4 text-slate-400" />
                           </div>
-                          <div>
+                          <div suppressHydrationWarning>
                             <p className="text-sm font-bold text-slate-900 dark:text-white">{formatDate(ordem.dataEntrega)}</p>
                             <p className={`text-[10px] font-bold uppercase ${daysInfo.color}`}>{daysInfo.text}</p>
                           </div>
