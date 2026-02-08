@@ -51,30 +51,30 @@ export function Sidebar({ user }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen transition-all duration-300 flex flex-col",
-        "glass dark:bg-slate-950/40 border-r border-white/10",
+        "fixed left-0 top-0 z-40 h-screen transition-all duration-300 ease-in-out flex flex-col",
+        "glass-panel border-r border-white/20 dark:border-white/10",
         collapsed ? "w-20" : "w-64"
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-black/5 dark:border-white/5">
+      <div className="flex h-20 items-center justify-between px-6 border-b border-white/10 dark:border-white/5">
         {!collapsed && (
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/40">
-              <span className="text-white font-bold text-sm">LG</span>
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <span className="text-white font-black text-sm tracking-tighter">LG</span>
             </div>
-            <span className="text-slate-900 dark:text-white font-bold text-lg tracking-tight">LabGest</span>
+            <span className="text-foreground font-bold text-xl tracking-tight">LabGest</span>
           </Link>
         )}
         {collapsed && (
-          <div className="h-8 w-8 mx-auto rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/40">
-            <span className="text-white font-bold text-sm">LG</span>
+          <div className="h-9 w-9 mx-auto rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <span className="text-white font-black text-sm tracking-tighter">LG</span>
           </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
         {navigation.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
           return (
@@ -82,17 +82,17 @@ export function Sidebar({ user }: SidebarProps) {
               key={item.name}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 group",
+                "flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-all duration-300 group relative overflow-hidden",
                 isActive
-                  ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/30 scale-[1.02]"
-                  : "text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-indigo-600 dark:hover:text-white",
-                collapsed && "justify-center px-2"
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                  : "text-muted-foreground hover:bg-white/50 dark:hover:bg-white/5 hover:text-foreground",
+                collapsed && "justify-center px-0 py-3"
               )}
               title={collapsed ? item.name : undefined}
             >
               <item.icon className={cn(
                 "h-5 w-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110",
-                isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600"
+                isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
               )} />
               {!collapsed && (
                 <span className="flex-1 tracking-tight">{item.name}</span>
@@ -106,29 +106,29 @@ export function Sidebar({ user }: SidebarProps) {
       </nav>
 
       {/* User & Collapse */}
-      <div className="border-t border-black/5 dark:border-white/5 p-4">
+      <div className="border-t border-white/10 dark:border-white/5 p-4 mx-2">
         {!collapsed && (
-          <div className="flex items-center gap-3 px-2 py-2.5 rounded-xl bg-white/40 dark:bg-black/20 border border-white/20 dark:border-white/5 mb-3 shadow-sm">
+          <div className="flex items-center gap-3 px-3 py-3 rounded-2xl bg-white/50 dark:bg-black/20 border border-white/20 dark:border-white/5 mb-4 shadow-sm backdrop-blur-sm">
             <Avatar name={user.nome} size="sm" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.nome}</p>
-              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 truncate">{user.tipo}</p>
+              <p className="text-sm font-semibold text-foreground truncate">{user.nome}</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground truncate opacity-80">{user.tipo}</p>
             </div>
             <button
               onClick={() => logout()}
-              className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 transition-colors"
+              className="p-2 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive dark:hover:bg-destructive/20 transition-all"
               title="Sair"
             >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         )}
-        
+
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
-            "flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-indigo-600 transition-all duration-300",
-            collapsed && "px-2"
+            "flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-muted-foreground hover:bg-white/50 dark:hover:bg-white/5 hover:text-primary transition-all duration-300",
+            collapsed && "px-0"
           )}
         >
           {collapsed ? (
