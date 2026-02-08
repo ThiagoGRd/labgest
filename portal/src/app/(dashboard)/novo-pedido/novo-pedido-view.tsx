@@ -19,7 +19,9 @@ import {
   Calendar,
   MessageSquare,
   Loader2,
+  Mic,
 } from 'lucide-react'
+import { VoiceInput } from '@/components/ui/voice-input'
 
 interface Servico {
   id: number
@@ -251,13 +253,21 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Observações
                   </label>
-                  <textarea
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    rows={3}
-                    placeholder="Informações adicionais sobre o caso..."
-                    value={formData.observacoes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, observacoes: e.target.value }))}
-                  />
+                  <div className="space-y-3">
+                    <VoiceInput 
+                      onTranscript={(text) => setFormData(prev => ({ 
+                        ...prev, 
+                        observacoes: prev.observacoes ? prev.observacoes + ' ' + text : text 
+                      }))}
+                    />
+                    <textarea
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      rows={3}
+                      placeholder="Informações adicionais sobre o caso... (ou use o botão acima para ditar)"
+                      value={formData.observacoes}
+                      onChange={(e) => setFormData(prev => ({ ...prev, observacoes: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <div>

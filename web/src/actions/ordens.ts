@@ -27,6 +27,8 @@ export async function getOrdens() {
       etapaAtual: o.etapaAtual || 'Recebimento',
       valor: Number(o.valorFinal || o.valor),
       corDentes: o.corDentes || '',
+      material: o.material || '',
+      observacoes: o.observacoes || '',
       foto: null, // TODO: Handle photo
     }))
   } catch (error) {
