@@ -121,6 +121,10 @@ export async function updateOrdem(id: number, data: {
 
 export async function getOrdemById(id: number) {
   await requireUser()
+  return getOrdemPublic(id)
+}
+
+export async function getOrdemPublic(id: number) {
   try {
     const ordem = await prisma.ordem.findUnique({
       where: { id },

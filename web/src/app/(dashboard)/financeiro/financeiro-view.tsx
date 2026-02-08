@@ -87,48 +87,48 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
       <div className="p-6 space-y-6">
         {/* Cards Resumo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-emerald-50 border-emerald-100">
+          <Card className="bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-emerald-100 rounded-lg">
-                  <ArrowUpRight className="h-6 w-6 text-emerald-600" />
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg">
+                  <ArrowUpRight className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <span className="text-sm font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-500/10 px-2 py-1 rounded">
                   A Receber
                 </span>
               </div>
-              <p className="text-sm text-emerald-700">Previsão de Entrada</p>
-              <h3 className="text-2xl font-bold text-emerald-900 mt-1">{formatCurrency(totalReceber)}</h3>
+              <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 opacity-70">Previsão de Entrada</p>
+              <h3 className="text-3xl font-bold text-emerald-900 dark:text-emerald-50 mt-1">{formatCurrency(totalReceber)}</h3>
             </CardContent>
           </Card>
 
-          <Card className="bg-red-50 border-red-100">
+          <Card className="bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <ArrowDownRight className="h-6 w-6 text-red-600" />
+                <div className="p-2 bg-red-100 dark:bg-red-500/20 rounded-lg">
+                  <ArrowDownRight className="h-6 w-6 text-red-600 dark:text-red-400" />
                 </div>
-                <span className="text-sm font-medium text-red-600 bg-red-100 px-2 py-1 rounded">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-100/50 dark:bg-red-500/10 px-2 py-1 rounded">
                   A Pagar
                 </span>
               </div>
-              <p className="text-sm text-red-700">Previsão de Saída</p>
-              <h3 className="text-2xl font-bold text-red-900 mt-1">{formatCurrency(totalPagar)}</h3>
+              <p className="text-xs font-bold uppercase tracking-widest text-red-700 dark:text-red-300 opacity-70">Previsão de Saída</p>
+              <h3 className="text-3xl font-bold text-red-900 dark:text-red-50 mt-1">{formatCurrency(totalPagar)}</h3>
             </CardContent>
           </Card>
 
-          <Card className="bg-blue-50 border-blue-100">
+          <Card className="bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <DollarSign className="h-6 w-6 text-blue-600" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg">
+                  <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-500/10 px-2 py-1 rounded">
                   Saldo Previsto
                 </span>
               </div>
-              <p className="text-sm text-blue-700">Balanço</p>
-              <h3 className="text-2xl font-bold text-blue-900 mt-1">{formatCurrency(saldoPrevisto)}</h3>
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300 opacity-70">Balanço</p>
+              <h3 className="text-3xl font-bold text-blue-900 dark:text-blue-50 mt-1">{formatCurrency(saldoPrevisto)}</h3>
             </CardContent>
           </Card>
         </div>
@@ -153,51 +153,49 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
               </div>
 
               <TabsContent value="receber" className="mt-0">
-                <div className="rounded-md border">
+                <div className="rounded-xl border border-black/5 dark:border-white/10 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-slate-50">
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Descrição</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Cliente</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Vencimento</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Status</th>
-                        <th className="h-10 px-4 text-right font-medium text-slate-500">Valor</th>
-                        <th className="h-10 px-4 text-right font-medium text-slate-500">Ações</th>
+                      <tr className="border-b border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/20">
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Descrição</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Cliente</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Vencimento</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Status</th>
+                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Valor</th>
+                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Ações</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-black/5 dark:divide-white/10">
                       {receber.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-500">
+                          <td colSpan={6} className="p-12 text-center text-slate-400 font-medium italic">
                             Nenhuma conta a receber lançada.
                           </td>
                         </tr>
                       ) : (
                         receber.map((conta) => (
-                          <tr key={conta.id} className="border-b last:border-0 hover:bg-slate-50">
-                            <td className="p-4 font-medium">
+                          <tr key={conta.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">
                               {conta.descricao}
                               {conta.ordemId && (
-                                <span className="ml-2 text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
+                                <span className="ml-2 text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">
                                   OS #{conta.ordemId}
                                 </span>
                               )}
                             </td>
-                            <td className="p-4 text-slate-600">{conta.cliente}</td>
+                            <td className="p-4 text-slate-600 dark:text-slate-300 font-medium">{conta.cliente}</td>
                             <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-600">
+                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                                 <Calendar className="h-4 w-4" />
                                 {formatDate(conta.vencimento)}
                               </div>
                             </td>
                             <td className="p-4">
-                              <Badge variant={conta.status === 'Pago' ? 'default' : 'outline'} className={
-                                conta.status === 'Pago' ? 'bg-emerald-500 hover:bg-emerald-600' : 'text-amber-600 border-amber-200 bg-amber-50'
-                              }>
+                              <Badge variant={conta.status === 'Pago' ? 'success' : 'warning'}>
                                 {conta.status === 'Pago' ? 'Recebido' : 'Pendente'}
                               </Badge>
                             </td>
-                            <td className="p-4 text-right font-medium text-emerald-600">
+                            <td className="p-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(conta.valor)}
                             </td>
                             <td className="p-4 text-right">
@@ -205,7 +203,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
                                 <Button 
                                   size="sm" 
                                   variant="ghost" 
-                                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold text-xs"
                                   onClick={() => handleBaixa(conta.id, 'receber')}
                                 >
                                   <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -222,48 +220,46 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
               </TabsContent>
 
               <TabsContent value="pagar" className="mt-0">
-                <div className="rounded-md border">
+                <div className="rounded-xl border border-black/5 dark:border-white/10 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-slate-50">
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Descrição</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Categoria</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Vencimento</th>
-                        <th className="h-10 px-4 text-left font-medium text-slate-500">Status</th>
-                        <th className="h-10 px-4 text-right font-medium text-slate-500">Valor</th>
-                        <th className="h-10 px-4 text-right font-medium text-slate-500">Ações</th>
+                      <tr className="border-b border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/20">
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Descrição</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Categoria</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Vencimento</th>
+                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Status</th>
+                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Valor</th>
+                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Ações</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-black/5 dark:divide-white/10">
                       {pagar.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-500">
+                          <td colSpan={6} className="p-12 text-center text-slate-400 font-medium italic">
                             Nenhuma conta a pagar lançada.
                           </td>
                         </tr>
                       ) : (
                         pagar.map((conta) => (
-                          <tr key={conta.id} className="border-b last:border-0 hover:bg-slate-50">
-                            <td className="p-4 font-medium">{conta.descricao}</td>
+                          <tr key={conta.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">{conta.descricao}</td>
                             <td className="p-4">
-                              <Badge variant="secondary" className="font-normal">
+                              <Badge variant="secondary">
                                 {conta.categoria}
                               </Badge>
                             </td>
                             <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-600">
+                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                                 <Calendar className="h-4 w-4" />
                                 {formatDate(conta.vencimento)}
                               </div>
                             </td>
                             <td className="p-4">
-                              <Badge variant={conta.status === 'Pago' ? 'default' : 'outline'} className={
-                                conta.status === 'Pago' ? 'bg-emerald-500 hover:bg-emerald-600' : 'text-red-600 border-red-200 bg-red-50'
-                              }>
+                              <Badge variant={conta.status === 'Pago' ? 'success' : 'destructive'}>
                                 {conta.status === 'Pago' ? 'Pago' : 'Pendente'}
                               </Badge>
                             </td>
-                            <td className="p-4 text-right font-medium text-red-600">
+                            <td className="p-4 text-right font-bold text-red-600 dark:text-red-400">
                               {formatCurrency(conta.valor)}
                             </td>
                             <td className="p-4 text-right">
@@ -271,7 +267,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
                                 <Button 
                                   size="sm" 
                                   variant="ghost" 
-                                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold text-xs"
                                   onClick={() => handleBaixa(conta.id, 'pagar')}
                                 >
                                   <CheckCircle2 className="h-4 w-4 mr-1" />

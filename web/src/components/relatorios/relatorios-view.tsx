@@ -78,13 +78,13 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
-          <p className="font-medium text-slate-900 mb-2">{label}</p>
+        <div className="glass p-4 border border-black/5 dark:border-white/10 rounded-xl shadow-xl">
+          <p className="font-bold text-slate-900 dark:text-white mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center gap-2 text-sm">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-              <span className="text-slate-500">{entry.name}:</span>
-              <span className="font-medium text-slate-900">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">{entry.name}:</span>
+              <span className="font-bold text-slate-900 dark:text-white">
                 {formatCurrency(Number(entry.value))}
               </span>
             </div>
@@ -99,25 +99,41 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
     <DashboardLayout>
       <Header title="Relatórios & Inteligência" subtitle="Análise financeira e operacional" />
       
-      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-100px)]">
+      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-120px)] max-w-[1600px] mx-auto">
         
         {/* Coluna 1 e 2: Dashboards Visuais */}
-        <div className="lg:col-span-2 space-y-6 overflow-y-auto pr-2">
+        <div className="lg:col-span-2 space-y-8 overflow-y-auto pr-2 custom-scrollbar">
           
           {/* Gráfico Principal */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Fluxo de Caixa (6 Meses)</CardTitle>
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b border-black/5 dark:border-white/5 pb-6">
+              <CardTitle className="text-xl">Fluxo de Caixa (6 Meses)</CardTitle>
             </CardHeader>
-            <CardContent className="h-[300px]">
+            <CardContent className="h-[350px] pt-8">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={financeiro.grafico}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="mes" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val/1000}k`} />
+                <BarChart data={financeiro.grafico} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                  <XAxis 
+                    dataKey="mes" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    fontFamily="Outfit"
+                    fontWeight="bold"
+                    tick={{ fill: '#94a3b8' }}
+                  />
+                  <YAxis 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    tickFormatter={(val) => `R$${val/1000}k`} 
+                    fontFamily="Outfit"
+                    fontWeight="bold"
+                    tick={{ fill: '#94a3b8' }}
+                  />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="receita" name="Receita" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="despesa" name="Despesa" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="receita" name="Receita" fill="#10b981" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="despesa" name="Despesa" fill="#f43f5e" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -125,23 +141,23 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
 
           {/* Top Clientes */}
           <Card>
-            <CardHeader>
-              <CardTitle>Top 5 Clientes (Faturamento)</CardTitle>
+            <CardHeader className="border-b border-black/5 dark:border-white/5 pb-6">
+              <CardTitle className="text-xl">Top 5 Clientes (Faturamento)</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="space-y-4">
                 {financeiro.topClientes.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                  <div key={i} className="flex items-center justify-between p-4 bg-white/40 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl group hover:scale-[1.01] transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-600/20">
                         {i + 1}
                       </div>
                       <div>
-                        <p className="font-medium text-slate-900">{c.nome}</p>
-                        <p className="text-xs text-slate-500">{c.qtd} pedidos • Ticket Médio: {formatCurrency(c.ticket)}</p>
+                        <p className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors">{c.nome}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{c.qtd} pedidos <span className="mx-1">•</span> Ticket Médio: {formatCurrency(c.ticket)}</p>
                       </div>
                     </div>
-                    <p className="font-bold text-slate-700">{formatCurrency(c.total)}</p>
+                    <p className="font-bold text-lg text-slate-900 dark:text-white">{formatCurrency(c.total)}</p>
                   </div>
                 ))}
               </div>
@@ -150,10 +166,12 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
         </div>
 
         {/* Coluna 3: Chat IA */}
-        <div className="flex flex-col h-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
+        <div className="flex flex-col h-full glass dark:bg-slate-950/40 border border-black/5 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden animate-in" style={{ animationDelay: '300ms' }}>
+          <div className="p-6 border-b border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/20">
+            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/20">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+              </div>
               Consultor IA
             </h3>
           </div>
@@ -177,16 +195,26 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
 
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[90%] rounded-lg p-3 text-sm ${
-                  m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'
+                <div className={`max-w-[90%] rounded-2xl p-4 shadow-sm transition-all duration-300 ${
+                  m.role === 'user' 
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-white/50 dark:bg-white/5 text-slate-800 dark:text-slate-100 rounded-tl-none border border-black/5 dark:border-white/5'
                 }`}>
-                  {m.content}
+                  <p className="text-sm font-medium leading-relaxed">{m.content}</p>
                   {m.data && (
-                    <div className="space-y-3 mt-1">
-                      <p className="font-medium text-indigo-700">{m.data.analiseGeral}</p>
+                    <div className="space-y-4 mt-3">
+                      <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20">
+                        <p className="font-bold text-indigo-700 dark:text-indigo-300 text-xs uppercase tracking-wider mb-2">Análise Estratégica</p>
+                        <p className="text-indigo-900 dark:text-indigo-100 leading-relaxed font-medium">{m.data.analiseGeral}</p>
+                      </div>
                       {m.data.tendencias.length > 0 && (
-                        <ul className="list-disc pl-4 space-y-1">
-                          {m.data.tendencias.map((t, idx) => <li key={idx}>{t}</li>)}
+                        <ul className="space-y-2">
+                          {m.data.tendencias.map((t, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                              <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                              <span className="text-xs font-medium">{t}</span>
+                            </li>
+                          ))}
                         </ul>
                       )}
                     </div>

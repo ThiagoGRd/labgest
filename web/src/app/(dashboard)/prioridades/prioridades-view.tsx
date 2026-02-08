@@ -25,38 +25,38 @@ interface PrioridadesViewProps {
 
 function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 'urgente' | 'proximo' }) {
   const colors = {
-    atrasado: 'border-l-4 border-l-red-500 bg-red-50',
-    hoje: 'border-l-4 border-l-amber-500 bg-amber-50',
-    urgente: 'border-l-4 border-l-orange-500 bg-orange-50',
-    proximo: 'border-l-4 border-l-blue-500 bg-blue-50',
+    atrasado: 'border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-500/10',
+    hoje: 'border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-500/10',
+    urgente: 'border-l-4 border-l-orange-500 bg-orange-50/50 dark:bg-orange-500/10',
+    proximo: 'border-l-4 border-l-blue-500 bg-blue-50/50 dark:bg-blue-500/10',
   }
 
   const icons = {
-    atrasado: <AlertCircle className="h-5 w-5 text-red-600" />,
-    hoje: <Clock className="h-5 w-5 text-amber-600" />,
-    urgente: <AlertTriangle className="h-5 w-5 text-orange-600" />,
-    proximo: <Calendar className="h-5 w-5 text-blue-600" />,
+    atrasado: <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />,
+    hoje: <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />,
+    urgente: <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />,
+    proximo: <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />,
   }
 
   return (
-    <div className={`p-4 rounded-lg shadow-sm bg-white mb-3 ${colors[type]}`}>
+    <div className={`p-4 rounded-xl shadow-sm glass mb-3 animate-in transition-all hover:scale-[1.02] ${colors[type]}`}>
       <div className="flex justify-between items-start">
         <div className="flex gap-3">
           <div className="mt-1">{icons[type]}</div>
           <div>
-            <h4 className="font-semibold text-slate-900">{ordem.nomePaciente}</h4>
-            <p className="text-sm text-slate-600">{ordem.servicoNome}</p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+            <h4 className="font-bold text-slate-900 dark:text-white">{ordem.nomePaciente}</h4>
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{ordem.servicoNome}</p>
+            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <User className="h-3 w-3" />
               <span>Dr(a). {ordem.clienteNome}</span>
             </div>
           </div>
         </div>
         <div className="text-right">
-          <Badge variant="outline" className="mb-1 bg-white">
+          <Badge variant="outline" className="mb-2 bg-white/50 dark:bg-black/20 border-black/5 dark:border-white/10">
             {ordem.etapaAtual || 'Em produção'}
           </Badge>
-          <p className="text-xs text-slate-500 font-medium">
+          <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">
             Entrega: {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR')}
           </p>
         </div>

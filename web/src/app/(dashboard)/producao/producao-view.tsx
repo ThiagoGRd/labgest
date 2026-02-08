@@ -248,7 +248,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             >
               <div
                 className="rounded-t-2xl px-5 py-4 flex items-center justify-between border-b border-black/5 dark:border-white/5"
-                style={{ backgroundColor: etapa.cor + '15', backdropFilter: 'blur(8px)' }}
+                style={{ backgroundColor: etapa.cor + '25', backdropFilter: 'blur(10px)' }}
               >
                 <div className="flex items-center gap-2.5">
                   <div

@@ -43,7 +43,7 @@ const Value = ({ children, className }: { children: React.ReactNode; className?:
 const Divider = () => <hr className="border-slate-200 my-4 border-dashed" />
 
 export const FichaImpressao = forwardRef<HTMLDivElement, FichaImpressaoProps>(({ ordem }, ref) => {
-  const qrData = JSON.stringify({ id: ordem.id, type: 'ordem' }) // Simplificado para leitura interna
+  const qrData = `https://labgest-web.vercel.app/check/${ordem.id}`
 
   return (
     <div ref={ref} className="bg-white p-8 w-[210mm] min-h-[297mm] mx-auto text-slate-900 print:p-0">

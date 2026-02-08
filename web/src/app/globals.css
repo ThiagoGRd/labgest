@@ -113,6 +113,10 @@ h1, h2, h3, h4, h5, h6 {
   color: #f1f5f9 !important; /* text-slate-100 */
 }
 
+.dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
 .dark .text-slate-700 {
   color: #e2e8f0 !important; /* text-slate-200 */
 }
@@ -129,21 +133,42 @@ h1, h2, h3, h4, h5, h6 {
   color: #64748b !important; /* text-slate-500 */
 }
 
+/* Overrides para fundos fixos que matam o contraste */
+.dark .bg-white {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+}
+
 .dark .bg-slate-50 {
-  background-color: rgba(15, 23, 42, 0.6) !important; /* slate-900 with opacity */
+  background-color: rgba(30, 41, 59, 0.4) !important;
 }
 
 .dark .bg-slate-100 {
-  background-color: rgba(30, 41, 59, 0.6) !important; /* slate-800 with opacity */
+  background-color: rgba(51, 65, 85, 0.4) !important;
 }
 
-.dark .border-slate-100,
-.dark .border-slate-200 {
+.dark .bg-emerald-50, .dark .bg-red-50, .dark .bg-blue-50, .dark .bg-amber-50, .dark .bg-orange-50 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-.dark .hover\:bg-slate-50:hover {
-  background-color: rgba(30, 41, 59, 0.8) !important;
+.dark .text-emerald-900, .dark .text-red-900, .dark .text-blue-900, .dark .text-amber-900, .dark .text-orange-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-emerald-700, .dark .text-red-700, .dark .text-blue-700, .dark .text-amber-700, .dark .text-orange-700 {
+  color: #cbd5e1 !important;
+}
+
+/* Fix para Gráficos (Recharts) */
+.recharts-cartesian-axis-tick-value {
+  fill: currentColor;
+}
+.dark .recharts-cartesian-axis-tick-value {
+  fill: #94a3b8;
+}
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.1);
 }
 
 /* Irresistible Design Utilities */
@@ -157,7 +182,9 @@ h1, h2, h3, h4, h5, h6 {
 
 .dark .glass {
   background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .mesh-bg {
