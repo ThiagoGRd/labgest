@@ -36,7 +36,7 @@
 }
 
 :root {
-  --background: 210 40% 98%; /* Slightly blue-ish background */
+  --background: 210 40% 98%; 
   --foreground: 222.2 84% 4.9%;
 
   --card: 0 0% 100%;
@@ -52,7 +52,7 @@
   --secondary-foreground: 222.2 47.4% 11.2%;
 
   --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 35%;
+  --muted-foreground: 215.4 16.3% 46.9%;
 
   --accent: 210 40% 96.1%;
   --accent-foreground: 222.2 47.4% 11.2%;
@@ -64,14 +64,14 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 243 75% 59%;
 
-  --radius: 1rem; /* Bolder rounded corners */
+  --radius: 1rem;
 }
 
 .dark {
-  --background: 222.2 47.4% 5.9%; /* Slightly lighter than 4% */
+  --background: 222.2 47.4% 5.9%;
   --foreground: 210 40% 98%;
 
-  --card: 222.2 47.4% 7.9%; /* Cards slightly lighter than background */
+  --card: 222.2 47.4% 7.9%;
   --card-foreground: 210 40% 98%;
 
   --popover: 222.2 47.4% 7.9%;
@@ -84,7 +84,7 @@
   --secondary-foreground: 210 40% 98%;
 
   --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 75.1%; /* Much brighter than 56.9% for readability */
+  --muted-foreground: 215 20.2% 75.1%;
 
   --accent: 217.2 32.6% 17.5%;
   --accent-foreground: 210 40% 98%;
@@ -108,99 +108,26 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-outfit), sans-serif;
 }
 
-/* Global Dark Mode Overrides for Legibility */
-.dark .text-slate-900 {
-  color: #f1f5f9 !important; /* text-slate-100 */
-}
-
-.dark .text-slate-800 {
-  color: #f1f5f9 !important;
-}
-
-.dark .text-slate-700 {
-  color: #e2e8f0 !important; /* text-slate-200 */
-}
-
-.dark .text-slate-600 {
-  color: #cbd5e1 !important; /* text-slate-300 */
-}
-
-.dark .text-slate-500 {
-  color: #94a3b8 !important; /* text-slate-400 */
-}
-
-.dark .text-slate-400 {
-  color: #64748b !important; /* text-slate-500 */
-}
-
-/* Overrides para fundos fixos que matam o contraste */
-.dark .bg-white {
-  background-color: rgba(15, 23, 42, 0.6) !important;
-}
-
-.dark .bg-slate-50 {
-  background-color: rgba(30, 41, 59, 0.4) !important;
-}
-
-.dark .bg-slate-100 {
-  background-color: rgba(51, 65, 85, 0.4) !important;
-}
-
-.dark .bg-emerald-50, .dark .bg-red-50, .dark .bg-blue-50, .dark .bg-amber-50, .dark .bg-orange-50 {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.dark .text-emerald-900, .dark .text-red-900, .dark .text-blue-900, .dark .text-amber-900, .dark .text-orange-900 {
-  color: #f8fafc !important;
-}
-
-.dark .text-emerald-700, .dark .text-red-700, .dark .text-blue-700, .dark .text-amber-700, .dark .text-orange-700 {
-  color: #cbd5e1 !important;
-}
-
-/* Fix para Gráficos (Recharts) */
-.recharts-cartesian-axis-tick-value {
-  fill: currentColor;
-}
-.dark .recharts-cartesian-axis-tick-value {
-  fill: #94a3b8;
-}
-.dark .recharts-cartesian-grid-horizontal line,
-.dark .recharts-cartesian-grid-vertical line {
-  stroke: rgba(255, 255, 255, 0.1);
-}
-
-/* Irresistible Design Utilities */
+/* Glassmorphism System */
 .glass {
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-}
-
-.dark .glass {
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  @apply bg-white/60 border border-black/5 shadow-sm backdrop-blur-md;
+  @apply dark:bg-slate-900/40 dark:border-white/10 dark:shadow-2xl;
 }
 
 .mesh-bg {
   background-color: #f8fafc;
   background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.05) 0, transparent 50%), 
-    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.05) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.05) 0, transparent 50%);
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.03) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.03) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.03) 0, transparent 50%);
 }
 
 .dark .mesh-bg {
   background-color: #020617;
   background-image: 
-    radial-gradient(at 0% 0%, hsla(243, 75%, 65%, 0.15) 0, transparent 50%), 
-    radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.2) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.15) 0, transparent 50%);
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.4) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.4) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.4) 0, transparent 50%);
 }
 
 .animate-in {
@@ -208,30 +135,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400 dark:bg-slate-600;
-}
+/* Scrollbar Customization */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-700 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-slate-400 dark:bg-slate-600; }

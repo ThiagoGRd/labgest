@@ -52,12 +52,11 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     observacoes: '',
   })
 
-  // Preencher form quando ordem mudar
   useEffect(() => {
     if (ordem) {
       setFormData({
         paciente: ordem.paciente || '',
-        dataEntrega: ordem.dataEntrega ? ordem.dataEntrega.split('T')[0] : '',
+        dataEntrega: ordem.dataEntrega ? new Date(ordem.dataEntrega).toISOString().split('T')[0] : '',
         prioridade: ordem.prioridade || 'Normal',
         status: ordem.status || 'Aguardando',
         etapaAtual: ordem.etapaAtual || 'Recebimento',
@@ -112,112 +111,75 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
       isOpen={isOpen}
       onClose={onClose}
       title={`Editar Ordem #${ordem.id}`}
-      description="Altere os dados da ordem de serviço"
+      description="Alteração das especificações do caso"
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+          <div className="p-4 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
             {error}
           </div>
         )}
 
-        {/* Info fixa (não editável) */}
-        <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Dentista:</span>
-            <span className="font-medium text-slate-900">{ordem.cliente.nome}</span>
+        <div className="bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl p-5 space-y-3">
+          <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+            <span className="text-slate-400">Dentista</span>
+            <span className="text-slate-900 dark:text-white">{ordem.cliente.nome}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Serviço:</span>
-            <span className="font-medium text-slate-900">{ordem.servico}</span>
+          <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+            <span className="text-slate-400">Serviço</span>
+            <span className="text-slate-900 dark:text-white">{ordem.servico}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Paciente */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Nome do Paciente *
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Paciente</label>
             <Input
               name="paciente"
               value={formData.paciente}
               onChange={handleChange}
-              placeholder="Ex: Maria Silva"
+              className="h-11 rounded-xl"
               required
             />
           </div>
 
-          {/* Data Entrega */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Data de Entrega *
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Data de Entrega</label>
             <Input
               type="date"
               name="dataEntrega"
               value={formData.dataEntrega}
               onChange={handleChange}
+              className="h-11 rounded-xl"
               required
             />
           </div>
 
-          {/* Status */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Status
-            </label>
-            <Select
-              name="status"
-              value={formData.status}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, status: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Status</label>
+            <Select name="status" value={formData.status} onValueChange={(val) => setFormData(p => ({ ...p, status: val }))}>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {statusOptions.map(s => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
+                {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Etapa Atual */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Etapa Atual
-            </label>
-            <Select
-              name="etapaAtual"
-              value={formData.etapaAtual}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, etapaAtual: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Etapa Atual</label>
+            <Select name="etapaAtual" value={formData.etapaAtual} onValueChange={(val) => setFormData(p => ({ ...p, etapaAtual: val }))}>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {etapas.map(e => (
-                  <SelectItem key={e} value={e}>{e}</SelectItem>
-                ))}
+                {etapas.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Prioridade */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Prioridade
-            </label>
-            <Select
-              name="prioridade"
-              value={formData.prioridade}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, prioridade: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Normal" />
-              </SelectTrigger>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Prioridade</label>
+            <Select name="prioridade" value={formData.prioridade} onValueChange={(val) => setFormData(p => ({ ...p, prioridade: val }))}>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Baixa">Baixa</SelectItem>
                 <SelectItem value="Normal">Normal</SelectItem>
@@ -227,70 +189,37 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
             </Select>
           </div>
 
-          {/* Cor dos Dentes */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Cor dos Dentes
-            </label>
-            <Select
-              name="corDentes"
-              value={formData.corDentes}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, corDentes: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Cor dos Dentes</label>
+            <Select name="corDentes" value={formData.corDentes} onValueChange={(val) => setFormData(p => ({ ...p, corDentes: val }))}>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                {cores.map(cor => (
-                  <SelectItem key={cor} value={cor}>{cor}</SelectItem>
-                ))}
+                {cores.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Material */}
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Material
-            </label>
-            <Input
-              name="material"
-              value={formData.material}
-              onChange={handleChange}
-              placeholder="Ex: PMMA Rosa, Dentes Artiplus..."
-            />
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Material</label>
+            <Input name="material" value={formData.material} onChange={handleChange} className="h-11 rounded-xl" />
           </div>
 
-          {/* Observações */}
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Observações
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Observações</label>
             <textarea
               name="observacoes"
               value={formData.observacoes}
               onChange={handleChange}
               rows={3}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Informações adicionais..."
+              className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
         </div>
 
-        {/* Botões */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              'Salvar Alterações'
-            )}
+        <div className="flex justify-end gap-3 pt-6 border-t border-black/5 dark:border-white/5">
+          <Button type="button" variant="outline" onClick={onClose} className="rounded-xl px-6">Cancelar</Button>
+          <Button type="submit" disabled={loading} className="rounded-xl px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Alterações'}
           </Button>
         </div>
       </form>

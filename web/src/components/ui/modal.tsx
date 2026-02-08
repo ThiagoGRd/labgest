@@ -50,27 +50,27 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
       }}
     >
       <div className={cn(
-        "bg-white rounded-2xl shadow-2xl w-full animate-slide-in",
+        "bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full animate-slide-in overflow-hidden",
         sizeClasses[size]
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-black/5 dark:border-white/5 bg-slate-50/50 dark:bg-black/20">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">{title}</h2>
             {description && (
-              <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-2">{description}</p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-6 max-h-[80vh] overflow-y-auto custom-scrollbar bg-white dark:bg-slate-900">
           {children}
         </div>
       </div>

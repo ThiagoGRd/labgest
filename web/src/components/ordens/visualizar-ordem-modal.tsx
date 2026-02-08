@@ -59,11 +59,7 @@ function getPriorityVariant(priority: string) {
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
+  return date.toLocaleDateString('pt-BR')
 }
 
 function formatCurrency(value: number) {
@@ -81,115 +77,103 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
       isOpen={isOpen}
       onClose={onClose}
       title={`Ordem #${ordem.id}`}
-      description="Detalhes da ordem de serviço"
+      description="Detalhes completos da ordem de serviço"
       size="lg"
     >
       <div className="space-y-6">
-        {/* Status e Prioridade */}
         <div className="flex items-center gap-3">
-          <Badge variant={getStatusVariant(ordem.status)} className="text-sm px-3 py-1">
+          <Badge variant={getStatusVariant(ordem.status)} className="px-3 py-1">
             {ordem.status}
           </Badge>
-          <Badge variant={getPriorityVariant(ordem.prioridade)} className="text-sm px-3 py-1">
+          <Badge variant={getPriorityVariant(ordem.prioridade)} className="px-3 py-1">
             {ordem.prioridade}
           </Badge>
         </div>
 
-        {/* Info Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Paciente */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
             <User className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Paciente</p>
-              <p className="font-medium text-slate-900">{ordem.paciente}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Paciente</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.paciente}</p>
             </div>
           </div>
 
-          {/* Dentista */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
             <User className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Dentista</p>
-              <p className="font-medium text-slate-900">{ordem.cliente.nome}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Dentista</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.cliente.nome}</p>
             </div>
           </div>
 
-          {/* Serviço */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
             <Package className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Serviço</p>
-              <p className="font-medium text-slate-900">{ordem.servico}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Serviço</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.servico}</p>
             </div>
           </div>
 
-          {/* Etapa Atual */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
             <Activity className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Etapa Atual</p>
-              <p className="font-medium text-slate-900">{ordem.etapaAtual}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Etapa Atual</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.etapaAtual}</p>
             </div>
           </div>
 
-          {/* Data Entrada */}
-          {ordem.dataEntrada && (
-            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
-              <Clock className="h-5 w-5 text-indigo-600 mt-0.5" />
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Data de Entrada</p>
-                <p className="font-medium text-slate-900">{formatDate(ordem.dataEntrada)}</p>
-              </div>
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
+            <Clock className="h-5 w-5 text-indigo-600 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Data de Entrada</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.dataEntrada ? formatDate(ordem.dataEntrada) : '-'}</p>
             </div>
-          )}
+          </div>
 
-          {/* Data Entrega */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
             <Calendar className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Data de Entrega</p>
-              <p className="font-medium text-slate-900">{formatDate(ordem.dataEntrega)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Data de Entrega</p>
+              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{formatDate(ordem.dataEntrega)}</p>
             </div>
           </div>
 
-          {/* Cor dos Dentes */}
           {ordem.corDentes && (
-            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
               <Palette className="h-5 w-5 text-indigo-600 mt-0.5" />
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Cor dos Dentes</p>
-                <p className="font-medium text-slate-900">{ordem.corDentes}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Cor dos Dentes</p>
+                <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.corDentes}</p>
               </div>
             </div>
           )}
 
-          {/* Valor */}
-          <div className="flex items-start gap-3 p-4 bg-indigo-50 rounded-lg">
-            <DollarSign className="h-5 w-5 text-indigo-600 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl">
+            <DollarSign className="h-5 w-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Valor</p>
-              <p className="font-bold text-indigo-600 text-lg">{formatCurrency(ordem.valor)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 opacity-70">Valor</p>
+              <p className="font-black text-indigo-600 dark:text-indigo-100 text-xl leading-none mt-0.5">{formatCurrency(ordem.valor)}</p>
             </div>
           </div>
         </div>
 
-        {/* Observações */}
         {ordem.observacoes && (
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <div className="flex items-start gap-3">
-              <FileText className="h-5 w-5 text-indigo-600 mt-0.5" />
+          <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+                <FileText className="h-5 w-5 text-indigo-600" />
+              </div>
               <div className="flex-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Observações</p>
-                <p className="text-slate-700 whitespace-pre-wrap">{ordem.observacoes}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Observações Clínicas</p>
+                <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium">{ordem.observacoes}</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Botão Fechar */}
-        <div className="flex justify-end pt-4 border-t border-slate-200">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex justify-end pt-4 border-t border-black/5 dark:border-white/5">
+          <Button variant="outline" onClick={onClose} className="rounded-xl px-8">
             Fechar
           </Button>
         </div>
