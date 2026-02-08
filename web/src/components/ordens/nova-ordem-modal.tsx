@@ -5,8 +5,9 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Upload, X } from 'lucide-react'
 import { createOrdem } from '@/actions/ordens'
+import { createClient } from '@/lib/supabase/client'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
@@ -21,6 +22,8 @@ const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2
 export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos }: NovaOrdemModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
   const [formData, setFormData] = useState({
     clienteId: '',
     servicoId: '',
@@ -32,9 +35,55 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
     observacoes: '',
   })
 
+  const supabase = createClient()
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
     if (error) setError('')
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setFiles(prev => [...prev, ...Array.from(e.target.files!)])
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const uploadFiles = async () => {
+    if (files.length === 0) return []
+    
+    setUploading(true)
+    const uploadedUrls: string[] = []
+
+    try {
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+        const filePath = `${fileName}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('lab-files')
+          .upload(filePath, file)
+
+        if (uploadError) throw uploadError
+
+        const { data } = supabase.storage
+          .from('lab-files')
+          .getPublicUrl(filePath)
+
+        uploadedUrls.push(data.publicUrl)
+      }
+    } catch (err) {
+      console.error('Erro no upload:', err)
+      throw new Error('Falha ao enviar arquivos. Tente novamente.')
+    } finally {
+      setUploading(false)
+    }
+
+    return uploadedUrls
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,6 +92,12 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
     setError('')
     
     try {
+      let uploadedUrls: string[] = []
+      
+      if (files.length > 0) {
+        uploadedUrls = await uploadFiles()
+      }
+
       const result = await createOrdem({
         clienteId: formData.clienteId,
         servicoId: formData.servicoId,
@@ -52,6 +107,7 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
         corDentes: formData.corDentes,
         material: formData.material,
         observacoes: formData.observacoes,
+        arquivos: uploadedUrls,
       })
       
       if (result.success) {
@@ -67,11 +123,12 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
           material: '',
           observacoes: '',
         })
+        setFiles([])
       } else {
         setError(result.error || 'Erro ao criar ordem')
       }
-    } catch (err) {
-      setError('Ocorreu um erro inesperado')
+    } catch (err: any) {
+      setError(err.message || 'Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
     }
@@ -224,6 +281,41 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             />
           </div>
 
+          {/* Arquivos STL */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Arquivos do Caso (.stl, .obj, .ply)
+            </label>
+            <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 hover:bg-slate-50 transition-colors text-center cursor-pointer relative">
+              <input
+                type="file"
+                multiple
+                accept=".stl,.obj,.ply"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="h-8 w-8 text-slate-400" />
+                <p className="text-sm text-slate-600">
+                  Clique ou arraste arquivos para anexar
+                </p>
+              </div>
+            </div>
+            
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {files.map((file, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-slate-100 p-2 rounded text-sm">
+                    <span className="truncate max-w-[90%]">{file.name}</span>
+                    <button type="button" onClick={() => removeFile(idx)} className="text-slate-500 hover:text-red-500">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Observações */}
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -258,10 +350,10 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             Cancelar
           </Button>
           <Button type="submit" disabled={loading}>
-            {loading ? (
+            {loading || uploading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Criando...
+                {uploading ? 'Enviando arquivos...' : 'Criando...'}
               </>
             ) : (
               'Criar Ordem'

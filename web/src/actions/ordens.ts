@@ -47,6 +47,7 @@ export async function createOrdem(data: {
   corDentes: string
   material: string
   observacoes: string
+  arquivos?: string[]
 }) {
   try {
     // Buscar cliente e serviço para pegar nomes e valores
@@ -77,6 +78,7 @@ export async function createOrdem(data: {
         observacoes: data.observacoes,
         status: 'Aguardando',
         etapaAtual: 'Recebimento',
+        arquivoStl: data.arquivos || [],
       }
     })
     revalidatePath('/ordens')
