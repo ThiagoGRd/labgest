@@ -16,7 +16,25 @@ function getStatusVariant(status: string) {
 }
 
 export default async function CheckOrderPage({ params }: { params: { id: string } }) {
+  console.log('[CheckOrderPage] Params received:', params)
   const id = parseInt(params.id)
+
+  if (isNaN(id)) {
+    console.error('[CheckOrderPage] Invalid ID:', params.id)
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
+        <Card className="max-w-md w-full text-center p-12">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Package className="h-10 w-10 text-amber-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Código Inválido</h1>
+          <p className="text-slate-500 mb-8">O código da ordem não parece ser válido. Tente digitar manualmente.</p>
+          <Link href="/" className="text-indigo-600 font-bold hover:underline">Voltar para o site</Link>
+        </Card>
+      </div>
+    )
+  }
+
   const ordem = await getOrdemPublic(id)
 
   if (!ordem) {
@@ -48,7 +66,7 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
   return (
     <div className="min-h-screen mesh-bg p-6 lg:p-12">
       <div className="max-w-2xl mx-auto space-y-8">
-        
+
         {/* Header */}
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-xl shadow-indigo-600/30">
@@ -72,7 +90,7 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
                 {ordem.status}
               </Badge>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-8">
               <div>
                 <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest mb-1">Paciente</p>
@@ -89,26 +107,24 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
             {/* Timeline */}
             <div className="relative">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-8">Etapa da Produção</h3>
-              
+
               <div className="space-y-6">
                 {etapas.map((etapa, idx) => {
                   const isCompleted = idx < etapaIndex
                   const isCurrent = idx === etapaIndex
-                  
+
                   return (
                     <div key={etapa} className="flex items-center gap-4 relative">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all duration-500 ${
-                        isCompleted ? 'bg-emerald-500 text-white' : 
-                        isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 animate-pulse' : 
-                        'bg-slate-100 text-slate-400'
-                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white' :
+                          isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 animate-pulse' :
+                            'bg-slate-100 text-slate-400'
+                        }`}>
                         {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <span className="text-xs font-bold">{idx + 1}</span>}
                       </div>
-                      
+
                       {idx < etapas.length - 1 && (
-                        <div className={`absolute left-4 top-8 w-0.5 h-6 -translate-x-1/2 ${
-                          idx < etapaIndex ? 'bg-emerald-500' : 'bg-slate-100'
-                        }`} />
+                        <div className={`absolute left-4 top-8 w-0.5 h-6 -translate-x-1/2 ${idx < etapaIndex ? 'bg-emerald-500' : 'bg-slate-100'
+                          }`} />
                       )}
 
                       <div className="flex-1">
@@ -134,7 +150,7 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
                 </div>
                 <p className="text-lg font-black text-slate-900">{new Date(ordem.dataEntrega).toLocaleDateString('pt-BR')}</p>
               </div>
-              
+
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Activity className="h-4 w-4" />
@@ -151,7 +167,7 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
         </Card>
 
         <p className="text-center text-xs text-slate-400">
-          Este é um canal oficial de rastreamento do laboratório. 
+          Este é um canal oficial de rastreamento do laboratório.
           Em caso de dúvidas, entre em contato diretamente com o suporte técnico.
         </p>
       </div>

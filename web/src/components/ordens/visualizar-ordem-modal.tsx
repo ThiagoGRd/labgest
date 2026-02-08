@@ -12,6 +12,8 @@ import {
   Package,
   DollarSign,
   Activity,
+  Paperclip,
+  Download,
 } from 'lucide-react'
 
 interface Ordem {
@@ -28,6 +30,7 @@ interface Ordem {
   corDentes?: string
   material?: string
   observacoes?: string
+  arquivos?: string[]
 }
 
 interface VisualizarOrdemModalProps {
@@ -167,6 +170,37 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
               <div className="flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Observações Clínicas</p>
                 <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium">{ordem.observacoes}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {ordem.arquivos && ordem.arquivos.length > 0 && (
+          <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+                <Paperclip className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Arquivos Anexados</p>
+                <div className="space-y-2">
+                  {ordem.arquivos.map((arquivo, index) => (
+                    <a
+                      key={index}
+                      href={arquivo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-500 transition-colors group"
+                    >
+                      <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded text-indigo-600">
+                        <Download className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 truncate">
+                        {arquivo.split('/').pop()}
+                      </span>
+                    </a>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

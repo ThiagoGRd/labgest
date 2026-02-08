@@ -30,6 +30,7 @@ export async function getOrdens() {
       material: o.material || '',
       observacoes: o.observacoes || '',
       foto: null, // TODO: Handle photo
+      arquivos: (o.arquivoStl as string[]) || [],
     }))
   } catch (error) {
     console.error('Erro ao buscar ordens:', error)
@@ -125,6 +126,7 @@ export async function getOrdemById(id: number) {
 }
 
 export async function getOrdemPublic(id: number) {
+  console.log('[getOrdemPublic] Buscando ordem ID:', id)
   try {
     const ordem = await prisma.ordem.findUnique({
       where: { id },
@@ -134,7 +136,10 @@ export async function getOrdemPublic(id: number) {
       }
     })
 
-    if (!ordem) return null
+    if (!ordem) {
+      console.log('[getOrdemPublic] Ordem não encontrada para ID:', id)
+      return null
+    }
 
     return {
       id: ordem.id,
@@ -152,9 +157,10 @@ export async function getOrdemPublic(id: number) {
       corDentes: ordem.corDentes || '',
       material: ordem.material || '',
       observacoes: ordem.observacoes || '',
+      arquivos: (ordem.arquivoStl as string[]) || [], // Mapped from Json
     }
   } catch (error) {
-    console.error('Erro ao buscar ordem:', error)
+    console.error('[getOrdemPublic] Erro ao buscar ordem:', error)
     return null
   }
 }
