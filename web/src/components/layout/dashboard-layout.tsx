@@ -13,10 +13,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen mesh-bg relative overflow-hidden">
       <Sidebar user={user} />
-      <main className="ml-64 transition-all duration-300">
-        {children}
+      <main className="ml-64 transition-all duration-300 min-h-screen flex flex-col">
+        <div className="flex-1 animate-in p-6">
+          {children}
+        </div>
       </main>
     </div>
   )

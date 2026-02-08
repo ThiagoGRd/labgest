@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import { RealtimeOrders } from "@/components/providers/realtime-orders";
 
-const inter = Inter({ 
+const outfit = Outfit({ 
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-outfit",
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
 });
 
 export const metadata: Metadata = {
@@ -23,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${inter.variable} antialiased`}>
+      <body className={`${outfit.variable} ${plusJakarta.variable} antialiased font-sans`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

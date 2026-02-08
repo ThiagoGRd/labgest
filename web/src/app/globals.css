@@ -36,7 +36,7 @@
 }
 
 :root {
-  --background: 0 0% 100%;
+  --background: 210 40% 98%; /* Slightly blue-ish background */
   --foreground: 222.2 84% 4.9%;
 
   --card: 0 0% 100%;
@@ -45,14 +45,14 @@
   --popover: 0 0% 100%;
   --popover-foreground: 222.2 84% 4.9%;
 
-  --primary: 243 75% 59%; /* Indigo 600 */
+  --primary: 243 75% 59%;
   --primary-foreground: 210 40% 98%;
 
   --secondary: 210 40% 96.1%;
   --secondary-foreground: 222.2 47.4% 11.2%;
 
   --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 35%; /* Mais escuro que o padrão 46% */
+  --muted-foreground: 215.4 16.3% 35%;
 
   --accent: 210 40% 96.1%;
   --accent-foreground: 222.2 47.4% 11.2%;
@@ -64,58 +64,93 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 243 75% 59%;
 
-  --radius: 0.75rem;
+  --radius: 1rem; /* Bolder rounded corners */
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
 
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
+  --card: 224 71% 4%;
+  --card-foreground: 213 31% 91%;
 
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 224 71% 4%;
+  --popover-foreground: 213 31% 91%;
 
-  --primary: 243 75% 65%; /* Indigo 500 para dark */
+  --primary: 243 75% 65%;
   --primary-foreground: 222.2 47.4% 11.2%;
 
-  --secondary: 217.2 32.6% 17.5%;
+  --secondary: 222.2 47.4% 11.2%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 223 47% 11%;
+  --muted-foreground: 215.4 16.3% 56.9%;
 
-  --accent: 217.2 32.6% 17.5%;
+  --accent: 216 34% 17%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 62.8% 30.6%;
+  --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
+  --border: 216 34% 17%;
+  --input: 216 34% 17%;
   --ring: 243 75% 65%;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Auto dark mode support */
-    /* Uncomment below to use system preference by default */
-    /* ...dark variables here... */
-  }
 }
 
 body {
   @apply bg-background text-foreground;
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: var(--font-jakarta), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Utilitários para aumentar contraste */
-.text-muted-foreground {
-  /* Força um cinza mais escuro no modo claro para legibilidade */
-  color: hsl(var(--muted-foreground));
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-outfit), sans-serif;
+}
+
+/* Irresistible Design Utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mesh-bg {
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.05) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.05) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.05) 0, transparent 50%);
+}
+
+.dark .mesh-bg {
+  background-color: #020617;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,0.4) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.4) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.4) 0, transparent 50%);
+}
+
+.animate-in {
+  animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Custom Scrollbar */
