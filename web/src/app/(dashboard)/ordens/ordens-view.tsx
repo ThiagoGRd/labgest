@@ -230,7 +230,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         subtitle={`${ordens.length} ordens no total`}
         action={{
           label: 'Nova Ordem',
-          onClick: () => setModalOpen(true),
+          onClick: () => {
+            console.log('Botão Nova Ordem clicado')
+            setModalOpen(true)
+          },
         }}
       />
       
