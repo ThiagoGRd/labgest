@@ -86,7 +86,7 @@ export function Sidebar({ user }: SidebarProps) {
                 "flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-medium transition-all duration-300 group relative overflow-hidden",
                 isActive
                   ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                  : "text-muted-foreground hover:bg-white/50 dark:hover:bg-white/5 hover:text-foreground",
+                  : "text-muted-foreground hover:bg-white/50 dark:hover:bg-white/10 hover:text-foreground",
                 collapsed && "justify-center px-0 py-3"
               )}
               title={collapsed ? item.name : undefined}
@@ -128,7 +128,7 @@ export function Sidebar({ user }: SidebarProps) {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
-            "flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-muted-foreground hover:bg-white/50 dark:hover:bg-white/5 hover:text-primary transition-all duration-300",
+            "flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-muted-foreground hover:bg-white/50 dark:hover:bg-white/10 hover:text-primary transition-all duration-300",
             collapsed && "px-0"
           )}
         >

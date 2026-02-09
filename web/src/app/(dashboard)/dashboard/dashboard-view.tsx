@@ -142,28 +142,28 @@ export function DashboardView({ initialData }: DashboardViewProps) {
             <CardContent className="p-0">
               <div className="divide-y divide-black/5 dark:divide-white/5">
                 {initialData.proximasEntregas.length === 0 ? (
-                  <p className="text-slate-500 text-center py-12">Nenhuma entrega prevista.</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-center py-12">Nenhuma entrega prevista.</p>
                 ) : (
                   initialData.proximasEntregas.map((order) => (
                     <div
                       key={order.id}
-                      className="flex items-center justify-between p-6 hover:bg-white/40 dark:hover:bg-white/5 transition-all cursor-pointer group"
+                      className="flex items-center justify-between p-6 hover:bg-slate-50/80 dark:hover:bg-white/5 transition-all cursor-pointer group"
                     >
                       <div className="flex items-center gap-4 min-w-0">
-                        <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-600 transition-colors">
+                        <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                            <Package className="h-6 w-6" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 transition-colors">{order.paciente}</p>
-                          <p className="text-xs font-medium text-slate-500 truncate mt-0.5">
-                            {order.servico} <span className="mx-1 text-slate-300">•</span> {order.cliente}
+                          <p className="font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{order.paciente}</p>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {order.servico} <span className="mx-1 text-slate-300 dark:text-slate-600">•</span> {order.cliente}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-6 ml-4">
                         <div className="text-right hidden sm:block">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{formatDate(order.dataEntrega)}</p>
-                          <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400 mt-0.5">Data de Entrega</p>
+                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(order.dataEntrega)}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400 dark:text-slate-500 mt-0.5">Data de Entrega</p>
                         </div>
                         <Badge variant={getStatusVariant(order.status)} className="shadow-sm">
                           {order.status}

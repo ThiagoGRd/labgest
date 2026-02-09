@@ -288,52 +288,52 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-black/5 dark:border-white/5 bg-slate-50/50 dark:bg-black/20">
-                  <th className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                <tr className="border-b border-black/5 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/50">
+                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Paciente / Serviço
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Dentista
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Status
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Etapa
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Entrega
                   </th>
-                  <th className="text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Valor
                   </th>
-                  <th className="text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest px-6 py-4">
+                  <th className="text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/5 dark:divide-white/10">
+              <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {filteredOrdens.map((ordem) => {
                   const daysInfo = getDaysRemaining(ordem.dataEntrega)
                   return (
-                    <tr key={ordem.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+                    <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0">
-                            <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                            <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
                               <FileText className="h-6 w-6" />
                             </div>
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-900 dark:text-white">{ordem.paciente}</span>
+                              <span className="font-bold text-slate-900 dark:text-slate-100">{ordem.paciente}</span>
                               <Badge variant={getPriorityVariant(ordem.prioridade)}>
                                 {ordem.prioridade}
                               </Badge>
                             </div>
                             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{ordem.servico}</p>
                             {ordem.arquivos && ordem.arquivos.length > 0 && (
-                              <div className="flex items-center gap-1 mt-1.5 text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-full w-fit">
+                              <div className="flex items-center gap-1 mt-1.5 text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-full w-fit">
                                 <Paperclip className="h-3 w-3" />
                                 <span>{ordem.arquivos.length} anexo(s)</span>
                               </div>
@@ -345,8 +345,8 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                         <div className="flex items-center gap-3">
                           <Avatar name={ordem.cliente.nome} size="sm" />
                           <div>
-                            <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">{ordem.cliente.nome}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Dentista</p>
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-none">{ordem.cliente.nome}</p>
+                            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-1">Dentista</p>
                           </div>
                         </div>
                       </td>
@@ -361,50 +361,50 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800">
-                            <Calendar className="h-4 w-4 text-slate-400" />
+                            <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                           </div>
                           <div suppressHydrationWarning>
-                            <p className="text-sm font-bold text-slate-900 dark:text-white">{formatDate(ordem.dataEntrega)}</p>
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(ordem.dataEntrega)}</p>
                             <p className={`text-[10px] font-bold uppercase ${daysInfo.color}`}>{daysInfo.text}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-black text-slate-900 dark:text-white text-base">{formatCurrency(ordem.valor)}</span>
+                        <span className="font-black text-slate-900 dark:text-slate-100 text-base">{formatCurrency(ordem.valor)}</span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => onPrintEtiquetaClick(ordem)}
-                            className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                            className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
                             title="Imprimir Etiqueta"
                           >
                             <Package className="h-5 w-5" />
                           </button>
                           <button
                             onClick={() => onPrintClick(ordem)}
-                            className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                            className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
                             title="Imprimir Ficha"
                           >
                             <Printer className="h-5 w-5" />
                           </button>
                           <button 
                             onClick={() => handleNotify(ordem.id)}
-                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl transition-all"
+                            className="p-2 text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl transition-all"
                             title="Notificar via WhatsApp"
                           >
                             <Bell className="h-5 w-5" />
                           </button>
                           <button 
                             onClick={() => handleView(ordem)}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
+                            className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
                             title="Visualizar Detalhes"
                           >
                             <Eye className="h-5 w-5" />
                           </button>
                           <button 
                             onClick={() => handleEdit(ordem)}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
+                            className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
                             title="Editar Ordem"
                           >
                             <Edit className="h-5 w-5" />

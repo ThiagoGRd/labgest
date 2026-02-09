@@ -82,7 +82,7 @@ function KanbanCard({ ordem, onDragStart, etapaId }: KanbanCardProps) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`glass rounded-xl border-l-4 ${getPriorityColor(ordem.prioridade)} p-4 cursor-grab active:cursor-grabbing hover:shadow-xl hover:scale-[1.02] transition-all group`}
+      className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 ${getPriorityColor(ordem.prioridade)} p-4 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group`}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -90,12 +90,12 @@ function KanbanCard({ ordem, onDragStart, etapaId }: KanbanCardProps) {
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">#{ordem.id}</span>
         </div>
         {ordem.prioridade === 'Urgente' && (
-          <Badge variant="urgente" className="text-[10px]">Urgente</Badge>
+          <Badge variant="destructive" className="text-[10px]">Urgente</Badge>
         )}
       </div>
 
       <h4 className="font-bold text-slate-900 dark:text-white mb-1 tracking-tight leading-snug">{ordem.paciente}</h4>
-      <p className="text-xs font-medium text-slate-500 mb-3 line-clamp-1">{ordem.servico}</p>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-3 line-clamp-1">{ordem.servico}</p>
 
       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
         <div className="flex items-center gap-1 text-slate-400">
@@ -257,12 +257,12 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                   />
                   <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{etapa.nome}</h3>
                 </div>
-                <Badge variant="secondary" className="bg-white/50 dark:bg-black/20 border-none font-bold">
+                <Badge variant="secondary" className="bg-white/50 dark:bg-black/20 border-none font-bold text-slate-700 dark:text-slate-300">
                   {ordensPorEtapa[etapa.id]?.length || 0}
                 </Badge>
               </div>
 
-              <div className="bg-slate-50/50 dark:bg-black/10 rounded-b-2xl p-3 min-h-[600px] space-y-4 border-x border-b border-black/5 dark:border-white/5">
+              <div className="bg-slate-50/50 dark:bg-slate-900/20 rounded-b-2xl p-3 min-h-[600px] space-y-4 border-x border-b border-slate-200 dark:border-white/5">
                 {ordensPorEtapa[etapa.id]?.map((ordem) => (
                   <KanbanCard
                     key={ordem.id}

@@ -8,17 +8,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-indigo-600 text-white shadow hover:bg-indigo-700 focus-visible:ring-indigo-500",
+          "bg-indigo-600 text-white shadow hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 focus-visible:ring-indigo-500",
         destructive:
-          "bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-500",
+          "bg-red-600 text-white shadow-sm hover:bg-red-700 dark:hover:bg-red-700 focus-visible:ring-red-500",
         outline:
-          "border border-slate-300 bg-white shadow-sm hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-indigo-500",
+          "border border-slate-300 dark:border-white/10 bg-white dark:bg-transparent shadow-sm hover:bg-slate-50 dark:hover:bg-white/5 text-slate-900 dark:text-slate-100 focus-visible:ring-indigo-500",
         secondary:
-          "bg-slate-100 text-slate-900 shadow-sm hover:bg-slate-200 focus-visible:ring-slate-500",
+          "bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-slate-100 shadow-sm hover:bg-slate-200 dark:hover:bg-white/20 focus-visible:ring-slate-500",
         ghost: 
-          "hover:bg-slate-100 hover:text-slate-900",
+          "hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white text-slate-600 dark:text-slate-400",
         link: 
-          "text-indigo-600 underline-offset-4 hover:underline",
+          "text-indigo-600 dark:text-indigo-400 underline-offset-4 hover:underline",
         success:
           "bg-emerald-600 text-white shadow hover:bg-emerald-700 focus-visible:ring-emerald-500",
         warning:
