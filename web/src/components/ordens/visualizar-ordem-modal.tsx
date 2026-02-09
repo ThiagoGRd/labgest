@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { STLViewer } from '@/components/ui/stl-viewer'
 import {
   User,
   Calendar,
@@ -14,6 +16,8 @@ import {
   Activity,
   Paperclip,
   Download,
+  Eye,
+  X
 } from 'lucide-react'
 
 interface Ordem {
@@ -73,12 +77,19 @@ function formatCurrency(value: number) {
 }
 
 export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdemModalProps) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
   if (!ordem) return null
+
+  const handleClose = () => {
+    setPreviewUrl(null)
+    onClose()
+  }
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={`Ordem #${ordem.id}`}
       description="Detalhes completos da ordem de serviço"
       size="lg"
@@ -175,6 +186,28 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
           </div>
         )}
 
+        {previewUrl && (
+          <div className="relative rounded-2xl overflow-hidden border border-indigo-100 dark:border-indigo-500/30 shadow-lg">
+            <div className="absolute top-3 right-3 z-10">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => setPreviewUrl(null)}
+                className="bg-white/80 backdrop-blur text-slate-700 hover:bg-white h-8 w-8 p-0 rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="bg-slate-900 h-10 px-4 flex items-center">
+              <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Activity className="h-3 w-3 text-indigo-400" />
+                Visualização 3D
+              </p>
+            </div>
+            <STLViewer url={previewUrl} className="w-full h-80" />
+          </div>
+        )}
+
         {ordem.arquivos && ordem.arquivos.length > 0 && (
           <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">
             <div className="flex items-start gap-4">
@@ -184,22 +217,50 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
               <div className="flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Arquivos Anexados</p>
                 <div className="space-y-2">
-                  {ordem.arquivos.map((arquivo, index) => (
-                    <a
-                      key={index}
-                      href={arquivo}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-500 transition-colors group"
-                    >
-                      <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded text-indigo-600">
-                        <Download className="h-4 w-4" />
+                  {ordem.arquivos.map((arquivo, index) => {
+                    const isStl = arquivo.toLowerCase().endsWith('.stl')
+                    const fileName = arquivo.split('/').pop() || 'Arquivo'
+                    
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-500 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded text-indigo-600 shrink-0">
+                            {isStl ? <Package className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                          </div>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate" title={fileName}>
+                            {fileName}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {isStl && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => setPreviewUrl(arquivo)}
+                              className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                              title="Visualizar 3D"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          
+                          <a
+                            href={arquivo}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-md transition-colors"
+                            title="Baixar"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </div>
                       </div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 truncate">
-                        {arquivo.split('/').pop()}
-                      </span>
-                    </a>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -207,7 +268,7 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
         )}
 
         <div className="flex justify-end pt-4 border-t border-black/5 dark:border-white/5">
-          <Button variant="outline" onClick={onClose} className="rounded-xl px-8">
+          <Button variant="outline" onClick={handleClose} className="rounded-xl px-8">
             Fechar
           </Button>
         </div>
