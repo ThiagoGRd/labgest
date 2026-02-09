@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTheme } from 'next-themes'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +26,9 @@ import {
   GripVertical,
   CheckCircle2,
   XCircle,
+  Moon,
+  Sun,
+  Monitor,
 } from 'lucide-react'
 
 // Interfaces
@@ -64,6 +68,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
   const [activeSection, setActiveSection] = useState('laboratorio')
   const [saving, setSaving] = useState(false)
   const [showNewUser, setShowNewUser] = useState(false)
+  const { theme, setTheme } = useTheme()
   
   // State Lab Config
   const [labConfig, setLabConfig] = useState({
@@ -157,8 +162,8 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                       onClick={() => setActiveSection(section.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                         activeSection === section.id
-                          ? 'bg-indigo-100 text-indigo-700'
-                          : 'text-slate-600 hover:bg-slate-100'
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                       }`}
                     >
                       <section.icon className="h-5 w-5" />
@@ -333,8 +338,124 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
               </Card>
             )}
 
+            {/* Aparência */}
+            {activeSection === 'aparencia' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Palette className="h-5 w-5" />
+                    Personalização Visual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  
+                  {/* Seção Tema */}
+                  <div>
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-4">Tema do Sistema</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Light */}
+                      <button
+                        onClick={() => setTheme('light')}
+                        className={`group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                          theme === 'light' 
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="w-full h-24 rounded-lg bg-[#f8fafc] border border-slate-200 flex items-center justify-center shadow-sm overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                          <div className="w-3/4 h-3/4 bg-white rounded shadow-sm p-2 flex flex-col gap-2">
+                            <div className="w-1/3 h-2 bg-indigo-500 rounded-full opacity-20"></div>
+                            <div className="w-full h-2 bg-slate-200 rounded-full"></div>
+                            <div className="w-2/3 h-2 bg-slate-200 rounded-full"></div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Sun className={`h-4 w-4 ${theme === 'light' ? 'text-indigo-600' : 'text-slate-500'}`} />
+                          <span className={theme === 'light' ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-400'}>
+                            Claro
+                          </span>
+                        </div>
+                        {theme === 'light' && (
+                          <div className="absolute top-2 right-2 text-indigo-600">
+                            <CheckCircle2 className="h-5 w-5 fill-indigo-100" />
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Dark */}
+                      <button
+                        onClick={() => setTheme('dark')}
+                        className={`group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                          theme === 'dark' 
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="w-full h-24 rounded-lg bg-[#0f172a] border border-slate-700 flex items-center justify-center shadow-sm overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                          <div className="w-3/4 h-3/4 bg-[#1e293b] rounded shadow-inner p-2 flex flex-col gap-2 border border-slate-700">
+                            <div className="w-1/3 h-2 bg-indigo-400 rounded-full opacity-40"></div>
+                            <div className="w-full h-2 bg-slate-700 rounded-full"></div>
+                            <div className="w-2/3 h-2 bg-slate-700 rounded-full"></div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Moon className={`h-4 w-4 ${theme === 'dark' ? 'text-indigo-400' : 'text-slate-500'}`} />
+                          <span className={theme === 'dark' ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-400'}>
+                            Escuro
+                          </span>
+                        </div>
+                        {theme === 'dark' && (
+                          <div className="absolute top-2 right-2 text-indigo-600 dark:text-indigo-400">
+                            <CheckCircle2 className="h-5 w-5 fill-indigo-100 dark:fill-indigo-900" />
+                          </div>
+                        )}
+                      </button>
+
+                      {/* System */}
+                      <button
+                        onClick={() => setTheme('system')}
+                        className={`group relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                          theme === 'system' 
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="w-full h-24 rounded-lg bg-gradient-to-r from-[#f8fafc] to-[#0f172a] border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm overflow-hidden group-hover:scale-105 transition-transform duration-300 relative">
+                          <div className="absolute inset-y-0 left-0 w-1/2 bg-[#f8fafc] flex items-center justify-center border-r border-slate-200/20">
+                             <Sun className="h-6 w-6 text-slate-400 opacity-20" />
+                          </div>
+                          <div className="absolute inset-y-0 right-0 w-1/2 bg-[#0f172a] flex items-center justify-center">
+                             <Moon className="h-6 w-6 text-slate-600 opacity-20" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Monitor className={`h-4 w-4 ${theme === 'system' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`} />
+                          <span className={theme === 'system' ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-400'}>
+                            Sistema
+                          </span>
+                        </div>
+                        {theme === 'system' && (
+                          <div className="absolute top-2 right-2 text-indigo-600 dark:text-indigo-400">
+                            <CheckCircle2 className="h-5 w-5 fill-indigo-100 dark:fill-indigo-900" />
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                      <Monitor className="h-4 w-4" />
+                      Mais opções de personalização (cores, fontes) chegarão em breve.
+                    </p>
+                  </div>
+
+                </CardContent>
+              </Card>
+            )}
+
             {/* Outras seções */}
-            {['etapas', 'aparencia', 'seguranca'].includes(activeSection) && (
+            {['etapas', 'seguranca'].includes(activeSection) && (
               <Card>
                 <CardContent className="p-8 text-center">
                   <div className="mx-auto w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-4">
