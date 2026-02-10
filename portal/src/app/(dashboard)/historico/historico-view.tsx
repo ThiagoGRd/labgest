@@ -50,11 +50,11 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
   return (
     <PortalLayout user={user}>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Histórico de Pedidos</h1>
-        <p className="text-slate-500">Consulte seus casos finalizados e entregues</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Histórico de Pedidos</h1>
+        <p className="text-slate-500 dark:text-slate-400">Consulte seus casos finalizados e entregues</p>
       </div>
 
-      <Card className="mb-6">
+      <Card className="mb-6 dark:bg-zinc-900 dark:border-zinc-800">
         <CardContent className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -62,50 +62,50 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
               placeholder="Buscar por paciente ou serviço..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:placeholder-zinc-500"
             />
           </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="dark:bg-zinc-900 dark:border-zinc-800">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">Data Finalização</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">ID</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">Paciente</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">Serviço</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">Status</th>
-                <th className="text-right text-xs font-medium text-slate-500 uppercase tracking-wider px-6 py-4">Valor</th>
+              <tr className="border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50">
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Data Finalização</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">ID</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Paciente</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Serviço</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Status</th>
+                <th className="text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Valor</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-200 dark:divide-zinc-800">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
                     Nenhum histórico encontrado.
                   </td>
                 </tr>
               ) : (
                 filteredPedidos.map((pedido) => (
-                  <tr key={pedido.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-slate-600">
+                  <tr key={pedido.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-slate-400" />
+                        <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                         {formatDate(pedido.dataFinalizacao)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">#{pedido.id}</td>
-                    <td className="px-6 py-4 font-medium text-slate-900">{pedido.paciente}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{pedido.servico}</td>
+                    <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">#{pedido.id}</td>
+                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{pedido.paciente}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{pedido.servico}</td>
                     <td className="px-6 py-4">
                       <Badge variant={getStatusVariant(pedido.status)}>
                         {pedido.status}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 text-right font-medium text-slate-900">
+                    <td className="px-6 py-4 text-right font-medium text-slate-900 dark:text-white">
                       {formatCurrency(pedido.valor)}
                     </td>
                   </tr>
@@ -117,4 +117,5 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
       </Card>
     </PortalLayout>
   )
+
 }

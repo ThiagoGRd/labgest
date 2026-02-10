@@ -102,8 +102,8 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     <PortalLayout user={user}>
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900">Novo Pedido</h1>
-          <p className="text-slate-500">Preencha os dados do caso para enviar ao laboratório</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Novo Pedido</h1>
+          <p className="text-slate-500 dark:text-slate-400">Preencha os dados do caso para enviar ao laboratório</p>
         </div>
 
         {/* Progress Steps */}
@@ -113,23 +113,23 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${
                 step >= s 
                   ? 'bg-emerald-600 text-white' 
-                  : 'bg-slate-200 text-slate-500'
+                  : 'bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-slate-400'
               }`}>
                 {step > s ? <Check className="h-5 w-5" /> : s}
               </div>
               {s < 3 && (
                 <div className={`w-24 md:w-32 h-1 mx-2 ${
-                  step > s ? 'bg-emerald-600' : 'bg-slate-200'
+                  step > s ? 'bg-emerald-600' : 'bg-slate-200 dark:bg-zinc-800'
                 }`} />
               )}
             </div>
           ))}
         </div>
 
-        <Card>
+        <Card className="dark:bg-zinc-900 dark:border-zinc-800">
           <CardContent className="p-6">
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
                 {error}
               </div>
             )}
@@ -138,28 +138,29 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
             {step === 1 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-lg bg-emerald-100">
-                    <User className="h-5 w-5 text-emerald-600" />
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                    <User className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900">Dados do Paciente</h3>
-                    <p className="text-sm text-slate-500">Informe o nome do paciente e selecione o serviço</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Dados do Paciente</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Informe o nome do paciente e selecione o serviço</p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Nome do Paciente *
                   </label>
                   <Input
                     placeholder="Ex: Maria Silva"
                     value={formData.paciente}
                     onChange={(e) => setFormData(prev => ({ ...prev, paciente: e.target.value }))}
+                    className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:placeholder-zinc-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Serviço *
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -173,16 +174,16 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                         }))}
                         className={`p-4 rounded-lg border-2 text-left transition-colors ${
                           formData.servicoId === servico.id
-                            ? 'border-emerald-500 bg-emerald-50'
-                            : 'border-slate-200 hover:border-slate-300'
+                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                            : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600'
                         }`}
                       >
-                        <p className="font-medium text-slate-900">{servico.nome}</p>
-                        <p className="text-sm text-slate-500">{servico.categoria || 'Geral'}</p>
-                        <p className="text-emerald-600 font-medium mt-1">{formatCurrency(servico.preco)}</p>
+                        <p className="font-medium text-slate-900 dark:text-white">{servico.nome}</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{servico.categoria || 'Geral'}</p>
+                        <p className="text-emerald-600 dark:text-emerald-400 font-medium mt-1">{formatCurrency(servico.preco)}</p>
                       </button>
                     )) : (
-                      <div className="col-span-2 p-4 text-center text-slate-500 bg-slate-50 rounded-lg">
+                      <div className="col-span-2 p-4 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-zinc-800 rounded-lg">
                         Nenhum serviço disponível. Entre em contato com o laboratório.
                       </div>
                     )}
@@ -193,6 +194,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   <Button 
                     onClick={() => setStep(2)}
                     disabled={!formData.paciente || !formData.servicoId}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     Próximo
                     <ChevronRight className="h-4 w-4 ml-2" />
@@ -205,18 +207,18 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
             {step === 2 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-lg bg-emerald-100">
-                    <Package className="h-5 w-5 text-emerald-600" />
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                    <Package className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900">Detalhes do Caso</h3>
-                    <p className="text-sm text-slate-500">Especificações técnicas e arquivos</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Detalhes do Caso</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Especificações técnicas e arquivos</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Cor dos Dentes
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -227,7 +229,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                             formData.corDentes === cor
                               ? 'bg-emerald-600 text-white'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'
                           }`}
                         >
                           {cor}
@@ -237,7 +239,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Data de Entrega Desejada
                     </label>
                     <Input
@@ -245,12 +247,13 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                       value={formData.dataEntrega}
                       onChange={(e) => setFormData(prev => ({ ...prev, dataEntrega: e.target.value }))}
                       min={new Date().toISOString().split('T')[0]}
+                      className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:calendar-picker-indicator-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Observações
                   </label>
                   <div className="space-y-3">
@@ -261,7 +264,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                       }))}
                     />
                     <textarea
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-zinc-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-white"
                       rows={3}
                       placeholder="Informações adicionais sobre o caso... (ou use o botão acima para ditar)"
                       value={formData.observacoes}
@@ -271,7 +274,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Arquivos (STL, ZIP, Fotos)
                   </label>
                   
@@ -281,19 +284,19 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                     {formData.arquivos.length > 0 && (
                       <div className="space-y-2">
                         {formData.arquivos.map((path, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg">
                             <div className="flex items-center gap-3">
                               <FileText className="h-5 w-5 text-slate-400" />
                               <div>
-                                <p className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
                                   {path.split('/').pop()}
                                 </p>
-                                <p className="text-xs text-emerald-600">Enviado</p>
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400">Enviado</p>
                               </div>
                             </div>
                             <button
                               onClick={() => removeFile(index)}
-                              className="p-1 text-slate-400 hover:text-red-600"
+                              className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
                             >
                               <X className="h-4 w-4" />
                             </button>
@@ -305,11 +308,11 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 </div>
 
                 <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(1)}>
+                  <Button variant="outline" onClick={() => setStep(1)} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Voltar
                   </Button>
-                  <Button onClick={() => setStep(3)}>
+                  <Button onClick={() => setStep(3)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                     Próximo
                     <ChevronRight className="h-4 w-4 ml-2" />
                   </Button>
@@ -321,56 +324,56 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
             {step === 3 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-lg bg-emerald-100">
-                    <Check className="h-5 w-5 text-emerald-600" />
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                    <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900">Confirmação</h3>
-                    <p className="text-sm text-slate-500">Revise os dados antes de enviar</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Confirmação</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Revise os dados antes de enviar</p>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-xl p-6 space-y-4">
+                <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl p-6 space-y-4">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Paciente</span>
-                    <span className="font-medium text-slate-900">{formData.paciente}</span>
+                    <span className="text-slate-500 dark:text-slate-400">Paciente</span>
+                    <span className="font-medium text-slate-900 dark:text-white">{formData.paciente}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Serviço</span>
-                    <span className="font-medium text-slate-900">{formData.servicoNome}</span>
+                    <span className="text-slate-500 dark:text-slate-400">Serviço</span>
+                    <span className="font-medium text-slate-900 dark:text-white">{formData.servicoNome}</span>
                   </div>
                   {formData.corDentes && (
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Cor dos Dentes</span>
-                      <span className="font-medium text-slate-900">{formData.corDentes}</span>
+                      <span className="text-slate-500 dark:text-slate-400">Cor dos Dentes</span>
+                      <span className="font-medium text-slate-900 dark:text-white">{formData.corDentes}</span>
                     </div>
                   )}
                   {formData.dataEntrega && (
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Data de Entrega</span>
-                      <span className="font-medium text-slate-900">
+                      <span className="text-slate-500 dark:text-slate-400">Data de Entrega</span>
+                      <span className="font-medium text-slate-900 dark:text-white">
                         {new Date(formData.dataEntrega).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Arquivos</span>
-                    <span className="font-medium text-slate-900">{formData.arquivos.length} arquivo(s)</span>
+                    <span className="text-slate-500 dark:text-slate-400">Arquivos</span>
+                    <span className="font-medium text-slate-900 dark:text-white">{formData.arquivos.length} arquivo(s)</span>
                   </div>
                   {formData.observacoes && (
-                    <div className="pt-4 border-t border-slate-200">
-                      <span className="text-slate-500 block mb-2">Observações</span>
-                      <p className="text-slate-900">{formData.observacoes}</p>
+                    <div className="pt-4 border-t border-slate-200 dark:border-zinc-700">
+                      <span className="text-slate-500 dark:text-slate-400 block mb-2">Observações</span>
+                      <p className="text-slate-900 dark:text-white">{formData.observacoes}</p>
                     </div>
                   )}
                 </div>
 
                 <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(2)}>
+                  <Button variant="outline" onClick={() => setStep(2)} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Voltar
                   </Button>
-                  <Button onClick={handleSubmit} disabled={loading}>
+                  <Button onClick={handleSubmit} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -390,15 +393,15 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
             {/* Step 4: Success */}
             {step === 4 && (
               <div className="text-center py-8">
-                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Check className="h-10 w-10 text-emerald-600" />
+                <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Check className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">Pedido Enviado!</h3>
-                <p className="text-slate-500 mb-6">
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Pedido Enviado!</h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6">
                   Seu pedido foi recebido pelo laboratório. Você pode acompanhar o status na página de pedidos.
                 </p>
                 <div className="flex justify-center gap-4">
-                  <Button variant="outline" onClick={() => window.location.href = '/pedidos'}>
+                  <Button variant="outline" onClick={() => window.location.href = '/pedidos'} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
                     Ver Meus Pedidos
                   </Button>
                   <Button onClick={() => {
@@ -412,7 +415,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                       observacoes: '',
                       arquivos: [],
                     })
-                  }}>
+                  }} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                     Novo Pedido
                   </Button>
                 </div>
@@ -423,4 +426,5 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
       </div>
     </PortalLayout>
   )
+
 }
