@@ -15,15 +15,16 @@ function getStatusVariant(status: string) {
   return map[status] || 'default'
 }
 
-export default async function CheckOrderPage({ params }: { params: { id: string } }) {
-  console.log('[CheckOrderPage] Params received:', params)
+export default async function CheckOrderPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  console.log('[CheckOrderPage] Params received:', resolvedParams)
 
   // Tentar limpar o ID (remover qualquer coisa que não seja número)
-  const cleanIdProp = params.id ? params.id.replace(/\D/g, '') : ''
+  const cleanIdProp = resolvedParams.id ? resolvedParams.id.replace(/\D/g, '') : ''
   const id = parseInt(cleanIdProp)
 
   if (isNaN(id) || !cleanIdProp) {
-    console.error('[CheckOrderPage] Invalid ID:', params.id)
+    console.error('[CheckOrderPage] Invalid ID:', resolvedParams.id)
     return (
       <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
         <Card className="max-w-md w-full text-center p-12">
@@ -33,7 +34,7 @@ export default async function CheckOrderPage({ params }: { params: { id: string 
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Código Inválido</h1>
           <p className="text-slate-500 mb-4">O código da ordem não parece ser válido.</p>
           <div className="bg-slate-100 p-2 rounded mb-6 text-xs font-mono text-slate-600 break-all">
-            Recebido: {JSON.stringify(params)}
+            Recebido: {JSON.stringify(resolvedParams)}
           </div>
           <Link href="/" className="text-indigo-600 font-bold hover:underline">Voltar para o site</Link>
         </Card>
