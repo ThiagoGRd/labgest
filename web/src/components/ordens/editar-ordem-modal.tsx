@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
+import { getEtapas, getEtapaNome } from '@/lib/workflow-config'
+import type { TipoWorkflow } from '@/lib/workflow-config'
 
 interface Ordem {
   id: number
@@ -23,6 +25,7 @@ interface Ordem {
   corDentes?: string
   material?: string
   observacoes?: string
+  tipoWorkflow?: string | null
 }
 
 interface EditarOrdemModalProps {
@@ -36,7 +39,6 @@ interface EditarOrdemModalProps {
 
 const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4']
 const statusOptions = ['Aguardando', 'Em Produção', 'Finalizado', 'Pausado', 'Cancelado']
-const etapas = ['Recebimento', 'Modelagem', 'Impressão', 'Acabamento', 'Conferência', 'Pronto para Entrega']
 
 export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, servicos }: EditarOrdemModalProps) {
   const [loading, setLoading] = useState(false)
@@ -51,6 +53,11 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     material: '',
     observacoes: '',
   })
+
+  // Get dynamic etapas based on workflow type
+  const workflowType = (ordem?.tipoWorkflow as TipoWorkflow) || null
+  const etapasRaw = getEtapas(workflowType)
+  const etapas = etapasRaw.map(e => getEtapaNome(e))
 
   useEffect(() => {
     if (ordem) {

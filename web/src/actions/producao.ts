@@ -38,6 +38,7 @@ export async function getProducao() {
 }
 
 export async function moverOrdem(id: number, novaEtapa: string) {
+  await requireUser()
   try {
     const ordem = await prisma.ordem.update({
       where: { id },
