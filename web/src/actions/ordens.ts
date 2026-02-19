@@ -128,6 +128,7 @@ export async function updateOrdem(id: number, data: {
 }) {
   await requireUser()
   try {
+    console.log('[updateOrdem] Atualizando ordem ID:', id, 'dados:', data)
     await prisma.ordem.update({
       where: { id },
       data: {
@@ -141,11 +142,13 @@ export async function updateOrdem(id: number, data: {
         observacoes: data.observacoes,
       }
     })
+    console.log('[updateOrdem] Sucesso!')
     revalidatePath('/ordens')
     return { success: true }
   } catch (error) {
-    console.error('Erro ao atualizar ordem:', error)
-    return { success: false, error: 'Erro ao atualizar ordem' }
+    console.error('[updateOrdem] Erro detalhado:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    return { success: false, error: `Erro ao atualizar ordem: ${errorMsg}` }
   }
 }
 
@@ -226,18 +229,26 @@ export async function getDadosNovaOrdem() {
 export async function avancarEtapa(ordemId: number, observacao?: string) {
   await requireUser()
   try {
+    console.log('[avancarEtapa] Iniciando para ordem ID:', ordemId)
     const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if (!ordem) {
+      console.error('[avancarEtapa] Ordem não encontrada:', ordemId)
+      return { success: false, error: 'Ordem não encontrada' }
+    }
 
     const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
     const etapaAtual = ordem.etapaAtual || 'Recebimento'
+    console.log('[avancarEtapa] Workflow:', tipoWorkflow, 'Etapa atual:', etapaAtual)
+    
     const proxima = getNextEtapa(tipoWorkflow, etapaAtual)
+    console.log('[avancarEtapa] Próxima etapa:', proxima)
 
     if (!proxima) return { success: false, error: 'Já está na última etapa' }
 
     // Se é etapa de prova, verificar checklist
     if (isEtapaProva(tipoWorkflow, etapaAtual)) {
       const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
+      console.log('[avancarEtapa] Checklist:', checklist)
       if (!canAdvance(tipoWorkflow, etapaAtual, checklist)) {
         return { success: false, error: 'Complete o checklist de registro estético antes de avançar' }
       }
@@ -261,6 +272,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
     // Calcular progresso
     const progresso = getProgresso(tipoWorkflow, proxima)
 
+    console.log('[avancarEtapa] Atualizando banco com etapa:', proxima, 'status:', novoStatus)
     await prisma.ordem.update({
       where: { id: ordemId },
       data: {
@@ -273,11 +285,13 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
       }
     })
 
+    console.log('[avancarEtapa] Sucesso!')
     revalidatePath('/ordens')
     return { success: true, novaEtapa: proxima }
   } catch (error) {
-    console.error('Erro ao avançar etapa:', error)
-    return { success: false, error: 'Erro ao avançar etapa' }
+    console.error('[avancarEtapa] Erro detalhado:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    return { success: false, error: `Erro ao avançar etapa: ${errorMsg}` }
   }
 }
 

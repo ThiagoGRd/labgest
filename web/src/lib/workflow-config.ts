@@ -122,7 +122,13 @@ export function getEtapaNome(etapa: EtapaConfig | string): string {
 
 export function getEtapaIndex(tipoWorkflow: TipoWorkflow, etapaNome: string): number {
   const etapas = getEtapas(tipoWorkflow)
-  return etapas.findIndex(e => getEtapaNome(e) === etapaNome)
+  // Tenta match exato primeiro
+  let idx = etapas.findIndex(e => getEtapaNome(e) === etapaNome)
+  if (idx >= 0) return idx
+  
+  // Fallback: match parcial (para compatibilidade com nomes antigos do banco)
+  idx = etapas.findIndex(e => getEtapaNome(e).toLowerCase().includes(etapaNome.toLowerCase()) || etapaNome.toLowerCase().includes(getEtapaNome(e).toLowerCase()))
+  return idx
 }
 
 export function getNextEtapa(tipoWorkflow: TipoWorkflow, etapaAtual: string): string | null {
