@@ -68,23 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_atribuicoes_ordem ON atribuicoes(ordem_id);
 CREATE INDEX IF NOT EXISTS idx_atribuicoes_usuario ON atribuicoes(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_atribuicoes_status ON atribuicoes(status);
 
--- Tabela: historico_ordens (timeline de alterações)
-CREATE TABLE IF NOT EXISTS historico_ordens (
-  id SERIAL PRIMARY KEY,
-  ordem_id INTEGER REFERENCES ordens(id) ON DELETE CASCADE,
-  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  usuario_nome VARCHAR(255),
-  acao VARCHAR(50) NOT NULL,
-  descricao TEXT,
-  dados_anteriores JSONB,
-  dados_novos JSONB,
-  ip_address VARCHAR(45),
-  user_agent TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_historico_ordem ON historico_ordens(ordem_id);
-CREATE INDEX IF NOT EXISTS idx_historico_created ON historico_ordens(created_at);
+-- Tabela: historico_ordens (REMOVIDA - Causava erro de integridade)
+-- CREATE TABLE IF NOT EXISTS historico_ordens ... (Removido)
 
 -- Tabela: mensagens_ordem (chat por ordem)
 CREATE TABLE IF NOT EXISTS mensagens_ordem (
@@ -223,37 +208,7 @@ CREATE TABLE IF NOT EXISTS relatorios_salvos (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Trigger para registrar histórico automaticamente
-CREATE OR REPLACE FUNCTION registrar_historico_ordem()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'UPDATE' THEN
-    IF OLD.status IS DISTINCT FROM NEW.status OR OLD.etapa_atual IS DISTINCT FROM NEW.etapa_atual THEN
-      INSERT INTO historico_ordens (ordem_id, acao, dados_anteriores, dados_novos)
-      VALUES (
-        NEW.id,
-        CASE 
-          WHEN OLD.status IS DISTINCT FROM NEW.status THEN 'status_alterado'
-          ELSE 'etapa_alterada'
-        END,
-        jsonb_build_object('status', OLD.status, 'etapa', OLD.etapa_atual),
-        jsonb_build_object('status', NEW.status, 'etapa', NEW.etapa_atual)
-      );
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Criar trigger se não existir
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_historico_ordem') THEN
-    CREATE TRIGGER trigger_historico_ordem
-    AFTER UPDATE ON ordens
-    FOR EACH ROW EXECUTE FUNCTION registrar_historico_ordem();
-  END IF;
-END $$;
+-- Trigger removido (Causava erro ao tentar escrever em tabela inexistente)
 
 -- ================================================
 -- Fim do script
