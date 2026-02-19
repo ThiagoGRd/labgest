@@ -17,8 +17,12 @@ import {
   Paperclip,
   Download,
   Eye,
-  X
+  X,
+  GitBranch,
+  RotateCcw,
+  Check,
 } from 'lucide-react'
+import { getEtapas, getEtapaNome, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow, type EtapaConfig } from '@/lib/workflow-config'
 
 interface Ordem {
   id: number
@@ -35,6 +39,9 @@ interface Ordem {
   material?: string
   observacoes?: string
   arquivos?: string[]
+  tipoWorkflow?: string | null
+  tentativaAtual?: number
+  historicoEtapas?: any[]
 }
 
 interface VisualizarOrdemModalProps {
@@ -171,6 +178,82 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
             </div>
           </div>
         </div>
+
+        {/* Mini Fluxo do Caso */}
+        {ordem.tipoWorkflow && (() => {
+          const tw = ordem.tipoWorkflow as TipoWorkflow
+          const etapas = getEtapas(tw)
+          const currentIdx = getEtapaIndex(tw, ordem.etapaAtual)
+          const progresso = getProgresso(tw, ordem.etapaAtual)
+
+          return (
+            <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+                    <GitBranch className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Fluxo do Caso</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{getWorkflowLabel(tw)}</p>
+                  </div>
+                </div>
+                {(ordem.tentativaAtual ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-2 py-1 rounded-full">
+                    <RotateCcw className="h-3 w-3" />
+                    {ordem.tentativaAtual} {ordem.tentativaAtual === 1 ? 'devolução' : 'devoluções'}
+                  </span>
+                )}
+              </div>
+
+              {/* Progress bar */}
+              <div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase mb-1.5">
+                  <span>Progresso</span>
+                  <span>{progresso}%</span>
+                </div>
+                <div className="h-2 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-500"
+                    style={{ width: `${progresso}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Mini etapas */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {etapas.map((etapa, idx) => {
+                  const isCompleted = idx < currentIdx
+                  const isCurrent = idx === currentIdx
+                  return (
+                    <div key={idx} className="flex items-center gap-1">
+                      <div
+                        className={`h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          isCompleted
+                            ? 'bg-emerald-500 text-white'
+                            : isCurrent
+                            ? 'bg-indigo-600 text-white ring-2 ring-indigo-200 dark:ring-indigo-500/30'
+                            : 'bg-slate-200 dark:bg-white/10 text-slate-400'
+                        }`}
+                        title={getEtapaNome(etapa)}
+                      >
+                        {isCompleted ? <Check className="h-3 w-3" /> : idx + 1}
+                      </div>
+                      {idx < etapas.length - 1 && (
+                        <div className={`w-3 h-0.5 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-white/10'}`} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <p className="text-xs text-slate-500">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Etapa atual:</span>{' '}
+                {ordem.etapaAtual} ({currentIdx + 1} de {etapas.length})
+              </p>
+            </div>
+          )
+        })()}
 
         {ordem.observacoes && (
           <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">

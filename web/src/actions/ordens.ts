@@ -3,6 +3,18 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import {
+  getWorkflowForServico,
+  getNextEtapa,
+  getRetornoEtapa,
+  getEtapas,
+  getEtapaNome,
+  getProgresso,
+  isEtapaProva,
+  canAdvance,
+  type ChecklistEstetico,
+  type TipoWorkflow,
+} from '@/lib/workflow-config'
 
 export async function getOrdens() {
   await requireUser()
@@ -23,14 +35,19 @@ export async function getOrdens() {
       status: o.status || 'Aguardando',
       prioridade: o.prioridade || 'Normal',
       dataEntrada: o.dataPedido ? o.dataPedido.toISOString() : new Date().toISOString(),
-      dataEntrega: o.dataEntrega && !isNaN(o.dataEntrega.getTime()) ? o.dataEntrega.toISOString() : new Date().toISOString(), // Fallback para hoje se inválido
+      dataEntrega: o.dataEntrega && !isNaN(o.dataEntrega.getTime()) ? o.dataEntrega.toISOString() : new Date().toISOString(),
       etapaAtual: o.etapaAtual || 'Recebimento',
       valor: Number(o.valorFinal || o.valor),
       corDentes: o.corDentes || '',
       material: o.material || '',
       observacoes: o.observacoes || '',
-      foto: null, // TODO: Handle photo
+      foto: null,
       arquivos: (o.arquivoStl as string[]) || [],
+      // Workflow fields
+      tipoWorkflow: (o.tipoWorkflow as TipoWorkflow) || null,
+      tentativaAtual: o.tentativaAtual || 0,
+      historicoEtapas: (o.historicoEtapas as any[]) || [],
+      checklistEstetico: (o.checklistEstetico as Partial<ChecklistEstetico>) || {},
     }))
   } catch (error) {
     console.error('Erro ao buscar ordens:', error)
@@ -62,6 +79,11 @@ export async function createOrdem(data: {
 
     const valor = Number(servico.preco)
 
+    // Detectar tipo de workflow
+    const tipoWorkflow = getWorkflowForServico(servico.nome)
+    const etapas = getEtapas(tipoWorkflow)
+    const primeiraEtapa = getEtapaNome(etapas[0])
+
     await prisma.ordem.create({
       data: {
         clienteId: cliente.id,
@@ -71,13 +93,17 @@ export async function createOrdem(data: {
         nomePaciente: data.paciente,
         dataEntrega: new Date(data.dataEntrega),
         valor: valor,
-        valorFinal: valor, // Pode aplicar desconto depois
+        valorFinal: valor,
         prioridade: data.prioridade,
         corDentes: data.corDentes,
         material: data.material,
         observacoes: data.observacoes,
         status: 'Aguardando',
-        etapaAtual: 'Recebimento',
+        etapaAtual: primeiraEtapa,
+        tipoWorkflow: tipoWorkflow,
+        tentativaAtual: 0,
+        historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
+        checklistEstetico: {},
         arquivoStl: data.arquivos || [],
       }
     })
@@ -159,7 +185,12 @@ export async function getOrdemPublic(id: number) {
       corDentes: ordem.corDentes || '',
       material: ordem.material || '',
       observacoes: ordem.observacoes || '',
-      arquivos: (ordem.arquivoStl as string[]) || [], // Mapped from Json
+      arquivos: (ordem.arquivoStl as string[]) || [],
+      // Workflow fields
+      tipoWorkflow: (ordem.tipoWorkflow as TipoWorkflow) || null,
+      tentativaAtual: ordem.tentativaAtual || 0,
+      historicoEtapas: (ordem.historicoEtapas as any[]) || [],
+      checklistEstetico: (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {},
     }
   } catch (error) {
     console.error('[getOrdemPublic] Erro ao buscar ordem:', error)
@@ -183,5 +214,132 @@ export async function getDadosNovaOrdem() {
   } catch (error) {
     console.error('Erro ao buscar dados para nova ordem:', error)
     return { clientes: [], servicos: [] }
+  }
+}
+
+// ============================================================
+// Workflow Actions — Avançar / Devolver etapas
+// ============================================================
+
+export async function avancarEtapa(ordemId: number, observacao?: string) {
+  await requireUser()
+  try {
+    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+
+    const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
+    const etapaAtual = ordem.etapaAtual || 'Recebimento'
+    const proxima = getNextEtapa(tipoWorkflow, etapaAtual)
+
+    if (!proxima) return { success: false, error: 'Já está na última etapa' }
+
+    // Se é etapa de prova, verificar checklist
+    if (isEtapaProva(tipoWorkflow, etapaAtual)) {
+      const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
+      if (!canAdvance(tipoWorkflow, etapaAtual, checklist)) {
+        return { success: false, error: 'Complete o checklist de registro estético antes de avançar' }
+      }
+    }
+
+    const historico = (ordem.historicoEtapas as any[]) || []
+    historico.push({
+      etapa: etapaAtual,
+      acao: 'avancou',
+      para: proxima,
+      data: new Date().toISOString(),
+      observacao: observacao || undefined,
+      tentativa: ordem.tentativaAtual || 0,
+    })
+
+    // Determinar novo status
+    const etapas = getEtapas(tipoWorkflow)
+    const lastEtapaNome = getEtapaNome(etapas[etapas.length - 1])
+    const novoStatus = proxima === lastEtapaNome ? 'Finalizado' : 'Em Produção'
+
+    // Calcular progresso
+    const progresso = getProgresso(tipoWorkflow, proxima)
+
+    await prisma.ordem.update({
+      where: { id: ordemId },
+      data: {
+        etapaAtual: proxima,
+        historicoEtapas: historico,
+        status: novoStatus,
+        progresso: progresso,
+        // Limpar checklist ao avançar (próxima prova precisa preencher de novo)
+        checklistEstetico: {},
+      }
+    })
+
+    revalidatePath('/ordens')
+    return { success: true, novaEtapa: proxima }
+  } catch (error) {
+    console.error('Erro ao avançar etapa:', error)
+    return { success: false, error: 'Erro ao avançar etapa' }
+  }
+}
+
+export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
+  await requireUser()
+  try {
+    if (!motivoRetorno.trim()) {
+      return { success: false, error: 'Informe o motivo da devolução' }
+    }
+
+    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+
+    const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
+    const etapaAtual = ordem.etapaAtual || 'Recebimento'
+    const retorno = getRetornoEtapa(tipoWorkflow, etapaAtual)
+
+    if (!retorno) return { success: false, error: 'Não é possível retornar desta etapa' }
+
+    const historico = (ordem.historicoEtapas as any[]) || []
+    const novaTentativa = (ordem.tentativaAtual || 0) + 1
+
+    historico.push({
+      etapa: etapaAtual,
+      acao: 'devolveu',
+      para: retorno,
+      data: new Date().toISOString(),
+      motivo: motivoRetorno,
+      tentativa: novaTentativa,
+    })
+
+    const progresso = getProgresso(tipoWorkflow, retorno)
+
+    await prisma.ordem.update({
+      where: { id: ordemId },
+      data: {
+        etapaAtual: retorno,
+        tentativaAtual: novaTentativa,
+        historicoEtapas: historico,
+        status: 'Em Produção',
+        progresso: progresso,
+        checklistEstetico: {},
+      }
+    })
+
+    revalidatePath('/ordens')
+    return { success: true, novaEtapa: retorno, tentativa: novaTentativa }
+  } catch (error) {
+    console.error('Erro ao retornar etapa:', error)
+    return { success: false, error: 'Erro ao retornar etapa' }
+  }
+}
+
+export async function updateChecklistEstetico(ordemId: number, checklist: Partial<ChecklistEstetico>) {
+  await requireUser()
+  try {
+    await prisma.ordem.update({
+      where: { id: ordemId },
+      data: { checklistEstetico: checklist }
+    })
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao atualizar checklist:', error)
+    return { success: false, error: 'Erro ao atualizar checklist' }
   }
 }

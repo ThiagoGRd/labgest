@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
+import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
@@ -30,6 +31,8 @@ import {
   Bell,
   Printer,
   Package,
+  GitBranch,
+  RotateCcw,
 } from 'lucide-react'
 
 // Types
@@ -43,12 +46,16 @@ interface Ordem {
   dataEntrega: string
   valor: number
   etapaAtual: string
-  progresso?: number // Optional/Calculated
+  progresso?: number
   arquivos?: string[]
-  // Campos extras que podem vir do backend ou serem adaptados
   dataEntrada?: string
   corDentes?: string
   observacoes?: string
+  // Workflow fields
+  tipoWorkflow?: string | null
+  tentativaAtual?: number
+  historicoEtapas?: any[]
+  checklistEstetico?: any
 }
 
 interface OrdensViewProps {
@@ -109,6 +116,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [modalOpen, setModalOpen] = useState(false)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
+  const [workflowModalOpen, setWorkflowModalOpen] = useState(false)
   const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null)
   const [printOrdem, setPrintOrdem] = useState<any>(null)
   const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
@@ -179,6 +187,11 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     setEditModalOpen(true)
   }
 
+  const handleWorkflow = (ordem: Ordem) => {
+    setSelectedOrdem(ordem)
+    setWorkflowModalOpen(true)
+  }
+
   const handleNotify = async (id: number) => {
     if (confirm('Finalizar ordem e notificar dentista via WhatsApp?')) {
       const result = await notificarMudancaStatus(id, 'Finalizado')
@@ -222,6 +235,15 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         servicos={servicos}
         onSuccess={() => {
           setEditModalOpen(false)
+        }}
+      />
+
+      <WorkflowModal
+        isOpen={workflowModalOpen}
+        onClose={() => setWorkflowModalOpen(false)}
+        ordem={selectedOrdem as any}
+        onSuccess={() => {
+          setWorkflowModalOpen(false)
         }}
       />
       
@@ -356,7 +378,21 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                         </Badge>
                       </td>
                       <td className="px-6 py-4">
-                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">{ordem.etapaAtual}</span>
+                         <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">{ordem.etapaAtual}</span>
+                           {ordem.tentativaAtual != null && ordem.tentativaAtual > 0 && (
+                             <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full">
+                               <RotateCcw className="h-2.5 w-2.5" />
+                               {ordem.tentativaAtual}x
+                             </span>
+                           )}
+                         </div>
+                         {ordem.tipoWorkflow && (
+                           <p className="text-[9px] font-bold text-indigo-500 uppercase mt-0.5 flex items-center gap-1">
+                             <GitBranch className="h-2.5 w-2.5" />
+                             {ordem.tipoWorkflow === 'protocolo' ? 'Protocolo' : ordem.tipoWorkflow === 'protese_total' ? 'Total' : 'PPR'}
+                           </p>
+                         )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -401,6 +437,13 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                             title="Visualizar Detalhes"
                           >
                             <Eye className="h-5 w-5" />
+                          </button>
+                          <button 
+                            onClick={() => handleWorkflow(ordem)}
+                            className="p-2 text-slate-400 hover:text-purple-600 dark:text-slate-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded-xl transition-all"
+                            title="Fluxo de Trabalho"
+                          >
+                            <GitBranch className="h-5 w-5" />
                           </button>
                           <button 
                             onClick={() => handleEdit(ordem)}

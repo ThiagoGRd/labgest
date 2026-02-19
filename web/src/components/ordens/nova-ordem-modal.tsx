@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Upload, X } from 'lucide-react'
 import { createOrdem } from '@/actions/ordens'
 import { createClient } from '@/lib/supabase/client'
+import { getWorkflowForServico, getWorkflowLabel, getEtapas, getEtapaNome, type TipoWorkflow } from '@/lib/workflow-config'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
@@ -135,6 +136,7 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
   }
 
   const servicoSelecionado = servicos.find(s => s.id.toString() === formData.servicoId)
+  const tipoWorkflowDetectado = servicoSelecionado ? getWorkflowForServico(servicoSelecionado.nome) : null
 
   return (
     <Modal
@@ -331,6 +333,26 @@ export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos 
             />
           </div>
         </div>
+
+        {/* Banner de Workflow */}
+        {tipoWorkflowDetectado && (
+          <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg">
+                <Upload className="h-4 w-4 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300">
+                  ⚡ Fluxo de {getWorkflowLabel(tipoWorkflowDetectado)}
+                </p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                  Este pedido passará por {getEtapas(tipoWorkflowDetectado).length} etapas com provas obrigatórias.
+                  O pedido poderá ir e voltar sem necessidade de criar novos pedidos.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Resumo do valor */}
         {servicoSelecionado && (
