@@ -34,7 +34,17 @@ import {
   Package,
   GitBranch,
   RotateCcw,
+  MoreHorizontal,
 } from 'lucide-react'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 // Types
 interface Ordem {
@@ -420,34 +430,6 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => onPrintEtiquetaClick(ordem)}
-                            className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-                            title="Imprimir Etiqueta"
-                          >
-                            <Package className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => onPrintClick(ordem)}
-                            className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-                            title="Imprimir Ficha"
-                          >
-                            <Printer className="h-5 w-5" />
-                          </button>
-                          <button 
-                            onClick={() => handleNotify(ordem.id)}
-                            className="p-2 text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl transition-all"
-                            title="Notificar via WhatsApp"
-                          >
-                            <Bell className="h-5 w-5" />
-                          </button>
-                          <button 
-                            onClick={() => handleView(ordem)}
-                            className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
-                            title="Visualizar Detalhes"
-                          >
-                            <Eye className="h-5 w-5" />
-                          </button>
                           <button 
                             onClick={() => handleWorkflow(ordem)}
                             className="p-2 text-slate-400 hover:text-purple-600 dark:text-slate-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded-xl transition-all"
@@ -455,6 +437,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                           >
                             <GitBranch className="h-5 w-5" />
                           </button>
+                          
                           <button 
                             onClick={() => handleEdit(ordem)}
                             className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
@@ -462,13 +445,46 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                           >
                             <Edit className="h-5 w-5" />
                           </button>
-                          <button 
-                            onClick={() => handleDelete(ordem.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                            title="Excluir Ordem"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all outline-none">
+                                <MoreHorizontal className="h-5 w-5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl">
+                              <DropdownMenuLabel className="text-xs font-bold text-slate-500 uppercase px-2 py-1.5">Ações</DropdownMenuLabel>
+                              
+                              <DropdownMenuItem onClick={() => handleView(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                                <Eye className="mr-2 h-4 w-4 text-slate-400" />
+                                Visualizar Detalhes
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem onClick={() => handleNotify(ordem.id)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                                <Bell className="mr-2 h-4 w-4 text-slate-400" />
+                                Notificar WhatsApp
+                              </DropdownMenuItem>
+                              
+                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                              
+                              <DropdownMenuItem onClick={() => onPrintClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                                <Printer className="mr-2 h-4 w-4 text-slate-400" />
+                                Imprimir Ficha
+                              </DropdownMenuItem>
+                              
+                              <DropdownMenuItem onClick={() => onPrintEtiquetaClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                                <Package className="mr-2 h-4 w-4 text-slate-400" />
+                                Imprimir Etiqueta
+                              </DropdownMenuItem>
+                              
+                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                              
+                              <DropdownMenuItem onClick={() => handleDelete(ordem.id)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir Ordem
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
