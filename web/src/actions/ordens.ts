@@ -203,6 +203,18 @@ export async function getOrdemPublic(id: number) {
   }
 }
 
+export async function deleteOrdem(id: number) {
+  await requireUser()
+  try {
+    await prisma.ordem.delete({ where: { id } })
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao excluir ordem:', error)
+    return { success: false, error: 'Erro ao excluir ordem' }
+  }
+}
+
 export async function getDadosNovaOrdem() {
   try {
     const [clientes, servicosRaw] = await Promise.all([

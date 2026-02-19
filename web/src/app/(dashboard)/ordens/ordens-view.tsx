@@ -16,6 +16,7 @@ import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
+import { deleteOrdem } from '@/actions/ordens'
 import {
   Search,
   Filter,
@@ -199,6 +200,15 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         window.open(result.whatsappLink, '_blank')
       } else {
         alert('Erro ao enviar: ' + (result.error || 'Verifique o console'))
+      }
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (confirm('Tem certeza que deseja excluir esta ordem? Esta ação não pode ser desfeita.')) {
+      const result = await deleteOrdem(id)
+      if (!result.success) {
+        alert('Erro ao excluir: ' + (result.error || 'Tente novamente'))
       }
     }
   }
@@ -451,6 +461,13 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                             title="Editar Ordem"
                           >
                             <Edit className="h-5 w-5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(ordem.id)}
+                            className="p-2 text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Excluir Ordem"
+                          >
+                            <Trash2 className="h-5 w-5" />
                           </button>
                         </div>
                       </td>
