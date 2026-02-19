@@ -48,6 +48,7 @@ export async function getOrdens() {
       tentativaAtual: o.tentativaAtual || 0,
       historicoEtapas: (o.historicoEtapas as any[]) || [],
       checklistEstetico: (o.checklistEstetico as Partial<ChecklistEstetico>) || {},
+      fotosProva: (o.fotosProva as any[]) || [],
     }))
   } catch (error) {
     console.error('Erro ao buscar ordens:', error)
@@ -191,6 +192,7 @@ export async function getOrdemPublic(id: number) {
       tentativaAtual: ordem.tentativaAtual || 0,
       historicoEtapas: (ordem.historicoEtapas as any[]) || [],
       checklistEstetico: (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {},
+      fotosProva: (ordem.fotosProva as any[]) || [],
     }
   } catch (error) {
     console.error('[getOrdemPublic] Erro ao buscar ordem:', error)
@@ -341,5 +343,47 @@ export async function updateChecklistEstetico(ordemId: number, checklist: Partia
   } catch (error) {
     console.error('Erro ao atualizar checklist:', error)
     return { success: false, error: 'Erro ao atualizar checklist' }
+  }
+}
+
+export async function uploadFotoProva(ordemId: number, fotoUrl: string, numeroProva: number, descricao?: string) {
+  await requireUser()
+  try {
+    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+
+    const fotos = (ordem.fotosProva as any[]) || []
+    fotos.push({
+      url: fotoUrl,
+      numeroProva,
+      descricao: descricao || '',
+      dataUpload: new Date().toISOString(),
+      etapa: ordem.etapaAtual,
+    })
+
+    await prisma.ordem.update({
+      where: { id: ordemId },
+      data: { fotosProva: fotos }
+    })
+
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao upload foto prova:', error)
+    return { success: false, error: 'Erro ao salvar foto' }
+  }
+}
+
+export async function getFotosProva(ordemId: number) {
+  await requireUser()
+  try {
+    const ordem = await prisma.ordem.findUnique({
+      where: { id: ordemId },
+      select: { fotosProva: true }
+    })
+    return (ordem?.fotosProva as any[]) || []
+  } catch (error) {
+    console.error('Erro ao buscar fotos:', error)
+    return []
   }
 }

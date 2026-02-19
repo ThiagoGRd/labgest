@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { PhotoComparison } from '@/components/ordens/photo-comparison'
 import {
   Check,
   Circle,
@@ -15,6 +16,7 @@ import {
   Clock,
   Loader2,
   GitBranch,
+  Upload,
 } from 'lucide-react'
 import { avancarEtapa, retornarEtapa, updateChecklistEstetico } from '@/actions/ordens'
 import {
@@ -43,6 +45,7 @@ interface Ordem {
   tentativaAtual: number
   historicoEtapas: any[]
   checklistEstetico: Partial<ChecklistEstetico>
+  fotosProva?: any[]
 }
 
 interface WorkflowModalProps {
@@ -55,6 +58,7 @@ interface WorkflowModalProps {
 export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowModalProps) {
   const [loading, setLoading] = useState(false)
   const [showRetorno, setShowRetorno] = useState(false)
+  const [showPhotoComparison, setShowPhotoComparison] = useState(false)
   const [motivoRetorno, setMotivoRetorno] = useState('')
   const [checklist, setChecklist] = useState<Partial<ChecklistEstetico>>({})
   const [error, setError] = useState('')
@@ -79,20 +83,33 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
   const handleAvancar = async () => {
     setLoading(true)
     setError('')
+    console.log('[WorkflowModal] Avançando etapa...', {
+      ordemId: ordem.id,
+      etapaAtual: ordem.etapaAtual,
+      tipoWorkflow: ordem.tipoWorkflow,
+      isProva,
+      checklist: mergedChecklist,
+    })
     try {
       // Salvar checklist primeiro se é prova
       if (isProva) {
-        await updateChecklistEstetico(ordem.id, mergedChecklist)
+        console.log('[WorkflowModal] Salvando checklist...')
+        const checklistResult = await updateChecklistEstetico(ordem.id, mergedChecklist)
+        console.log('[WorkflowModal] Checklist salvo:', checklistResult)
       }
       const result = await avancarEtapa(ordem.id)
+      console.log('[WorkflowModal] Resultado avancarEtapa:', result)
       if (result.success) {
+        console.log('[WorkflowModal] Sucesso! Nova etapa:', result.novaEtapa)
         onSuccess?.()
         onClose()
       } else {
+        console.error('[WorkflowModal] Erro:', result.error)
         setError(result.error || 'Erro ao avançar')
       }
-    } catch {
-      setError('Erro inesperado')
+    } catch (err) {
+      console.error('[WorkflowModal] Erro inesperado:', err)
+      setError('Erro inesperado: ' + String(err))
     } finally {
       setLoading(false)
     }
@@ -131,6 +148,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
 
   const handleClose = () => {
     setShowRetorno(false)
+    setShowPhotoComparison(false)
     setMotivoRetorno('')
     setError('')
     setChecklist({})
@@ -245,12 +263,23 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
 
         {/* Checklist de Registro Estético (se etapa de prova) */}
         {isProva && (
-          <div className="p-5 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-2xl space-y-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <span className="text-sm font-bold text-amber-800 dark:text-amber-400">
-                Checklist de Registro Estético
-              </span>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-bold text-amber-800 dark:text-amber-400">
+                  Checklist de Registro Estético
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowPhotoComparison(true)}
+                className="rounded-xl text-indigo-600 border-indigo-300 hover:bg-indigo-50 gap-2 text-xs"
+              >
+                <Upload className="h-3 w-3" />
+                Fotos da Prova
+              </Button>
             </div>
             <p className="text-xs text-amber-700 dark:text-amber-400/80">
               Preencha todos os itens antes de aprovar e avançar esta etapa de prova.
@@ -359,6 +388,27 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
               ))}
             </div>
           </details>
+        )}
+
+        {/* Photo Comparison Modal */}
+        {showPhotoComparison && (
+          <Modal
+            isOpen={showPhotoComparison}
+            onClose={() => setShowPhotoComparison(false)}
+            title={`Comparação de Prova #${ordem.tentativaAtual! + 1}`}
+            description={ordem.paciente}
+            size="lg"
+          >
+            <PhotoComparison
+              ordemId={ordem.id}
+              numeroProva={ordem.tentativaAtual! + 1}
+              fotosExistentes={ordem.fotosProva || []}
+              onSuccess={() => {
+                setShowPhotoComparison(false)
+                onSuccess?.()
+              }}
+            />
+          </Modal>
         )}
 
         {/* Action buttons */}
