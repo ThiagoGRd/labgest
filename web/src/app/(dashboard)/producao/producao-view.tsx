@@ -39,6 +39,7 @@ interface Ordem {
   prioridade: string
   entrega: string
   cor?: string | null
+  elementos?: string | null
   foto?: string | null
 }
 

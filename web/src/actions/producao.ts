@@ -29,6 +29,7 @@ export async function getProducao() {
       prioridade: o.prioridade || 'Normal',
       entrega: o.dataEntrega.toISOString(),
       cor: o.corDentes,
+      elementos: o.elementos,
       foto: null
     }))
   } catch (error) {
