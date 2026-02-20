@@ -272,7 +272,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
           ) : (
             <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
               <p className="text-sm text-slate-500">Nenhum serviço adicionado ainda.</p>
-              <p className=\"text-xs text-slate-400\">Preencha acima e clique em "Add"</p>
+              <p className="text-xs text-slate-400">Preencha acima e clique em "Add"</p>
             </div>
           )}
         </div>
