@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { VisualizarPedidoModal } from '@/components/pedidos/visualizar-pedido-modal'
+import { getPedidoById } from '@/actions/pedidos'
 import {
   Search,
   Filter,
@@ -14,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Loader2
 } from 'lucide-react'
 
 interface Pedido {
@@ -53,6 +56,9 @@ function formatCurrency(value: number) {
 export function PedidosView({ user, pedidos }: PedidosViewProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
+  const [selectedPedido, setSelectedPedido] = useState<any>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [loadingId, setLoadingId] = useState<number | null>(null)
 
   const filteredPedidos = pedidos.filter(pedido => {
     const matchSearch = 
@@ -62,8 +68,29 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
     return matchSearch && matchStatus
   })
 
+  const handleView = async (id: number) => {
+    setLoadingId(id)
+    try {
+      const pedidoDetalhado = await getPedidoById(id)
+      if (pedidoDetalhado) {
+        setSelectedPedido(pedidoDetalhado)
+        setModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Erro ao abrir pedido:', error)
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
   return (
     <PortalLayout user={user}>
+      <VisualizarPedidoModal 
+        isOpen={modalOpen} 
+        onClose={() => setModalOpen(false)} 
+        pedido={selectedPedido} 
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Meus Pedidos</h1>
@@ -151,8 +178,12 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                         {formatCurrency(pedido.valor)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                        <Button variant="ghost" size="icon" onClick={() => handleView(pedido.id)} disabled={loadingId === pedido.id}>
+                          {loadingId === pedido.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                          )}
                         </Button>
                       </td>
                     </tr>

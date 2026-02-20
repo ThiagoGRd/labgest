@@ -179,6 +179,44 @@ export async function criarPedido(data: {
   }
 }
 
+export async function getPedidoById(id: number) {
+  const logado = await getClienteLogado()
+  
+  if (!logado?.cliente) return null
+
+  try {
+    const pedido = await prisma.ordem.findFirst({
+      where: { 
+        id,
+        clienteId: logado.cliente.id 
+      },
+      include: {
+        servico: { select: { nome: true } }
+      }
+    })
+
+    if (!pedido) return null
+
+    return {
+      id: pedido.id,
+      paciente: pedido.nomePaciente,
+      servico: pedido.servicoNome || pedido.servico?.nome || '',
+      status: pedido.status || 'Aguardando',
+      dataEntrega: pedido.dataEntrega.toISOString(),
+      valor: Number(pedido.valorFinal),
+      etapa: pedido.etapaAtual || 'Recebimento',
+      corDentes: pedido.corDentes || '',
+      elementos: pedido.elementos || '',
+      observacoes: pedido.observacoes || '',
+      historicoEtapas: (pedido.historicoEtapas as any[]) || [],
+      arquivos: (pedido.arquivoStl as string[]) || []
+    }
+  } catch (error) {
+    console.error('Erro ao buscar pedido:', error)
+    return null
+  }
+}
+
 export async function getMeusPedidos() {
   const logado = await getClienteLogado()
   
