@@ -21,6 +21,84 @@ async function getClienteLogado() {
   return { user, cliente }
 }
 
+export async function criarPedidoBatch(data: {
+  paciente: string
+  dataEntrega: string
+  observacoes: string
+  arquivos: string[]
+  itens: Array<{
+    servicoId: number
+    elementos: string
+    corDentes: string
+  }>
+}) {
+  const logado = await getClienteLogado()
+  
+  if (!logado?.cliente) {
+    return { success: false, error: 'Cliente não encontrado. Complete seu cadastro.' }
+  }
+
+  try {
+    const promises = data.itens.map(async (item) => {
+      const servico = await prisma.servico.findUnique({
+        where: { id: item.servicoId }
+      })
+
+      if (!servico) throw new Error(`Serviço ID ${item.servicoId} inválido`)
+
+      // Detectar workflow
+      let tipoWorkflow = null
+      const nomeLower = servico.nome.toLowerCase()
+      if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
+      else if (nomeLower.includes('total')) tipoWorkflow = 'protese_total'
+      else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
+
+      // Etapas básicas
+      const etapasMap: Record<string, string[]> = {
+        protocolo: ['Recebimento (Scanner + Fotos)', 'Planejamento Digital'],
+        protese_total: ['Recebimento (Moldagem/Scanner + Fotos)', 'Confecção de Rodete / Base de Prova'],
+        parcial_removivel: ['Recebimento (Modelo/Scanner)', 'Delineamento']
+      }
+      
+      const primeiraEtapa = tipoWorkflow && etapasMap[tipoWorkflow] ? etapasMap[tipoWorkflow][0] : 'Recebimento'
+
+      return prisma.ordem.create({
+        data: {
+          clienteId: logado.cliente.id,
+          clienteNome: logado.cliente.nome,
+          servicoId: servico.id,
+          servicoNome: servico.nome,
+          nomePaciente: data.paciente,
+          dataEntrega: new Date(data.dataEntrega),
+          valor: servico.preco,
+          valorFinal: servico.preco,
+          prioridade: 'Normal',
+          corDentes: item.corDentes,
+          elementos: item.elementos,
+          observacoes: data.observacoes,
+          status: 'Aguardando',
+          etapaAtual: primeiraEtapa,
+          tipoWorkflow: tipoWorkflow,
+          tentativaAtual: 0,
+          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
+          checklistEstetico: {},
+          arquivoStl: data.arquivos,
+        }
+      })
+    })
+
+    await Promise.all(promises)
+
+    revalidatePath('/pedidos')
+    revalidatePath('/dashboard')
+    return { success: true }
+
+  } catch (error) {
+    console.error('Erro ao criar pedidos em lote:', error)
+    return { success: false, error: 'Erro interno ao criar pedido' }
+  }
+}
+
 export async function criarPedido(data: {
   paciente: string
   servicoId: number
@@ -44,6 +122,26 @@ export async function criarPedido(data: {
 
     if (!servico) return { success: false, error: 'Serviço inválido' }
 
+    // Detectar workflow
+    // Importação dinâmica ou duplicada pois workflow-config está no web
+    // Por enquanto vamos usar defaults simples se não conseguirmos importar
+    
+    // Tentar mapear workflow básico pelo nome (lógica simplificada do workflow-config)
+    let tipoWorkflow = null
+    const nomeLower = servico.nome.toLowerCase()
+    if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
+    else if (nomeLower.includes('total')) tipoWorkflow = 'protese_total'
+    else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
+
+    // Etapas básicas por tipo
+    const etapasMap: Record<string, string[]> = {
+      protocolo: ['Recebimento (Scanner + Fotos)', 'Planejamento Digital'],
+      protese_total: ['Recebimento (Moldagem/Scanner + Fotos)', 'Confecção de Rodete / Base de Prova'],
+      parcial_removivel: ['Recebimento (Modelo/Scanner)', 'Delineamento']
+    }
+    
+    const primeiraEtapa = tipoWorkflow && etapasMap[tipoWorkflow] ? etapasMap[tipoWorkflow][0] : 'Recebimento'
+
     await prisma.ordem.create({
       data: {
         clienteId: logado.cliente.id,
@@ -52,14 +150,18 @@ export async function criarPedido(data: {
         servicoNome: servico.nome,
         nomePaciente: data.paciente,
         dataEntrega: new Date(data.dataEntrega),
-        valor: servico.preco, // Preço base
+        valor: servico.preco,
         valorFinal: servico.preco,
         prioridade: 'Normal',
         corDentes: data.corDentes,
         observacoes: data.observacoes,
-        status: 'Aguardando', // Começa aguardando
-        etapaAtual: 'Recebimento',
-        arquivoStl: data.arquivos, // Salvando array de caminhos
+        status: 'Aguardando',
+        etapaAtual: primeiraEtapa,
+        tipoWorkflow: tipoWorkflow,
+        tentativaAtual: 0,
+        historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
+        checklistEstetico: {},
+        arquivoStl: data.arquivos,
       }
     })
 

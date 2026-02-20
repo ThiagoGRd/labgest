@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { PortalLayout } from '@/components/layout/portal-layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FileUpload } from '@/components/ui/file-upload'
-import { criarPedido } from '@/actions/pedidos'
+import { criarPedidoBatch } from '@/actions/pedidos'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
-  Upload,
   FileText,
   X,
   Check,
@@ -16,10 +16,9 @@ import {
   ChevronLeft,
   User,
   Package,
-  Calendar,
-  MessageSquare,
   Loader2,
-  Mic,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
 
@@ -37,23 +36,64 @@ interface NovoPedidoViewProps {
 
 const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4']
 
+interface ItemPedido {
+  id: string
+  servicoId: number
+  servicoNome: string
+  elementos: string
+  corDentes: string
+  preco: number
+}
+
 export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [formData, setFormData] = useState({
+  
+  // Dados Globais
+  const [globalData, setGlobalData] = useState({
     paciente: '',
-    servicoId: 0,
-    servicoNome: '',
-    corDentes: '',
     dataEntrega: '',
     observacoes: '',
     arquivos: [] as string[],
   })
 
+  // Itens
+  const [itens, setItens] = useState<ItemPedido[]>([])
+  
+  // Item sendo adicionado
+  const [currentItem, setCurrentItem] = useState({
+    servicoId: '',
+    elementos: '',
+    corDentes: '',
+  })
+
+  const handleAddItem = () => {
+    if (!currentItem.servicoId) return
+    const servico = servicos.find(s => s.id.toString() === currentItem.servicoId)
+    
+    setItens(prev => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substr(2, 9),
+        servicoId: Number(currentItem.servicoId),
+        servicoNome: servico?.nome || '',
+        elementos: currentItem.elementos,
+        corDentes: currentItem.corDentes,
+        preco: servico?.preco || 0
+      }
+    ])
+
+    setCurrentItem(prev => ({ ...prev, servicoId: '', elementos: '' }))
+  }
+
+  const handleRemoveItem = (id: string) => {
+    setItens(prev => prev.filter(i => i.id !== id))
+  }
+
   const handleFileUpload = (path: string) => {
     if (path) {
-      setFormData(prev => ({
+      setGlobalData(prev => ({
         ...prev,
         arquivos: [...prev.arquivos, path]
       }))
@@ -61,25 +101,32 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   }
 
   const removeFile = (index: number) => {
-    setFormData(prev => ({
+    setGlobalData(prev => ({
       ...prev,
       arquivos: prev.arquivos.filter((_, i) => i !== index)
     }))
   }
 
   const handleSubmit = async () => {
+    if (itens.length === 0) {
+      setError('Adicione pelo menos um serviço')
+      return
+    }
+
     setLoading(true)
     setError('')
     
     try {
-      const result = await criarPedido({
-        paciente: formData.paciente,
-        servicoId: formData.servicoId,
-        servicoNome: formData.servicoNome,
-        corDentes: formData.corDentes,
-        dataEntrega: formData.dataEntrega,
-        observacoes: formData.observacoes,
-        arquivos: formData.arquivos,
+      const result = await criarPedidoBatch({
+        paciente: globalData.paciente,
+        dataEntrega: globalData.dataEntrega,
+        observacoes: globalData.observacoes,
+        arquivos: globalData.arquivos,
+        itens: itens.map(i => ({
+          servicoId: i.servicoId,
+          elementos: i.elementos,
+          corDentes: i.corDentes
+        }))
       })
 
       if (result.success) {
@@ -134,7 +181,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
               </div>
             )}
 
-            {/* Step 1: Paciente e Serviço */}
+            {/* Step 1: Paciente e Data */}
             {step === 1 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
@@ -142,8 +189,8 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                     <User className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Dados do Paciente</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Informe o nome do paciente e selecione o serviço</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Dados do Caso</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Identificação do paciente e prazo</p>
                   </div>
                 </div>
 
@@ -153,47 +200,29 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   </label>
                   <Input
                     placeholder="Ex: Maria Silva"
-                    value={formData.paciente}
-                    onChange={(e) => setFormData(prev => ({ ...prev, paciente: e.target.value }))}
+                    value={globalData.paciente}
+                    onChange={(e) => setGlobalData(prev => ({ ...prev, paciente: e.target.value }))}
                     className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:placeholder-zinc-500"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Serviço *
+                    Data de Entrega Desejada *
                   </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {servicos.length > 0 ? servicos.map((servico) => (
-                      <button
-                        key={servico.id}
-                        onClick={() => setFormData(prev => ({ 
-                          ...prev, 
-                          servicoId: servico.id,
-                          servicoNome: servico.nome 
-                        }))}
-                        className={`p-4 rounded-lg border-2 text-left transition-colors ${
-                          formData.servicoId === servico.id
-                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                            : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600'
-                        }`}
-                      >
-                        <p className="font-medium text-slate-900 dark:text-white">{servico.nome}</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{servico.categoria || 'Geral'}</p>
-                        <p className="text-emerald-600 dark:text-emerald-400 font-medium mt-1">{formatCurrency(servico.preco)}</p>
-                      </button>
-                    )) : (
-                      <div className="col-span-2 p-4 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-zinc-800 rounded-lg">
-                        Nenhum serviço disponível. Entre em contato com o laboratório.
-                      </div>
-                    )}
-                  </div>
+                  <Input
+                    type="date"
+                    value={globalData.dataEntrega}
+                    onChange={(e) => setGlobalData(prev => ({ ...prev, dataEntrega: e.target.value }))}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:calendar-picker-indicator-white"
+                  />
                 </div>
 
                 <div className="flex justify-end">
                   <Button 
                     onClick={() => setStep(2)}
-                    disabled={!formData.paciente || !formData.servicoId}
+                    disabled={!globalData.paciente || !globalData.dataEntrega}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     Próximo
@@ -203,7 +232,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
               </div>
             )}
 
-            {/* Step 2: Detalhes e Arquivos */}
+            {/* Step 2: Adicionar Serviços */}
             {step === 2 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 mb-6">
@@ -211,54 +240,124 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                     <Package className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Detalhes do Caso</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Especificações técnicas e arquivos</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Serviços</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Adicione os serviços para este paciente</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Form de Adição */}
+                <div className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-xl border border-slate-200 dark:border-zinc-700 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Cor dos Dentes
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {cores.map((cor) => (
-                        <button
-                          key={cor}
-                          onClick={() => setFormData(prev => ({ ...prev, corDentes: cor }))}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            formData.corDentes === cor
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'
-                          }`}
-                        >
-                          {cor}
-                        </button>
-                      ))}
+                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Serviço</label>
+                    <Select 
+                      value={currentItem.servicoId} 
+                      onValueChange={(val) => setCurrentItem(p => ({ ...p, servicoId: val }))}
+                    >
+                      <SelectTrigger className="bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {servicos.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.nome} - {formatCurrency(s.preco)}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Dentes / Elementos</label>
+                      <Input
+                        value={currentItem.elementos}
+                        onChange={e => setCurrentItem(p => ({ ...p, elementos: e.target.value }))}
+                        className="bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700"
+                        placeholder="Ex: 11, 21..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Cor</label>
+                      <Select 
+                        value={currentItem.corDentes} 
+                        onValueChange={(val) => setCurrentItem(p => ({ ...p, corDentes: val }))}
+                      >
+                        <SelectTrigger className="bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700">
+                          <SelectValue placeholder="Cor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cores.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
+                  <Button 
+                    onClick={handleAddItem}
+                    disabled={!currentItem.servicoId}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Serviço
+                  </Button>
+                </div>
+
+                {/* Lista */}
+                {itens.length > 0 ? (
+                  <div className="space-y-2">
+                    {itens.map((item, idx) => (
+                      <div key={item.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{item.servicoNome}</p>
+                            <p className="text-xs text-slate-500">
+                              {item.elementos && `Elem: ${item.elementos} • `}
+                              {item.corDentes && `Cor: ${item.corDentes}`}
+                            </p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:bg-red-50">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-sm">Nenhum serviço adicionado.</div>
+                )}
+
+                <div className="flex justify-between pt-4">
+                  <Button variant="outline" onClick={() => setStep(1)}>
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Voltar
+                  </Button>
+                  <Button onClick={() => setStep(3)} disabled={itens.length === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    Próximo
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Arquivos e Finalização */}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                    <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Data de Entrega Desejada
-                    </label>
-                    <Input
-                      type="date"
-                      value={formData.dataEntrega}
-                      onChange={(e) => setFormData(prev => ({ ...prev, dataEntrega: e.target.value }))}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:calendar-picker-indicator-white"
-                    />
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Arquivos e Envio</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Anexe arquivos e revise o pedido</p>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Observações
+                    Observações Gerais
                   </label>
                   <div className="space-y-3">
                     <VoiceInput 
-                      onTranscript={(text) => setFormData(prev => ({ 
+                      onTranscript={(text) => setGlobalData(prev => ({ 
                         ...prev, 
                         observacoes: prev.observacoes ? prev.observacoes + ' ' + text : text 
                       }))}
@@ -266,9 +365,9 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                     <textarea
                       className="w-full rounded-lg border border-slate-300 dark:border-zinc-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-white"
                       rows={3}
-                      placeholder="Informações adicionais sobre o caso... (ou use o botão acima para ditar)"
-                      value={formData.observacoes}
-                      onChange={(e) => setFormData(prev => ({ ...prev, observacoes: e.target.value }))}
+                      placeholder="Informações adicionais..."
+                      value={globalData.observacoes}
+                      onChange={(e) => setGlobalData(prev => ({ ...prev, observacoes: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -277,114 +376,33 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Arquivos (STL, ZIP, Fotos)
                   </label>
-                  
-                  <div className="space-y-4">
-                    <FileUpload onUploadComplete={handleFileUpload} />
+                  <FileUpload onUploadComplete={handleFileUpload} />
+                  {globalData.arquivos.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {globalData.arquivos.map((path, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-zinc-800 rounded text-sm">
+                          <span className="truncate max-w-[200px]">{path.split('/').pop()}</span>
+                          <button onClick={() => removeFile(index)}><X className="h-4 w-4 text-slate-400" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-                    {formData.arquivos.length > 0 && (
-                      <div className="space-y-2">
-                        {formData.arquivos.map((path, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-5 w-5 text-slate-400" />
-                              <div>
-                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                                  {path.split('/').pop()}
-                                </p>
-                                <p className="text-xs text-emerald-600 dark:text-emerald-400">Enviado</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => removeFile(index)}
-                              className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl p-4">
+                  <h4 className="font-bold text-sm mb-2">Resumo</h4>
+                  <p className="text-sm">Paciente: <span className="font-medium">{globalData.paciente}</span></p>
+                  <p className="text-sm">Itens: <span className="font-medium">{itens.length}</span></p>
+                  <p className="text-sm">Total Estimado: <span className="font-medium text-emerald-600">{formatCurrency(itens.reduce((acc, i) => acc + i.preco, 0))}</span></p>
                 </div>
 
                 <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(1)} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Voltar
-                  </Button>
-                  <Button onClick={() => setStep(3)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    Próximo
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Confirmação */}
-            {step === 3 && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                    <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Confirmação</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Revise os dados antes de enviar</p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl p-6 space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Paciente</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{formData.paciente}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Serviço</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{formData.servicoNome}</span>
-                  </div>
-                  {formData.corDentes && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 dark:text-slate-400">Cor dos Dentes</span>
-                      <span className="font-medium text-slate-900 dark:text-white">{formData.corDentes}</span>
-                    </div>
-                  )}
-                  {formData.dataEntrega && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 dark:text-slate-400">Data de Entrega</span>
-                      <span className="font-medium text-slate-900 dark:text-white">
-                        {new Date(formData.dataEntrega).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Arquivos</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{formData.arquivos.length} arquivo(s)</span>
-                  </div>
-                  {formData.observacoes && (
-                    <div className="pt-4 border-t border-slate-200 dark:border-zinc-700">
-                      <span className="text-slate-500 dark:text-slate-400 block mb-2">Observações</span>
-                      <p className="text-slate-900 dark:text-white">{formData.observacoes}</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(2)} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
+                  <Button variant="outline" onClick={() => setStep(2)}>
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Voltar
                   </Button>
                   <Button onClick={handleSubmit} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        Enviar Pedido
-                        <Check className="h-4 w-4 ml-2" />
-                      </>
-                    )}
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Envio'}
                   </Button>
                 </div>
               </div>
@@ -398,24 +416,13 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Pedido Enviado!</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-6">
-                  Seu pedido foi recebido pelo laboratório. Você pode acompanhar o status na página de pedidos.
+                  Foram geradas {itens.length} ordens de serviço com sucesso.
                 </p>
                 <div className="flex justify-center gap-4">
-                  <Button variant="outline" onClick={() => window.location.href = '/pedidos'} className="dark:bg-zinc-800 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-700">
-                    Ver Meus Pedidos
+                  <Button variant="outline" onClick={() => window.location.href = '/pedidos'}>
+                    Ver Pedidos
                   </Button>
-                  <Button onClick={() => {
-                    setStep(1)
-                    setFormData({
-                      paciente: '',
-                      servicoId: 0,
-                      servicoNome: '',
-                      corDentes: '',
-                      dataEntrega: '',
-                      observacoes: '',
-                      arquivos: [],
-                    })
-                  }} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  <Button onClick={() => window.location.reload()} className="bg-emerald-600 text-white">
                     Novo Pedido
                   </Button>
                 </div>
@@ -426,5 +433,4 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
       </div>
     </PortalLayout>
   )
-
 }
