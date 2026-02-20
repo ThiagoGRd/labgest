@@ -69,49 +69,7 @@ function getDaysRemaining(dateStr: string) {
   return { text: `${diff}d`, isLate: false }
 }
 
-interface KanbanCardProps {
-  ordem: Ordem
-  onDragStart: (e: React.DragEvent, ordem: Ordem, etapaId: string) => void
-  etapaId: string
-}
-
-function KanbanCard({ ordem, onDragStart, etapaId }: KanbanCardProps) {
-  const daysInfo = getDaysRemaining(ordem.entrega)
-
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 ${getPriorityColor(ordem.prioridade)} p-4 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group`}
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <GripVertical className="h-4 w-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">#{ordem.id}</span>
-        </div>
-        {ordem.prioridade === 'Urgente' && (
-          <Badge variant="destructive" className="text-[10px]">Urgente</Badge>
-        )}
-      </div>
-
-      <h4 className="font-bold text-slate-900 dark:text-white mb-1 tracking-tight leading-snug">{ordem.paciente}</h4>
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-3 line-clamp-1">{ordem.servico}</p>
-
-      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-        <div className="flex items-center gap-1 text-slate-400">
-          <User className="h-3 w-3" />
-          <span className="truncate max-w-[80px]">{ordem.dentista.split(' ')[0]}</span>
-        </div>
-        <div className={`flex items-center gap-1 ${daysInfo.isLate ? 'text-red-500' : daysInfo.isToday ? 'text-amber-500' : 'text-slate-400'}`}>
-          {daysInfo.isLate && <AlertTriangle className="h-3 w-3" />}
-          <Calendar className="h-3 w-3" />
-          <span>{daysInfo.text}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
+import { KanbanCard } from '@/components/producao/kanban-card'
 import { ChecklistModal } from '@/components/producao/checklist-modal'
 
 export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
