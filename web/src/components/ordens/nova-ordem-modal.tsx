@@ -5,381 +5,286 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, Upload, X } from 'lucide-react'
-import { createOrdem } from '@/actions/ordens'
-import { createClient } from '@/lib/supabase/client'
-import { getWorkflowForServico, getWorkflowLabel, getEtapas, getEtapaNome, type TipoWorkflow } from '@/lib/workflow-config'
+import { Loader2, Plus, Trash2, Package } from 'lucide-react'
+import { createBatchOrdens } from '@/actions/ordens'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess?: () => void
   clientes: { id: number; nome: string }[]
-  servicos: { id: number; nome: string; preco: any }[]
+  servicos: { id: number; nome: string; preco: number }[]
+  onSuccess?: () => void
 }
 
 const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4']
 
-export function NovaOrdemModal({ isOpen, onClose, onSuccess, clientes, servicos }: NovaOrdemModalProps) {
+interface ItemPedido {
+  id: string
+  servicoId: string
+  servicoNome: string
+  elementos: string
+  corDentes: string
+  material: string
+  preco: number
+}
+
+export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess }: NovaOrdemModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [files, setFiles] = useState<File[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [formData, setFormData] = useState({
+  
+  // Dados Globais
+  const [globalData, setGlobalData] = useState({
     clienteId: '',
-    servicoId: '',
     paciente: '',
     dataEntrega: '',
     prioridade: 'Normal',
-    corDentes: '',
-    material: '',
     observacoes: '',
   })
 
-  const supabase = createClient()
+  // Lista de Itens
+  const [itens, setItens] = useState<ItemPedido[]>([])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
-    if (error) setError('')
-  }
+  // Estado do Item Atual (Sendo adicionado)
+  const [currentItem, setCurrentItem] = useState({
+    servicoId: '',
+    elementos: '',
+    corDentes: '',
+    material: '',
+  })
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)])
-    }
-  }
-
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const uploadFiles = async () => {
-    if (files.length === 0) return []
+  const handleAddItem = () => {
+    if (!currentItem.servicoId) return
+    const servico = servicos.find(s => s.id.toString() === currentItem.servicoId)
     
-    setUploading(true)
-    const uploadedUrls: string[] = []
-
-    try {
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        const filePath = `${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('lab-files')
-          .upload(filePath, file)
-
-        if (uploadError) throw uploadError
-
-        const { data } = supabase.storage
-          .from('lab-files')
-          .getPublicUrl(filePath)
-
-        uploadedUrls.push(data.publicUrl)
+    setItens(prev => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substr(2, 9),
+        servicoId: currentItem.servicoId,
+        servicoNome: servico?.nome || '',
+        elementos: currentItem.elementos,
+        corDentes: currentItem.corDentes,
+        material: currentItem.material,
+        preco: servico?.preco || 0
       }
-    } catch (err) {
-      console.error('Erro no upload:', err)
-      throw new Error('Falha ao enviar arquivos. Tente novamente.')
-    } finally {
-      setUploading(false)
-    }
+    ])
 
-    return uploadedUrls
+    // Limpar campos do item (mantendo cor e material pois geralmente repetem)
+    setCurrentItem(prev => ({
+      ...prev,
+      servicoId: '',
+      elementos: '',
+    }))
+  }
+
+  const handleRemoveItem = (id: string) => {
+    setItens(prev => prev.filter(i => i.id !== id))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (itens.length === 0) {
+      setError('Adicione pelo menos um serviço ao pedido')
+      return
+    }
+
     setLoading(true)
     setError('')
-    
-    try {
-      let uploadedUrls: string[] = []
-      
-      if (files.length > 0) {
-        uploadedUrls = await uploadFiles()
-      }
 
-      const result = await createOrdem({
-        clienteId: formData.clienteId,
-        servicoId: formData.servicoId,
-        paciente: formData.paciente,
-        dataEntrega: formData.dataEntrega,
-        prioridade: formData.prioridade,
-        corDentes: formData.corDentes,
-        material: formData.material,
-        observacoes: formData.observacoes,
-        arquivos: uploadedUrls,
+    try {
+      const result = await createBatchOrdens({
+        ...globalData,
+        itens: itens.map(i => ({
+          servicoId: i.servicoId,
+          elementos: i.elementos,
+          corDentes: i.corDentes,
+          material: i.material
+        }))
       })
-      
+
       if (result.success) {
+        setGlobalData({ clienteId: '', paciente: '', dataEntrega: '', prioridade: 'Normal', observacoes: '' })
+        setItens([])
+        setCurrentItem({ servicoId: '', elementos: '', corDentes: '', material: '' })
         onSuccess?.()
         onClose()
-        setFormData({
-          clienteId: '',
-          servicoId: '',
-          paciente: '',
-          dataEntrega: '',
-          prioridade: 'Normal',
-          corDentes: '',
-          material: '',
-          observacoes: '',
-        })
-        setFiles([])
       } else {
-        setError(result.error || 'Erro ao criar ordem')
+        setError(result.error || 'Erro ao criar ordens')
       }
-    } catch (err: any) {
-      setError(err.message || 'Ocorreu um erro inesperado')
+    } catch (err) {
+      setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
     }
   }
 
-  const servicoSelecionado = servicos.find(s => s.id.toString() === formData.servicoId)
-  const tipoWorkflowDetectado = servicoSelecionado ? getWorkflowForServico(servicoSelecionado.nome) : null
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Nova Ordem de Serviço"
-      description="Preencha os dados para criar uma nova ordem"
+      title="Novo Pedido"
+      description="Adicione múltiplos serviços para o mesmo paciente"
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+          <div className="p-4 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
             {error}
           </div>
         )}
 
+        {/* Seção 1: Dados do Paciente */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Cliente */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Dentista *
-            </label>
-            <Select
-              name="clienteId"
-              value={formData.clienteId}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, clienteId: val }))}
-              required
+          <div className="md:col-span-2">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Dentista / Clínica</label>
+            <Select 
+              value={globalData.clienteId} 
+              onValueChange={(val) => setGlobalData(p => ({ ...p, clienteId: val }))}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
+              <SelectTrigger className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border-slate-200 dark:border-zinc-700">
+                <SelectValue placeholder="Selecione o dentista..." />
               </SelectTrigger>
               <SelectContent>
-                {clientes.map(c => (
-                  <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
-                ))}
+                {clientes.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Paciente */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Nome do Paciente *
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Nome do Paciente</label>
             <Input
-              name="paciente"
-              value={formData.paciente}
-              onChange={handleChange}
+              value={globalData.paciente}
+              onChange={e => setGlobalData(p => ({ ...p, paciente: e.target.value }))}
+              className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
               placeholder="Ex: Maria Silva"
-              required
             />
           </div>
 
-          {/* Serviço */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Serviço *
-            </label>
-            <Select
-              name="servicoId"
-              value={formData.servicoId}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, servicoId: val }))}
-              required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
-              <SelectContent>
-                {servicos.map(s => (
-                  <SelectItem key={s.id} value={s.id.toString()}>{s.nome} - R$ {Number(s.preco).toFixed(2)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Data Entrega */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Data de Entrega *
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Entrega Prevista</label>
             <Input
               type="date"
-              name="dataEntrega"
-              value={formData.dataEntrega}
-              onChange={handleChange}
-              min={new Date().toISOString().split('T')[0]}
-              required
-            />
-          </div>
-
-          {/* Prioridade */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Prioridade
-            </label>
-            <Select
-              name="prioridade"
-              value={formData.prioridade}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, prioridade: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Normal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Baixa">Baixa</SelectItem>
-                <SelectItem value="Normal">Normal</SelectItem>
-                <SelectItem value="Alta">Alta</SelectItem>
-                <SelectItem value="Urgente">Urgente</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Cor dos Dentes */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Cor dos Dentes
-            </label>
-            <Select
-              name="corDentes"
-              value={formData.corDentes}
-              onValueChange={(val) => setFormData(prev => ({ ...prev, corDentes: val }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
-              <SelectContent>
-                {cores.map(cor => (
-                  <SelectItem key={cor} value={cor}>{cor}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Material */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Material
-            </label>
-            <Input
-              name="material"
-              value={formData.material}
-              onChange={handleChange}
-              placeholder="Ex: PMMA Rosa, Dentes Artiplus..."
-            />
-          </div>
-
-          {/* Arquivos STL */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Arquivos do Caso (.stl, .obj, .ply)
-            </label>
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 hover:bg-slate-50 transition-colors text-center cursor-pointer relative">
-              <input
-                type="file"
-                multiple
-                accept=".stl,.obj,.ply"
-                onChange={handleFileChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="h-8 w-8 text-slate-400" />
-                <p className="text-sm text-slate-600">
-                  Clique ou arraste arquivos para anexar
-                </p>
-              </div>
-            </div>
-            
-            {files.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {files.map((file, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-slate-100 p-2 rounded text-sm">
-                    <span className="truncate max-w-[90%]">{file.name}</span>
-                    <button type="button" onClick={() => removeFile(idx)} className="text-slate-500 hover:text-red-500">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Observações */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Observações
-            </label>
-            <textarea
-              name="observacoes"
-              value={formData.observacoes}
-              onChange={handleChange}
-              rows={3}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Informações adicionais..."
+              value={globalData.dataEntrega}
+              onChange={e => setGlobalData(p => ({ ...p, dataEntrega: e.target.value }))}
+              className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
             />
           </div>
         </div>
 
-        {/* Banner de Workflow */}
-        {tipoWorkflowDetectado && (
-          <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg">
-                <Upload className="h-4 w-4 text-indigo-600" />
+        <div className="border-t border-slate-200 dark:border-zinc-800 my-4" />
+
+        {/* Seção 2: Adicionar Serviços */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Package className="h-4 w-4 text-indigo-500" />
+              Serviços do Caso
+            </h3>
+            <span className="text-xs text-slate-500">{itens.length} itens adicionados</span>
+          </div>
+
+          {/* Formulário de Item (Card de Entrada) */}
+          <div className="p-4 bg-slate-50 dark:bg-zinc-800/30 rounded-xl border border-slate-200 dark:border-zinc-800/50 space-y-4">
+            <div className="grid grid-cols-12 gap-3">
+              <div className="col-span-12 md:col-span-5">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Serviço</label>
+                <Select 
+                  value={currentItem.servicoId} 
+                  onValueChange={(val) => setCurrentItem(p => ({ ...p, servicoId: val }))}
+                >
+                  <SelectTrigger className="h-9 bg-white dark:bg-zinc-900 border-slate-200">
+                    <SelectValue placeholder="Selecione o serviço..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {servicos.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300">
-                  ⚡ Fluxo de {getWorkflowLabel(tipoWorkflowDetectado)}
-                </p>
-                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
-                  Este pedido passará por {getEtapas(tipoWorkflowDetectado).length} etapas com provas obrigatórias.
-                  O pedido poderá ir e voltar sem necessidade de criar novos pedidos.
-                </p>
+
+              <div className="col-span-6 md:col-span-3">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Dentes / Elementos</label>
+                <Input
+                  value={currentItem.elementos}
+                  onChange={e => setCurrentItem(p => ({ ...p, elementos: e.target.value }))}
+                  className="h-9 bg-white dark:bg-zinc-900"
+                  placeholder="Ex: 11, 21, Sup..."
+                />
+              </div>
+
+              <div className="col-span-6 md:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Cor</label>
+                <Select 
+                  value={currentItem.corDentes} 
+                  onValueChange={(val) => setCurrentItem(p => ({ ...p, corDentes: val }))}
+                >
+                  <SelectTrigger className="h-9 bg-white dark:bg-zinc-900 border-slate-200">
+                    <SelectValue placeholder="Cor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cores.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="col-span-12 md:col-span-2 flex items-end">
+                <Button 
+                  type="button"
+                  onClick={handleAddItem}
+                  disabled={!currentItem.servicoId}
+                  className="w-full h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add
+                </Button>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Resumo do valor */}
-        {servicoSelecionado && (
-          <div className="bg-indigo-50 rounded-lg p-4">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-600">Valor do Serviço:</span>
-              <span className="text-2xl font-bold text-indigo-600">
-                R$ {Number(servicoSelecionado.preco).toFixed(2)}
-              </span>
+          {/* Lista de Itens Adicionados */}
+          {itens.length > 0 ? (
+            <div className="space-y-2">
+              {itens.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-lg shadow-sm group hover:border-indigo-200 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs">
+                      {itens.indexOf(item) + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{item.servicoNome}</p>
+                      <div className="flex gap-2 text-xs text-slate-500">
+                        {item.elementos && <span className="bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400">Elem: {item.elementos}</span>}
+                        {item.corDentes && <span>Cor: {item.corDentes}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleRemoveItem(item.id)}
+                    className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
+              <p className="text-sm text-slate-500">Nenhum serviço adicionado ainda.</p>
+              <p className=\"text-xs text-slate-400\">Preencha acima e clique em "Add"</p>
+            </div>
+          )}
+        </div>
 
-        {/* Botões */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading || uploading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {uploading ? 'Enviando arquivos...' : 'Criando...'}
-              </>
-            ) : (
-              'Criar Ordem'
-            )}
+        <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 dark:border-zinc-800">
+          <Button type="button" variant="outline" onClick={onClose} className="rounded-xl px-6">Cancelar</Button>
+          <Button 
+            type="submit" 
+            disabled={loading || itens.length === 0} 
+            className="rounded-xl px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : `Gerar ${itens.length > 1 ? itens.length + ' Ordens' : 'Ordem'}`}
           </Button>
         </div>
       </form>

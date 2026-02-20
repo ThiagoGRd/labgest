@@ -56,63 +56,67 @@ export async function getOrdens() {
   }
 }
 
-export async function createOrdem(data: {
+export async function createBatchOrdens(data: {
   clienteId: string
-  servicoId: string
   paciente: string
   dataEntrega: string
   prioridade: string
-  corDentes: string
-  material: string
   observacoes: string
   arquivos?: string[]
+  itens: Array<{
+    servicoId: string
+    elementos: string
+    corDentes: string
+    material: string
+  }>
 }) {
   try {
-    // Buscar cliente e serviço para pegar nomes e valores
-    const [cliente, servico] = await Promise.all([
-      prisma.cliente.findUnique({ where: { id: Number(data.clienteId) } }),
-      prisma.servico.findUnique({ where: { id: Number(data.servicoId) } })
-    ])
+    const cliente = await prisma.cliente.findUnique({ where: { id: Number(data.clienteId) } })
+    if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
-    if (!cliente || !servico) {
-      return { success: false, error: 'Cliente ou Serviço não encontrado' }
-    }
+    // Processar cada item como uma ordem separada
+    const promises = data.itens.map(async (item) => {
+      const servico = await prisma.servico.findUnique({ where: { id: Number(item.servicoId) } })
+      if (!servico) throw new Error(`Serviço ID ${item.servicoId} não encontrado`)
 
-    const valor = Number(servico.preco)
+      const valor = Number(servico.preco)
+      const tipoWorkflow = getWorkflowForServico(servico.nome)
+      const etapas = getEtapas(tipoWorkflow)
+      const primeiraEtapa = getEtapaNome(etapas[0])
 
-    // Detectar tipo de workflow
-    const tipoWorkflow = getWorkflowForServico(servico.nome)
-    const etapas = getEtapas(tipoWorkflow)
-    const primeiraEtapa = getEtapaNome(etapas[0])
-
-    await prisma.ordem.create({
-      data: {
-        clienteId: cliente.id,
-        clienteNome: cliente.nome,
-        servicoId: servico.id,
-        servicoNome: servico.nome,
-        nomePaciente: data.paciente,
-        dataEntrega: new Date(data.dataEntrega),
-        valor: valor,
-        valorFinal: valor,
-        prioridade: data.prioridade,
-        corDentes: data.corDentes,
-        material: data.material,
-        observacoes: data.observacoes,
-        status: 'Aguardando',
-        etapaAtual: primeiraEtapa,
-        tipoWorkflow: tipoWorkflow,
-        tentativaAtual: 0,
-        historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
-        checklistEstetico: {},
-        arquivoStl: data.arquivos || [],
-      }
+      return prisma.ordem.create({
+        data: {
+          clienteId: cliente.id,
+          clienteNome: cliente.nome,
+          servicoId: servico.id,
+          servicoNome: servico.nome,
+          nomePaciente: data.paciente,
+          dataEntrega: new Date(data.dataEntrega),
+          valor: valor,
+          valorFinal: valor,
+          prioridade: data.prioridade,
+          corDentes: item.corDentes,
+          elementos: item.elementos,
+          material: item.material,
+          observacoes: data.observacoes,
+          status: 'Aguardando',
+          etapaAtual: primeiraEtapa,
+          tipoWorkflow: tipoWorkflow,
+          tentativaAtual: 0,
+          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
+          checklistEstetico: {},
+          arquivoStl: data.arquivos || [],
+        }
+      })
     })
+
+    await Promise.all(promises)
     revalidatePath('/ordens')
+    revalidatePath('/producao')
     return { success: true }
   } catch (error) {
-    console.error('Erro ao criar ordem:', error)
-    return { success: false, error: 'Erro ao criar ordem' }
+    console.error('Erro ao criar ordens em lote:', error)
+    return { success: false, error: 'Erro ao criar ordens' }
   }
 }
 

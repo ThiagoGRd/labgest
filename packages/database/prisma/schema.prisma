@@ -66,6 +66,7 @@ model Ordem {
   valorFinal      Decimal        @map("valor_final") @db.Decimal(10, 2)
   desconto        Decimal?       @default(0.00) @db.Decimal(10, 2)
   observacoes     String?
+  elementos       String?        @db.VarChar(100)
   corDentes       String?        @map("cor_dentes") @db.VarChar(50)
   material        String?        @db.VarChar(100)
   marcaDentes     String?        @map("marca_dentes") @db.VarChar(100)
