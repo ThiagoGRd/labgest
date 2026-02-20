@@ -149,7 +149,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     <PortalLayout user={user}>
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Novo Pedido</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Novo Pedido (Multi-Serviços)</h1>
           <p className="text-slate-500 dark:text-slate-400">Preencha os dados do caso para enviar ao laboratório</p>
         </div>
 
