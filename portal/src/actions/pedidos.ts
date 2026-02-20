@@ -38,6 +38,8 @@ export async function criarPedidoBatch(data: {
     return { success: false, error: 'Cliente não encontrado. Complete seu cadastro.' }
   }
 
+  const { cliente } = logado
+
   try {
     const promises = data.itens.map(async (item) => {
       const servico = await prisma.servico.findUnique({
@@ -64,8 +66,8 @@ export async function criarPedidoBatch(data: {
 
       return prisma.ordem.create({
         data: {
-          clienteId: logado.cliente.id,
-          clienteNome: logado.cliente.nome,
+          clienteId: cliente.id,
+          clienteNome: cliente.nome,
           servicoId: servico.id,
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
@@ -114,6 +116,8 @@ export async function criarPedido(data: {
     return { success: false, error: 'Cliente não encontrado. Complete seu cadastro.' }
   }
 
+  const { cliente } = logado
+
   try {
     // Pegar preço do serviço
     const servico = await prisma.servico.findUnique({
@@ -144,8 +148,8 @@ export async function criarPedido(data: {
 
     await prisma.ordem.create({
       data: {
-        clienteId: logado.cliente.id,
-        clienteNome: logado.cliente.nome,
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
         servicoId: servico.id,
         servicoNome: servico.nome,
         nomePaciente: data.paciente,
