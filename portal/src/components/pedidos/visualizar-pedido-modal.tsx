@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { aprovarProva } from '@/actions/pedidos'
 import {
   User,
   Calendar,
@@ -16,8 +19,11 @@ import {
   Eye,
   X,
   MapPin,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react'
+import { CHECKLIST_LABELS, isEtapaProva, isChecklistCompleto, type ChecklistEstetico, getWorkflowForServico } from '@/lib/workflow-config'
 
 interface Pedido {
   id: number
@@ -27,12 +33,12 @@ interface Pedido {
   dataEntrega: string
   valor: number
   etapa: string
-  // Campos extras que precisaremos buscar no getOrdemById
   corDentes?: string
   elementos?: string
   observacoes?: string
   historicoEtapas?: any[]
   arquivos?: string[]
+  checklistEstetico?: Partial<ChecklistEstetico>
 }
 
 interface VisualizarPedidoModalProps {
@@ -77,10 +83,37 @@ function formatCurrency(value: number) {
 }
 
 export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPedidoModalProps) {
+  const [loading, setLoading] = useState(false)
+  const [checklist, setChecklist] = useState<Partial<ChecklistEstetico>>({})
+
   if (!pedido) return null
 
   // Histórico reverso (mais recente primeiro)
   const historico = [...(pedido.historicoEtapas || [])].reverse()
+
+  // Detectar se é etapa de prova
+  const tipoWorkflow = getWorkflowForServico(pedido.servico)
+  const isProva = isEtapaProva(tipoWorkflow, pedido.etapa)
+  
+  // Checklist combinado (existente + novo)
+  const mergedChecklist = { ...(pedido.checklistEstetico || {}), ...checklist }
+  const podeAprovar = isChecklistCompleto(mergedChecklist)
+
+  const handleCheck = (key: keyof ChecklistEstetico, checked: boolean) => {
+    setChecklist(prev => ({ ...prev, [key]: checked }))
+  }
+
+  const handleAprovarProva = async () => {
+    setLoading(true)
+    try {
+      await aprovarProva(pedido.id, mergedChecklist)
+      onClose()
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <Modal
@@ -121,6 +154,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     {h.acao === 'avancou' && `Iniciou: ${h.para}`}
                     {h.acao === 'devolveu' && `Devolvido: ${h.para}`}
+                    {h.acao === 'aprovou_prova' && `Prova Aprovada`}
                     {h.acao === 'criou' && 'Pedido Criado'}
                   </p>
                   {h.motivo && (
@@ -136,6 +170,50 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
 
         {/* Detalhes (Direita) */}
         <div className="lg:col-span-2 space-y-6">
+          
+          {/* Alerta de Prova (Se for etapa de prova) */}
+          {isProva && (
+            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-4 w-full">
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">Aprovação de Prova Necessária</h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-500/80 mt-1">
+                      Para devolver este trabalho ao laboratório, por favor preencha o checklist abaixo confirmando a prova.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 bg-white/50 dark:bg-black/20 p-3 rounded-lg">
+                    {(Object.keys(CHECKLIST_LABELS) as (keyof ChecklistEstetico)[]).map((key) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={key} 
+                          checked={mergedChecklist[key] || false}
+                          onCheckedChange={(checked) => handleCheck(key, checked as boolean)}
+                        />
+                        <label
+                          htmlFor={key}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-700 dark:text-slate-300"
+                        >
+                          {CHECKLIST_LABELS[key]}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button 
+                    onClick={handleAprovarProva} 
+                    disabled={!podeAprovar || loading}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Prova e Devolver'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Cabeçalho */}
           <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl p-4 border border-slate-200 dark:border-zinc-700">
             <div className="flex justify-between items-start mb-4">

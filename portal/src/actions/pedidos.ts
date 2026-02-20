@@ -179,6 +179,43 @@ export async function criarPedido(data: {
   }
 }
 
+export async function aprovarProva(pedidoId: number, checklist: any) {
+  const logado = await getClienteLogado()
+  
+  if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
+
+  try {
+    const pedido = await prisma.ordem.findUnique({ where: { id: pedidoId } })
+    if (!pedido) return { success: false, error: 'Pedido não encontrado' }
+
+    // Atualizar checklist e mudar status
+    await prisma.ordem.update({
+      where: { id: pedidoId },
+      data: {
+        checklistEstetico: checklist,
+        // Ao aprovar prova, o dentista está "devolvendo" para o laboratório continuar
+        // O status ideal seria "Retorno de Prova" ou "Em Produção" novamente
+        status: 'Em Produção',
+        historicoEtapas: [
+          ...(pedido.historicoEtapas as any[] || []),
+          {
+            etapa: pedido.etapaAtual,
+            acao: 'aprovou_prova',
+            data: new Date().toISOString(),
+            usuario: logado.cliente.nome
+          }
+        ]
+      }
+    })
+
+    revalidatePath('/pedidos')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao aprovar prova:', error)
+    return { success: false, error: 'Erro ao aprovar prova' }
+  }
+}
+
 export async function getPedidoById(id: number) {
   const logado = await getClienteLogado()
   
