@@ -18,11 +18,14 @@ import {
   Download,
   Eye,
   X,
-  GitBranch,
   RotateCcw,
-  Check,
+  CheckCircle2,
+  Circle,
+  Truck,
+  AlertCircle,
+  MapPin
 } from 'lucide-react'
-import { getEtapas, getEtapaNome, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow, type EtapaConfig } from '@/lib/workflow-config'
+import { getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
 
 interface Ordem {
   id: number
@@ -36,6 +39,7 @@ interface Ordem {
   etapaAtual: string
   valor: number
   corDentes?: string
+  elementos?: string
   material?: string
   observacoes?: string
   arquivos?: string[]
@@ -61,19 +65,19 @@ function getStatusVariant(status: string) {
   return map[status] || 'default'
 }
 
-function getPriorityVariant(priority: string) {
-  const map: Record<string, any> = {
-    'Baixa': 'baixa',
-    'Normal': 'normal',
-    'Alta': 'alta',
-    'Urgente': 'urgente',
-  }
-  return map[priority] || 'normal'
-}
-
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
   return date.toLocaleDateString('pt-BR')
+}
+
+function formatDateTime(dateStr: string) {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('pt-BR', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
 }
 
 function formatCurrency(value: number) {
@@ -93,251 +97,187 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
     onClose()
   }
 
+  // Ordenar histórico do mais recente para o mais antigo
+  const historico = [...(ordem.historicoEtapas || [])].reverse()
+  
+  // Calcular progresso para a barra
+  const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
+  const progresso = getProgresso(tipoWorkflow, ordem.etapaAtual)
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Ordem #${ordem.id}`}
-      description="Detalhes completos da ordem de serviço"
-      size="lg"
+      title={`Rastreamento #${ordem.id}`}
+      description={ordem.servico}
+      size="xl"
     >
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Badge variant={getStatusVariant(ordem.status)} className="px-3 py-1">
-            {ordem.status}
-          </Badge>
-          <Badge variant={getPriorityVariant(ordem.prioridade)} className="px-3 py-1">
-            {ordem.prioridade}
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <User className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Paciente</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.paciente}</p>
-            </div>
+      <div className="space-y-8">
+        
+        {/* Barra de Progresso Visual (Topo) */}
+        <div className="relative pt-2 px-1">
+          <div className="flex justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Progresso do Caso</span>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{progresso}% Concluído</span>
           </div>
-
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <User className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Dentista</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.cliente.nome}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <Package className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Serviço</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.servico}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <Activity className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Etapa Atual</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.etapaAtual}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <Clock className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Data de Entrada</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.dataEntrada ? formatDate(ordem.dataEntrada) : '-'}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-            <Calendar className="h-5 w-5 text-indigo-600 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Data de Entrega</p>
-              <p className="font-bold text-slate-900 dark:text-white mt-0.5">{formatDate(ordem.dataEntrega)}</p>
-            </div>
-          </div>
-
-          {ordem.corDentes && (
-            <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl">
-              <Palette className="h-5 w-5 text-indigo-600 mt-0.5" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Cor dos Dentes</p>
-                <p className="font-bold text-slate-900 dark:text-white mt-0.5">{ordem.corDentes}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-start gap-3 p-4 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl">
-            <DollarSign className="h-5 w-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 opacity-70">Valor</p>
-              <p className="font-black text-indigo-600 dark:text-indigo-100 text-xl leading-none mt-0.5">{formatCurrency(ordem.valor)}</p>
-            </div>
+          <div className="h-2 w-full bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-indigo-600 transition-all duration-500 ease-out" 
+              style={{ width: `${progresso}%` }} 
+            />
           </div>
         </div>
 
-        {/* Mini Fluxo do Caso */}
-        {ordem.tipoWorkflow && (() => {
-          const tw = ordem.tipoWorkflow as TipoWorkflow
-          const etapas = getEtapas(tw)
-          const currentIdx = getEtapaIndex(tw, ordem.etapaAtual)
-          const progresso = getProgresso(tw, ordem.etapaAtual)
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Coluna Esquerda: Timeline / Rastreio */}
+          <div className="lg:col-span-1 border-r border-slate-100 dark:border-zinc-800 pr-0 lg:pr-8">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-6 flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Rastreio
+            </h3>
 
-          return (
-            <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-                    <GitBranch className="h-5 w-5 text-indigo-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Fluxo do Caso</p>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">{getWorkflowLabel(tw)}</p>
-                  </div>
+            <div className="relative pl-4 border-l-2 border-indigo-100 dark:border-zinc-800 space-y-8">
+              {/* Estado Atual (Topo) */}
+              <div className="relative">
+                <div className="absolute -left-[23px] top-0 h-5 w-5 rounded-full bg-indigo-600 ring-4 ring-white dark:ring-zinc-900 shadow-lg flex items-center justify-center animate-pulse">
+                  <div className="h-2 w-2 bg-white rounded-full" />
                 </div>
-                {(ordem.tentativaAtual ?? 0) > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-2 py-1 rounded-full">
-                    <RotateCcw className="h-3 w-3" />
-                    {ordem.tentativaAtual} {ordem.tentativaAtual === 1 ? 'devolução' : 'devoluções'}
-                  </span>
-                )}
-              </div>
-
-              {/* Progress bar */}
-              <div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase mb-1.5">
-                  <span>Progresso</span>
-                  <span>{progresso}%</span>
-                </div>
-                <div className="h-2 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-500"
-                    style={{ width: `${progresso}%` }}
-                  />
+                <div className="bg-indigo-50 dark:bg-indigo-500/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
+                  <p className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400 mb-1">Status Atual</p>
+                  <p className="font-bold text-slate-900 dark:text-white leading-tight">{ordem.etapaAtual}</p>
+                  <p className="text-xs text-slate-500 mt-1">{ordem.status}</p>
                 </div>
               </div>
 
-              {/* Mini etapas */}
-              <div className="flex items-center gap-1 flex-wrap">
-                {etapas.map((etapa, idx) => {
-                  const isCompleted = idx < currentIdx
-                  const isCurrent = idx === currentIdx
-                  return (
-                    <div key={idx} className="flex items-center gap-1">
-                      <div
-                        className={`h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold ${
-                          isCompleted
-                            ? 'bg-emerald-500 text-white'
-                            : isCurrent
-                            ? 'bg-indigo-600 text-white ring-2 ring-indigo-200 dark:ring-indigo-500/30'
-                            : 'bg-slate-200 dark:bg-white/10 text-slate-400'
-                        }`}
-                        title={getEtapaNome(etapa)}
-                      >
-                        {isCompleted ? <Check className="h-3 w-3" /> : idx + 1}
-                      </div>
-                      {idx < etapas.length - 1 && (
-                        <div className={`w-3 h-0.5 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-white/10'}`} />
+              {/* Histórico */}
+              {historico.map((h, i) => {
+                const isDevolucao = h.acao === 'devolveu'
+                const isFinalizado = h.para === 'Pronto para Entrega' || h.status === 'Finalizado'
+                const isCriacao = h.acao === 'criou'
+                
+                return (
+                  <div key={i} className="relative">
+                    <div className={`
+                      absolute -left-[21px] top-1.5 h-3 w-3 rounded-full ring-4 ring-white dark:ring-zinc-900
+                      ${isDevolucao ? 'bg-red-500' : isFinalizado ? 'bg-emerald-500' : isCriacao ? 'bg-slate-900 dark:bg-white' : 'bg-slate-300 dark:bg-zinc-600'}
+                    `} />
+                    
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-medium text-slate-400 mb-0.5 font-mono">
+                        {formatDateTime(h.data)}
+                      </span>
+                      
+                      <p className={`text-sm font-bold ${isDevolucao ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {h.acao === 'avancou' && `Avançou para ${h.para}`}
+                        {h.acao === 'devolveu' && `Devolvido para ${h.para}`}
+                        {h.acao === 'criou' && 'Pedido Recebido'}
+                      </p>
+
+                      {h.motivo && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-xs text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/30">
+                          <span className="font-bold block mb-1">Motivo da Devolução:</span> 
+                          {h.motivo}
+                        </div>
+                      )}
+
+                      {h.observacao && (
+                        <p className="text-xs text-slate-500 mt-1 italic">"{h.observacao}"</p>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-
-              <p className="text-xs text-slate-500">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Etapa atual:</span>{' '}
-                {ordem.etapaAtual} ({currentIdx + 1} de {etapas.length})
-              </p>
-            </div>
-          )
-        })()}
-
-        {ordem.observacoes && (
-          <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">
-            <div className="flex items-start gap-4">
-              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-                <FileText className="h-5 w-5 text-indigo-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Observações Clínicas</p>
-                <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium">{ordem.observacoes}</p>
-              </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        )}
 
-        {previewUrl && (
-          <div className="relative rounded-2xl overflow-hidden border border-indigo-100 dark:border-indigo-500/30 shadow-lg">
-            <div className="absolute top-3 right-3 z-10">
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={() => setPreviewUrl(null)}
-                className="bg-white/80 backdrop-blur text-slate-700 hover:bg-white h-8 w-8 p-0 rounded-full"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="bg-slate-900 h-10 px-4 flex items-center">
-              <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Activity className="h-3 w-3 text-indigo-400" />
-                Visualização 3D
-              </p>
-            </div>
-            <STLViewer url={previewUrl} className="w-full h-80" />
-          </div>
-        )}
-
-        {ordem.arquivos && ordem.arquivos.length > 0 && (
-          <div className="p-5 bg-slate-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-2xl">
-            <div className="flex items-start gap-4">
-              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-                <Paperclip className="h-5 w-5 text-indigo-600" />
+          {/* Coluna Direita: Detalhes do Pedido */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Header Card */}
+            <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">{ordem.paciente}</h2>
+                  <div className="flex items-center gap-2 mt-1 text-slate-500 dark:text-slate-400 text-sm">
+                    <User className="h-4 w-4" />
+                    <span>Dr(a). {ordem.cliente.nome}</span>
+                  </div>
+                </div>
+                <Badge variant={getStatusVariant(ordem.status)}>{ordem.status}</Badge>
               </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Arquivos Anexados</p>
-                <div className="space-y-2">
-                  {ordem.arquivos.map((arquivo, index) => {
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                <div className="bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Entrega</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-1">
+                    <Calendar className="h-4 w-4 text-indigo-500" />
+                    {formatDate(ordem.dataEntrega)}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Valor</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-1">
+                    <DollarSign className="h-4 w-4 text-emerald-500" />
+                    {formatCurrency(ordem.valor)}
+                  </p>
+                </div>
+                {ordem.corDentes && (
+                  <div className="bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Cor</span>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-1">
+                      <Palette className="h-4 w-4 text-pink-500" />
+                      {ordem.corDentes}
+                    </p>
+                  </div>
+                )}
+                {ordem.elementos && (
+                  <div className="bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Dentes</span>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-1">
+                      <Activity className="h-4 w-4 text-blue-500" />
+                      {ordem.elementos}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Observações */}
+            {ordem.observacoes && (
+              <div>
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Observações Clínicas</h4>
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-xl text-amber-900 dark:text-amber-100 text-sm">
+                  {ordem.observacoes}
+                </div>
+              </div>
+            )}
+
+            {/* Arquivos */}
+            <div>
+              <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                <Paperclip className="h-3 w-3" />
+                Arquivos do Caso ({ordem.arquivos?.length || 0})
+              </h4>
+              
+              {ordem.arquivos && ordem.arquivos.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {ordem.arquivos.map((arquivo, idx) => {
                     const isStl = arquivo.toLowerCase().endsWith('.stl')
-                    const fileName = arquivo.split('/').pop() || 'Arquivo'
-                    
                     return (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-500 transition-colors group"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded text-indigo-600 shrink-0">
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg group hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => isStl && setPreviewUrl(arquivo)}>
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <div className={`p-2 rounded-lg ${isStl ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800'}`}>
                             {isStl ? <Package className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                           </div>
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate" title={fileName}>
-                            {fileName}
-                          </span>
+                          <span className="text-xs font-medium truncate max-w-[150px]">{arquivo.split('/').pop()}</span>
                         </div>
-                        
-                        <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
                           {isStl && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => setPreviewUrl(arquivo)}
-                              className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                              title="Visualizar 3D"
-                            >
-                              <Eye className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-indigo-50 dark:hover:bg-indigo-900/20">
+                              <Eye className="h-4 w-4 text-indigo-600" />
                             </Button>
                           )}
-                          
-                          <a
-                            href={arquivo}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-md transition-colors"
-                            title="Baixar"
-                          >
+                          <a href={arquivo} target="_blank" onClick={(e) => e.stopPropagation()} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500">
                             <Download className="h-4 w-4" />
                           </a>
                         </div>
@@ -345,15 +285,25 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                     )
                   })}
                 </div>
-              </div>
+              ) : (
+                <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl">
+                  <p className="text-sm text-slate-400">Nenhum arquivo anexado.</p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
 
-        <div className="flex justify-end pt-4 border-t border-black/5 dark:border-white/5">
-          <Button variant="outline" onClick={handleClose} className="rounded-xl px-8">
-            Fechar
-          </Button>
+            {/* Preview 3D */}
+            {previewUrl && (
+              <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden relative shadow-lg">
+                <div className="absolute top-2 right-2 z-10">
+                  <Button variant="secondary" size="sm" onClick={() => setPreviewUrl(null)} className="h-8 w-8 p-0 rounded-full shadow-md">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <STLViewer url={previewUrl} className="w-full h-80 bg-slate-900" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Modal>
