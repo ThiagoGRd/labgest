@@ -123,3 +123,9 @@ export function isEtapaProva(tipoWorkflow: TipoWorkflow, etapaNome: string): boo
   const etapa = etapas.find(e => e.nome.includes(etapaNome) || etapaNome.includes(e.nome))
   return etapa?.isProva ?? false
 }
+
+export function isChecklistCompleto(checklist?: Partial<ChecklistEstetico> | null): boolean {
+  if (!checklist) return false
+  const keys = Object.keys(CHECKLIST_LABELS) as (keyof ChecklistEstetico)[]
+  return keys.every(key => checklist[key] === true)
+}
