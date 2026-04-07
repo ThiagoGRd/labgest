@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { moverOrdem } from '@/actions/producao'
+import { getOrdemById } from '@/actions/ordens'
+import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import {
   Calendar,
   User,
@@ -81,6 +83,10 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   // Controle do Checklist
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
+
+  // Controle de Visualização
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [selectedFullOrdem, setSelectedFullOrdem] = useState<any | null>(null)
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
@@ -164,8 +170,24 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
 
   const totalOrdens = Object.values(ordensPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
 
+  const handlePatientClick = async (id: number) => {
+    const fullOrdem = await getOrdemById(id)
+    if (fullOrdem) {
+      setSelectedFullOrdem(fullOrdem)
+      setViewModalOpen(true)
+    }
+  }
+
   return (
     <DashboardLayout>
+      <VisualizarOrdemModal
+        isOpen={viewModalOpen}
+        onClose={() => {
+          setViewModalOpen(false)
+          setSelectedFullOrdem(null)
+        }}
+        ordem={selectedFullOrdem}
+      />
       {pendingMove && (
         <ChecklistModal
           isOpen={checklistOpen}
@@ -248,6 +270,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                     ordem={ordem}
                     etapaId={etapa.id}
                     onDragStart={handleDragStart}
+                    onPatientClick={() => handlePatientClick(ordem.id)}
                   />
                 ))}
 

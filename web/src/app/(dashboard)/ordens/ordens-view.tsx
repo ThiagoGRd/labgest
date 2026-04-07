@@ -351,7 +351,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
               </thead>
               <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {filteredOrdens.map((ordem) => {
-                  const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue')
+                  const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
                   return (
                     <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">

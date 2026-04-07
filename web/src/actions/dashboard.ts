@@ -33,14 +33,14 @@ export async function getDashboardData() {
       // Atrasadas (não finalizadas e data entrega < hoje)
       prisma.ordem.count({
         where: {
-          status: { notIn: ['Finalizado', 'Cancelado', 'Entregue'] },
+          status: { notIn: ['Finalizado', 'Cancelado', 'Entregue', 'Pausado'] },
           dataEntrega: { lt: hoje }
         }
       }),
       // Próximas Entregas (hoje ou futuro próximo)
       prisma.ordem.findMany({
         where: {
-          status: { notIn: ['Finalizado', 'Cancelado', 'Entregue'] },
+          status: { notIn: ['Finalizado', 'Cancelado', 'Entregue', 'Pausado'] },
           dataEntrega: { gte: hoje }
         },
         orderBy: { dataEntrega: 'asc' },

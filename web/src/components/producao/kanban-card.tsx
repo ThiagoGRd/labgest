@@ -17,6 +17,7 @@ interface KanbanCardProps {
   onDragStart: (e: React.DragEvent, ordem: any, etapaId: string) => void
   etapaId: string
   onClick?: () => void
+  onPatientClick?: () => void
 }
 
 function getPriorityColor(priority: string) {
@@ -44,8 +45,8 @@ function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
   return { text: `${diff}d`, isLate: false, color: 'text-slate-500 bg-slate-100 dark:bg-zinc-800' }
 }
 
-export function KanbanCard({ ordem, onDragStart, etapaId, onClick }: KanbanCardProps) {
-  const daysInfo = getDaysRemaining(ordem.entrega, ordem.etapa === 'Finalizado' || ordem.status === 'Finalizado' || ordem.status === 'Entregue')
+export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClick }: KanbanCardProps) {
+  const daysInfo = getDaysRemaining(ordem.entrega, ordem.etapa === 'Finalizado' || ordem.status === 'Finalizado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
 
   // Extrair elementos se houver
   const elementos = ordem.elementos ? ordem.elementos.split(',').map((e: string) => e.trim()) : []
@@ -90,7 +91,13 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick }: KanbanCardP
       {/* Corpo do Card */}
       <div className="mb-4">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <h4 className="font-bold text-slate-900 dark:text-white leading-snug text-sm line-clamp-2">
+          <h4 
+            className="font-bold text-slate-900 dark:text-white leading-snug text-sm line-clamp-2 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onPatientClick) onPatientClick()
+            }}
+          >
             {ordem.paciente}
           </h4>
           {/* Avatar do Paciente (Simulado por enquanto) */}
