@@ -104,8 +104,16 @@ export async function getRetrabalhos() {
 
 export async function getDashboardLabsExternos() {
   await requireUser()
+  // Cast bigint to int to avoid JSON serialization issues
   const rows = await prisma.$queryRaw<any[]>`
-    SELECT * FROM labs_externos_dashboard
+    SELECT
+      SUM(total_enviados)::int   AS total_enviados,
+      SUM(total_provando)::int   AS total_provando,
+      SUM(total_prontos)::int    AS total_prontos,
+      SUM(total_entregues)::int  AS total_entregues,
+      SUM(total_atrasados)::int  AS total_atrasados,
+      SUM(total_retrabalhos)::int AS total_retrabalhos
+    FROM labs_externos_dashboard
   `
   return rows[0] ?? {
     total_enviados: 0,
@@ -202,8 +210,8 @@ export async function excluirPedido(id: number) {
 
 function normalizar(row: any): LabExternoPedido {
   return {
-    id:               row.id,
-    labId:            row.lab_id,
+    id:               Number(row.id),
+    labId:            row.lab_id ? Number(row.lab_id) : null,
     labNome:          row.lab_nome,
     paciente:         row.paciente,
     dentista:         row.dentista,
@@ -216,6 +224,6 @@ function normalizar(row: any): LabExternoPedido {
     motivoRetrabalho: row.motivo_retrabalho,
     createdAt:        row.created_at,
     updatedAt:        row.updated_at,
-    diasAtraso:       row.dias_atraso ?? undefined,
+    diasAtraso:       row.dias_atraso != null ? Number(row.dias_atraso) : undefined,
   }
 }
