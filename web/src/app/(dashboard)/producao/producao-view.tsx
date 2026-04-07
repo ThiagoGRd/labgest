@@ -82,14 +82,24 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
 
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState('todas')
+
   useEffect(() => {
     const agrupado: Record<string, Ordem[]> = {}
     
     // Inicializar etapas vazias
     etapas.forEach(e => agrupado[e.id] = [])
 
-    // Popula com ordens
-    initialOrdens.forEach(o => {
+    // Popula com ordens filtradas
+    const ordensFiltradas = initialOrdens.filter(o => {
+      const matchSearch = String(o.paciente).toLowerCase().includes(searchTerm.toLowerCase()) || String(o.id).includes(searchTerm)
+      const matchPriority = priorityFilter === 'todas' || o.prioridade === priorityFilter
+      return matchSearch && matchPriority
+    })
+
+    ordensFiltradas.forEach(o => {
       // Normaliza o nome da etapa para corresponder às chaves
       const etapaKey = etapas.find(e => e.nome === o.etapa || e.id === o.etapa)?.id || 'Recebimento'
       if (!agrupado[etapaKey]) agrupado[etapaKey] = []
@@ -97,7 +107,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     })
 
     setOrdensPorEtapa(agrupado)
-  }, [initialOrdens])
+  }, [initialOrdens, searchTerm, priorityFilter])
 
   const handleDragStart = (e: React.DragEvent, ordem: Ordem, etapaId: string) => {
     setDraggedItem({ ordem, fromEtapa: etapaId })
@@ -175,16 +185,26 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
       
       <div className="p-6">
         {/* Toolbar */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
-            </Button>
-            <Button variant="outline" size="sm">
-              Prioridade
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </Button>
+        <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input 
+              type="text" 
+              placeholder="Buscar paciente ou #ID..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 text-slate-900 dark:text-white"
+            />
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+            >
+              <option value="todas">Todas as Prioridades</option>
+              <option value="Baixa">Baixa</option>
+              <option value="Normal">Normal</option>
+              <option value="Alta">Alta</option>
+              <option value="Urgente">Urgente</option>
+            </select>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="icon">

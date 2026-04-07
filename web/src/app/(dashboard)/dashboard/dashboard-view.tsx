@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 import {
   ClipboardList,
   Clock,
@@ -195,9 +196,11 @@ export function DashboardView({ initialData }: DashboardViewProps) {
                 <p className="text-indigo-100 text-sm leading-relaxed mb-6">
                   "O faturamento deste mês está 15% acima da média. Notei um aumento de 20% em pedidos de Prótese Sobre Implante."
                 </p>
-                <Button className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-xl h-11">
-                  Gerar Relatório Completo
-                </Button>
+                <Link href="/relatorios">
+                  <Button className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-xl h-11">
+                    Gerar Relatório Completo
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
 

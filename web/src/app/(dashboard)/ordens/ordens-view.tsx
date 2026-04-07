@@ -108,7 +108,8 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function getDaysRemaining(dateStr: string) {
+function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
+  if (isFinished) return { text: 'Concluído', color: 'text-emerald-600' }
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const entrega = new Date(dateStr)
@@ -118,7 +119,7 @@ function getDaysRemaining(dateStr: string) {
   if (diff < 0) return { text: `${Math.abs(diff)}d atrasado`, color: 'text-red-600' }
   if (diff === 0) return { text: 'Hoje', color: 'text-amber-600' }
   if (diff === 1) return { text: 'Amanhã', color: 'text-amber-600' }
-  return { text: `${diff} dias`, color: 'text-slate-600' }
+  return { text: `${diff} dias`, color: 'text-slate-600 dark:text-slate-400' }
 }
 
 export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps) {
@@ -312,15 +313,9 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                 ))}
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <Button variant="outline" size="icon">
-                  <Filter className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="icon">
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* Actions 
+               * (Filtro Genérico e Download ocultados por serem não-funcionais)
+               */}
             </div>
           </CardContent>
         </Card>
@@ -356,7 +351,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
               </thead>
               <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {filteredOrdens.map((ordem) => {
-                  const daysInfo = getDaysRemaining(ordem.dataEntrega)
+                  const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue')
                   return (
                     <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">

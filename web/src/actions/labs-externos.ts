@@ -85,8 +85,11 @@ export async function getPedidosLabExterno(labId?: number) {
 export async function getAtrasados() {
   await requireUser()
   const rows = await prisma.$queryRaw<any[]>`
-    SELECT *, (CURRENT_DATE - prazo)::int AS dias_atraso
-    FROM labs_externos_atrasados
+    SELECT
+      *,
+      (CURRENT_DATE - prazo)::int AS dias_atraso
+    FROM labs_externos_pedidos
+    WHERE prazo IS NOT NULL AND prazo < CURRENT_DATE AND situacao != 'Entregue'
     ORDER BY dias_atraso DESC
   `
   return rows.map(normalizar)
@@ -95,8 +98,8 @@ export async function getAtrasados() {
 export async function getRetrabalhos() {
   await requireUser()
   const rows = await prisma.$queryRaw<any[]>`
-    SELECT * FROM labs_externos_retrabalhos
-    WHERE situacao != 'Entregue'
+    SELECT * FROM labs_externos_pedidos
+    WHERE is_retrabalho = true AND situacao != 'Entregue'
     ORDER BY created_at DESC
   `
   return rows.map(normalizar)
@@ -107,13 +110,13 @@ export async function getDashboardLabsExternos() {
   // Cast bigint to int to avoid JSON serialization issues
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
-      SUM(total_enviados)::int   AS total_enviados,
-      SUM(total_provando)::int   AS total_provando,
-      SUM(total_prontos)::int    AS total_prontos,
-      SUM(total_entregues)::int  AS total_entregues,
-      SUM(total_atrasados)::int  AS total_atrasados,
-      SUM(total_retrabalhos)::int AS total_retrabalhos
-    FROM labs_externos_dashboard
+      COUNT(*) FILTER (WHERE situacao = 'Enviado')::int   AS total_enviados,
+      COUNT(*) FILTER (WHERE situacao = 'Provando')::int   AS total_provando,
+      COUNT(*) FILTER (WHERE situacao = 'Pronto')::int    AS total_prontos,
+      COUNT(*) FILTER (WHERE situacao = 'Entregue')::int  AS total_entregues,
+      COUNT(*) FILTER (WHERE prazo IS NOT NULL AND prazo < CURRENT_DATE AND situacao != 'Entregue')::int  AS total_atrasados,
+      COUNT(*) FILTER (WHERE is_retrabalho = true AND situacao != 'Entregue')::int AS total_retrabalhos
+    FROM labs_externos_pedidos
   `
   return rows[0] ?? {
     total_enviados: 0,

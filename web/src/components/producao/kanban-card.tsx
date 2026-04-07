@@ -29,7 +29,9 @@ function getPriorityColor(priority: string) {
   return map[priority] || 'border-l-slate-400'
 }
 
-function getDaysRemaining(dateStr: string) {
+function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
+  if (isFinished) return { text: 'Concluído', isLate: false, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' }
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const entrega = new Date(dateStr)
@@ -43,7 +45,7 @@ function getDaysRemaining(dateStr: string) {
 }
 
 export function KanbanCard({ ordem, onDragStart, etapaId, onClick }: KanbanCardProps) {
-  const daysInfo = getDaysRemaining(ordem.entrega)
+  const daysInfo = getDaysRemaining(ordem.entrega, ordem.etapa === 'Finalizado' || ordem.status === 'Finalizado' || ordem.status === 'Entregue')
 
   // Extrair elementos se houver
   const elementos = ordem.elementos ? ordem.elementos.split(',').map((e: string) => e.trim()) : []

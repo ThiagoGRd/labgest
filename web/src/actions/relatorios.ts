@@ -4,7 +4,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+let genAI: GoogleGenerativeAI | null = null
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+}
 
 export async function getRelatorioFinanceiro() {
   await requireUser()
@@ -131,7 +134,19 @@ export async function gerarRelatorioIA() {
       clientesRisco: clientesInativos.map(c => c.nome),
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    if (!genAI) {
+      return {
+        analiseGeral: 'Configure a sua GEMINI_API_KEY no arquivo .env.local para gerar análises automáticas com IA.',
+        tendencias: [],
+        sugestoesAcao: ['Acesse o Google AI Studio para obter a sua chave de API.'],
+        alertaRisco: null
+      }
+    }
+
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' }
+    })
 
     const prompt = `
       Você é um consultor especialista em gestão de laboratórios de prótese dentária.
@@ -162,12 +177,12 @@ export async function gerarRelatorioIA() {
     
     return JSON.parse(jsonStr)
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro na IA:', error)
     return {
-      analiseGeral: 'Não foi possível gerar a análise neste momento.',
+      analiseGeral: `Não foi possível gerar a análise neste momento. Motivo: ${error.message || 'Erro desconhecido.'}`,
       tendencias: [],
-      sugestoesAcao: [],
+      sugestoesAcao: ['Verifique o token Gemini ou as cotas da API.', 'Verifique se você reiniciou o Next.js (terminal) para aplicar a varíavel de ambiente.'],
       alertaRisco: null
     }
   }
