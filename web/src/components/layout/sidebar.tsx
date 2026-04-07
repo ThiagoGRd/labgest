@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Sparkles,
   Clock,
+  Building2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
@@ -33,6 +34,7 @@ const navigation = [
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },
   { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
+  { name: 'Labs Externos', href: '/labs-externos', icon: Building2 },
   { name: 'Relatórios', href: '/relatorios', icon: BarChart3, hasAI: true },
   { name: 'Configurações', href: '/configuracoes', icon: Settings },
 ]
