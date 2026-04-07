@@ -35,7 +35,32 @@ export interface LabExterno {
 
 export async function getPedidosLabExterno(labId?: number) {
   await requireUser()
-  const pedidos = await prisma.$queryRaw<LabExternoPedido[]>`
+
+  if (labId) {
+    const pedidos = await prisma.$queryRaw<any[]>`
+      SELECT
+        p.*,
+        CASE
+          WHEN p.prazo IS NOT NULL AND p.prazo < CURRENT_DATE AND p.situacao != 'Entregue'
+          THEN (CURRENT_DATE - p.prazo)::int
+          ELSE NULL
+        END AS dias_atraso
+      FROM labs_externos_pedidos p
+      WHERE p.lab_id = ${labId}
+      ORDER BY
+        CASE p.situacao
+          WHEN 'Enviado'  THEN 1
+          WHEN 'Provando' THEN 2
+          WHEN 'Pronto'   THEN 3
+          WHEN 'Entregue' THEN 4
+        END,
+        p.prazo ASC NULLS LAST,
+        p.created_at DESC
+    `
+    return pedidos.map(normalizar)
+  }
+
+  const pedidos = await prisma.$queryRaw<any[]>`
     SELECT
       p.*,
       CASE
@@ -44,7 +69,6 @@ export async function getPedidosLabExterno(labId?: number) {
         ELSE NULL
       END AS dias_atraso
     FROM labs_externos_pedidos p
-    ${labId ? prisma.$raw`WHERE p.lab_id = ${labId}` : prisma.$raw``}
     ORDER BY
       CASE p.situacao
         WHEN 'Enviado'  THEN 1
@@ -80,10 +104,10 @@ export async function getRetrabalhos() {
 
 export async function getDashboardLabsExternos() {
   await requireUser()
-  const [stats] = await prisma.$queryRaw<any[]>`
+  const rows = await prisma.$queryRaw<any[]>`
     SELECT * FROM labs_externos_dashboard
   `
-  return stats ?? {
+  return rows[0] ?? {
     total_enviados: 0,
     total_provando: 0,
     total_prontos: 0,
