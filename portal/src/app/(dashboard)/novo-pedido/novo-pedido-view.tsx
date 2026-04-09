@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { FileUpload } from '@/components/ui/file-upload'
 import { criarPedidoBatch } from '@/actions/pedidos'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   FileText,
   X,
@@ -56,6 +57,25 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     dataEntrega: '',
     observacoes: '',
     arquivos: [] as string[],
+  })
+
+  // Quadro Clínico
+  const [dadosClinicos, setDadosClinicos] = useState({
+    // Dados Clínicos
+    dvo: false,
+    registroMordida: false,
+    linhaMedia: false,
+    oclusao: false,
+    corredorBucal: false,
+    // Escala
+    corGengiva: '',
+    // Solicitação
+    moldeiraIndividual: false,
+    planoCera: false,
+    montagemDente: false,
+    barraProtocolo: false,
+    acrilizacao: false,
+    conserto: false
   })
 
   // Itens
@@ -122,6 +142,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
         dataEntrega: globalData.dataEntrega,
         observacoes: globalData.observacoes,
         arquivos: globalData.arquivos,
+        dadosClinicos: dadosClinicos,
         itens: itens.map(i => ({
           servicoId: i.servicoId,
           elementos: i.elementos,
@@ -262,7 +283,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                     </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Dentes / Elementos</label>
                       <Input
@@ -348,6 +369,83 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   <div>
                     <h3 className="font-semibold text-slate-900 dark:text-white">Arquivos e Envio</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Anexe arquivos e revise o pedido</p>
+                  </div>
+                </div>
+
+                {/* Quadro Clínico */}
+                <div className="bg-slate-50 dark:bg-zinc-800/50 p-5 rounded-xl border border-slate-200 dark:border-zinc-700 space-y-6 mb-6">
+                  <h4 className="font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-700 pb-2">Quadro Clínico e Solicitações</h4>
+                  
+                  {/* Dados Clínicos e Solicitação em Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-3">Dados Clínicos</h5>
+                      <div className="space-y-3">
+                        {[
+                          { key: 'dvo', label: 'D.V.O.' },
+                          { key: 'registroMordida', label: 'Registro de Mordida' },
+                          { key: 'linhaMedia', label: 'Linha Média' },
+                          { key: 'oclusao', label: 'Oclusão' },
+                          { key: 'corredorBucal', label: 'Corredor Bucal' },
+                        ].map((item) => (
+                          <div key={item.key} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={item.key} 
+                              checked={dadosClinicos[item.key as keyof typeof dadosClinicos] as boolean}
+                              onCheckedChange={(checked) => setDadosClinicos(prev => ({ ...prev, [item.key]: checked === true }))}
+                            />
+                            <label htmlFor={item.key} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-slate-300">
+                              {item.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-3">Solicitação Específica</h5>
+                      <div className="space-y-3">
+                        {[
+                          { key: 'moldeiraIndividual', label: 'Moldeira Individual' },
+                          { key: 'planoCera', label: 'Plano de Cera' },
+                          { key: 'montagemDente', label: 'Montagem de Dente' },
+                          { key: 'barraProtocolo', label: 'Barra de Protocolo' },
+                          { key: 'acrilizacao', label: 'Acrilização' },
+                          { key: 'conserto', label: 'Conserto' },
+                        ].map((item) => (
+                          <div key={item.key} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={item.key} 
+                              checked={dadosClinicos[item.key as keyof typeof dadosClinicos] as boolean}
+                              onCheckedChange={(checked) => setDadosClinicos(prev => ({ ...prev, [item.key]: checked === true }))}
+                            />
+                            <label htmlFor={item.key} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-slate-300">
+                              {item.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Escala (Gengiva) */}
+                  <div className="pt-4 border-t border-slate-200 dark:border-zinc-700">
+                    <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-3">Escala</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Cor da Gengiva</label>
+                        <Input
+                          placeholder="Ex: Escala STG, Tom Rosa Médio..."
+                          value={dadosClinicos.corGengiva}
+                          onChange={(e) => setDadosClinicos(prev => ({ ...prev, corGengiva: e.target.value }))}
+                          className="bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700"
+                        />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                        <User className="h-4 w-4 mr-2 text-blue-500" />
+                        A cor do Dente deverá ser definida individualmente em cada serviço que compõe a ordem, no passo anterior.
+                      </div>
+                    </div>
                   </div>
                 </div>
 

@@ -6,12 +6,16 @@ interface SidebarContextType {
     collapsed: boolean
     setCollapsed: (collapsed: boolean) => void
     toggleCollapsed: () => void
+    isOpenMobile: boolean
+    setIsOpenMobile: (isOpen: boolean) => void
+    toggleMobile: () => void
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
     const [collapsed, setCollapsed] = useState(false)
+    const [isOpenMobile, setIsOpenMobile] = useState(false)
 
     // Opcional: Persistir estado no localStorage
     useEffect(() => {
@@ -26,9 +30,19 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     }, [collapsed])
 
     const toggleCollapsed = () => setCollapsed((prev) => !prev)
+    const toggleMobile = () => setIsOpenMobile((prev) => !prev)
+
+    // Close mobile sidebar on route change can be handled in component 
 
     return (
-        <SidebarContext.Provider value={{ collapsed, setCollapsed, toggleCollapsed }}>
+        <SidebarContext.Provider value={{ 
+            collapsed, 
+            setCollapsed, 
+            toggleCollapsed,
+            isOpenMobile,
+            setIsOpenMobile,
+            toggleMobile
+        }}>
             {children}
         </SidebarContext.Provider>
     )

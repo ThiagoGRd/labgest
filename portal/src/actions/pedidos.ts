@@ -26,6 +26,7 @@ export async function criarPedidoBatch(data: {
   dataEntrega: string
   observacoes: string
   arquivos: string[]
+  dadosClinicos?: any
   itens: Array<{
     servicoId: number
     elementos: string
@@ -83,7 +84,7 @@ export async function criarPedidoBatch(data: {
           tipoWorkflow: tipoWorkflow,
           tentativaAtual: 0,
           historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
-          checklistEstetico: {},
+          checklistEstetico: data.dadosClinicos || {},
           arquivoStl: data.arquivos,
         }
       })

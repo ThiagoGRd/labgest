@@ -239,11 +239,11 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
         </div>
 
         {/* Kanban Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-p-4 min-h-[calc(100vh-250px)]">
           {etapas.map((etapa) => (
             <div
               key={etapa.id}
-              className="flex-shrink-0 w-80"
+              className="flex-shrink-0 w-80 snap-center md:snap-align-none"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, etapa.id)}
             >

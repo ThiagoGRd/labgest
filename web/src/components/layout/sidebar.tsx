@@ -20,7 +20,7 @@ import {
   Clock,
   Building2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
 import { useSidebar } from '@/components/providers/sidebar-provider'
@@ -49,16 +49,32 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
-  const { collapsed, setCollapsed } = useSidebar()
+  const { collapsed, setCollapsed, isOpenMobile, setIsOpenMobile } = useSidebar()
+
+  // Fechar o menu mobile ao navegar
+  useEffect(() => {
+    setIsOpenMobile(false)
+  }, [pathname, setIsOpenMobile])
 
   return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 z-40 h-screen transition-all duration-300 ease-in-out flex flex-col",
-        "glass-panel border-r border-white/20 dark:border-white/10",
-        collapsed ? "w-20" : "w-64"
+    <>
+      {/* Overlay Escuro Mobile */}
+      {isOpenMobile && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden transition-opacity" 
+          onClick={() => setIsOpenMobile(false)}
+        />
       )}
-    >
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-50 h-screen transition-all duration-300 ease-in-out flex flex-col",
+          "glass-panel border-r border-white/20 dark:border-white/10",
+          collapsed ? "w-20" : "w-64",
+          // Regras Mobile: Escondido se !isOpenMobile
+          !isOpenMobile && "-translate-x-full md:translate-x-0"
+        )}
+      >
       {/* Logo */}
       <div className="flex h-20 items-center justify-between px-6 border-b border-white/10 dark:border-white/5">
         {!collapsed && (
@@ -145,5 +161,6 @@ export function Sidebar({ user }: SidebarProps) {
         </button>
       </div>
     </aside>
+    </>
   )
 }

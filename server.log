@@ -1,0 +1,142 @@
+
+> labgest@1.0.0 dev:all
+> concurrently "npm run dev:web" "npm run dev:portal"
+
+[0] 
+[0] > labgest@1.0.0 dev:web
+[0] > npm run dev --workspace=web
+[0] 
+[1] 
+[1] > labgest@1.0.0 dev:portal
+[1] > npm run dev --workspace=portal
+[1] 
+[0] 
+[0] > web@0.1.0 dev
+[0] > next dev
+[0] 
+[1] 
+[1] > portal@0.1.0 dev
+[1] > next dev
+[1] 
+[0] ⚠ Port 3000 is in use by process 54877, using available port 3001 instead.
+[0] ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+[0]  We detected multiple lockfiles and selected the directory of /Users/thiagocruz/labgest/package-lock.json as the root directory.
+[0]  To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+[0]    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+[0]  Detected additional lockfiles: 
+[0]    * /Users/thiagocruz/labgest/web/package-lock.json
+[0] 
+[0] ▲ Next.js 16.1.6 (Turbopack)
+[0] - Local:         http://localhost:3001
+[0] - Network:       http://192.168.31.55:3001
+[0] - Environments: .env.local
+[0] 
+[0] ✓ Starting...
+[1] ⚠ Port 3000 is in use by process 54877, using available port 3002 instead.
+[0] ⨯ Unable to acquire lock at /Users/thiagocruz/labgest/web/.next/dev/lock, is another instance of next dev running?
+[0]   Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[0] [?25h
+[0] npm error Lifecycle script `dev` failed with error:
+[0] npm error code 1
+[0] npm error path /Users/thiagocruz/labgest/web
+[0] npm error workspace web@0.1.0
+[0] npm error location /Users/thiagocruz/labgest/web
+[0] npm error command failed
+[0] npm error command sh -c next dev
+[0] npm notice
+[0] npm notice New major version of npm available! 10.9.7 -> 11.12.1
+[0] npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+[0] npm notice To update run: npm install -g npm@11.12.1
+[0] npm notice
+[0] npm notice
+[0] npm notice New major version of npm available! 10.9.7 -> 11.12.1
+[0] npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+[0] npm notice To update run: npm install -g npm@11.12.1
+[0] npm notice
+[0] npm run dev:web exited with code 1
+[1] ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+[1]  We detected multiple lockfiles and selected the directory of /Users/thiagocruz/labgest/package-lock.json as the root directory.
+[1]  To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+[1]    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+[1]  Detected additional lockfiles: 
+[1]    * /Users/thiagocruz/labgest/portal/package-lock.json
+[1] 
+[1] ▲ Next.js 16.1.6 (Turbopack)
+[1] - Local:         http://localhost:3002
+[1] - Network:       http://192.168.31.55:3002
+[1] 
+[1] ✓ Starting...
+[1] ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[1] ✓ Ready in 1913ms
+[1] ⨯ Error: Your project's URL and Key are required to create a Supabase client!
+[1] 
+[1] Check your Supabase project's API settings to find these values
+[1] 
+[1] https://supabase.com/dashboard/project/_/settings/api
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at middleware (portal/src/middleware.ts:11:38)
+[1]    9 |   })
+[1]   10 |
+[1] > 11 |   const supabase = createServerClient(
+[1]      |                                      ^
+[1]   12 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+[1]   13 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+[1]   14 |     {
+[1]  GET /novo-pedido 404 in 491ms (compile: -66015µs, proxy.ts: 490ms, render: 68ms)
+[1] ⨯ Error: Your project's URL and Key are required to create a Supabase client!
+[1] 
+[1] Check your Supabase project's API settings to find these values
+[1] 
+[1] https://supabase.com/dashboard/project/_/settings/api
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at middleware (portal/src/middleware.ts:11:38)
+[1]    9 |   })
+[1]   10 |
+[1] > 11 |   const supabase = createServerClient(
+[1]      |                                      ^
+[1]   12 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+[1]   13 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+[1]   14 |     {
+[1]  GET /novo-pedido 404 in 41ms (compile: -7518µs, proxy.ts: 38ms, render: 10ms)
+[1] ⨯ Error: Your project's URL and Key are required to create a Supabase client!
+[1] 
+[1] Check your Supabase project's API settings to find these values
+[1] 
+[1] https://supabase.com/dashboard/project/_/settings/api
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at middleware (portal/src/middleware.ts:11:38)
+[1]    9 |   })
+[1]   10 |
+[1] > 11 |   const supabase = createServerClient(
+[1]      |                                      ^
+[1]   12 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+[1]   13 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+[1]   14 |     {
+[1]  GET / 404 in 29ms (compile: -6039µs, proxy.ts: 27ms, render: 8ms)
+[1] ⨯ Error: Your project's URL and Key are required to create a Supabase client!
+[1] 
+[1] Check your Supabase project's API settings to find these values
+[1] 
+[1] https://supabase.com/dashboard/project/_/settings/api
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+[1]     at middleware (portal/src/middleware.ts:11:38)
+[1]    9 |   })
+[1]   10 |
+[1] > 11 |   const supabase = createServerClient(
+[1]      |                                      ^
+[1]   12 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+[1]   13 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+[1]   14 |     {
+[1]  GET /login 404 in 37ms (compile: -6402µs, proxy.ts: 36ms, render: 7ms)
+[1]   Reload env: .env.local
+[1]  GET /login 200 in 1194ms (compile: 1101ms, proxy.ts: 10ms, render: 83ms)
+[1]  GET /dashboard 200 in 5.8s (compile: 631ms, proxy.ts: 222ms, render: 5.0s)
+[1]  POST /login 303 in 7.1s (compile: 4ms, proxy.ts: 16ms, render: 7.1s)
+[1]  GET /novo-pedido 200 in 2.2s (compile: 517ms, proxy.ts: 593ms, render: 1101ms)
+[1] ✓ Compiled in 160ms
+[1]  GET /novo-pedido 200 in 3.3s (compile: 80ms, proxy.ts: 884ms, render: 2.3s)
+[1] ✓ Compiled in 273ms

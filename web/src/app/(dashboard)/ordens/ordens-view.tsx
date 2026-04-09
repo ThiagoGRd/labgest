@@ -297,7 +297,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
               </div>
 
               {/* Status Filter */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {['todos', 'Aguardando', 'Em Produção', 'Finalizado', 'Pausado'].map((status) => (
                   <button
                     key={status}
