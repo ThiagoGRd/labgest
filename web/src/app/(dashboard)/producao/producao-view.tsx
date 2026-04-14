@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { getOrdemById } from '@/actions/ordens'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
@@ -275,10 +276,12 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                 ))}
 
                 {(!ordensPorEtapa[etapa.id] || ordensPorEtapa[etapa.id].length === 0) && (
-                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
-                    <FileText className="h-8 w-8 mb-2 opacity-50" />
-                    <p className="text-sm">Nenhuma ordem</p>
-                  </div>
+                  <EmptyState
+                    icon={FileText}
+                    title="Sem ordens"
+                    description="Arraste uma ordem para esta etapa"
+                    className="py-6"
+                  />
                 )}
               </div>
             </div>

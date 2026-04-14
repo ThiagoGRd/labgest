@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
 import { VisualizarPedidoModal } from '@/components/pedidos/visualizar-pedido-modal'
 import { getPedidoById } from '@/actions/pedidos'
 import {
@@ -152,8 +153,11 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
               <tbody className="divide-y divide-slate-200 dark:divide-zinc-800">
                 {filteredPedidos.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
-                      Nenhum pedido encontrado.
+                    <td colSpan={7} className="p-0">
+                      <EmptyState 
+                        title="Nenhum pedido encontrado" 
+                        description={statusFilter !== 'todos' || search !== '' ? "Tente ajustar seus filtros de busca para encontrar o que precisa." : "Você ainda não fez nenhum pedido no laboratório."}
+                      />
                     </td>
                   </tr>
                 ) : (

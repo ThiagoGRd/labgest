@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/empty-state'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
@@ -349,11 +350,21 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/5 dark:divide-white/5">
-                {filteredOrdens.map((ordem) => {
-                  const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
-                  return (
-                    <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors">
+              <tbody className="divide-y divide-black/5 dark:divide-white/5 relative">
+                {filteredOrdens.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-0">
+                      <EmptyState 
+                        title="Nenhuma ordem encontrada" 
+                        description={statusFilter !== 'todos' || search !== '' ? "Tente ajustar seus filtros de busca para encontrar o que precisa." : "Sua lista de ordens está vazia. Crie uma nova ordem para começar."}
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrdens.map((ordem) => {
+                    const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
+                    return (
+                      <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0">
@@ -484,9 +495,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </table>
+                })
+              )}
+            </tbody>
+          </table>
           </div>
 
           {/* Pagination */}

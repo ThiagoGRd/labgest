@@ -63,7 +63,7 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
     setLoading(true)
 
     try {
-      const data = await gerarRelatorioIA()
+      const data = await gerarRelatorioIA(messageText)
       setMessages(prev => [...prev, { role: 'assistant', data: data }])
     } catch (error) {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Erro ao gerar análise.' }])

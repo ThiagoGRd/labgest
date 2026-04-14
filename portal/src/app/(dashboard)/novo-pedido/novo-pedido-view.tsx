@@ -204,7 +204,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
             {/* Step 1: Paciente e Data */}
             {step === 1 && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-in">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
                     <User className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -255,7 +255,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
             {/* Step 2: Adicionar Serviços */}
             {step === 2 && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-in">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
                     <Package className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -361,7 +361,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
             {/* Step 3: Arquivos e Finalização */}
             {step === 3 && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-in">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
                     <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -508,7 +508,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
             {/* Step 4: Success */}
             {step === 4 && (
-              <div className="text-center py-8">
+              <div className="text-center py-8 animate-in">
                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Check className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
                 </div>
