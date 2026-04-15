@@ -223,17 +223,37 @@ export async function getPedidoById(id: number) {
   if (!logado?.cliente) return null
 
   try {
-    const pedido = await prisma.ordem.findFirst({
+    const pedido = await (prisma as any).ordem.findFirst({
       where: { 
         id,
         clienteId: logado.cliente.id 
       },
       include: {
-        servico: { select: { nome: true } }
+        servico: { select: { nome: true } },
+        ciclos: {
+          orderBy: { numeroCiclo: 'asc' }
+        }
       }
     })
 
     if (!pedido) return null
+
+    const ciclos = (pedido.ciclos || []).map((c: any) => ({
+      id: c.id,
+      numeroCiclo: c.numeroCiclo,
+      etapa: c.etapa,
+      dataEntrada: c.dataEntrada?.toISOString(),
+      prazoDias: c.prazoDias,
+      dataComprometida: c.dataComprometida?.toISOString(),
+      dataSaida: c.dataSaida?.toISOString() || null,
+      dataRetorno: c.dataRetorno?.toISOString() || null,
+      observacoesDentista: c.observacoesDentista,
+      fotosProva: (c.fotosProva as string[]) || [],
+      decisao: c.decisao,
+      status: c.status,
+    }))
+
+    const cicloAtivo = ciclos.find((c: any) => c.status === 'em_prova') || null
 
     return {
       id: pedido.id,
@@ -247,7 +267,9 @@ export async function getPedidoById(id: number) {
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
       historicoEtapas: (pedido.historicoEtapas as any[]) || [],
-      arquivos: (pedido.arquivoStl as string[]) || []
+      arquivos: (pedido.arquivoStl as string[]) || [],
+      ciclos,
+      cicloAtivoId: cicloAtivo?.id ?? null,
     }
   } catch (error) {
     console.error('Erro ao buscar pedido:', error)

@@ -39,6 +39,9 @@ function getStatusVariant(status: string) {
   const map: Record<string, any> = {
     'Aguardando': 'aguardando',
     'Em Produção': 'emProducao',
+    'Em Prova': 'warning',
+    'Retornou - Ajustes': 'warning',
+    'Retornou - Aprovado': 'success',
     'Finalizado': 'finalizado',
     'Entregue': 'finalizado',
     'Cancelado': 'destructive',
@@ -117,7 +120,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                 />
               </div>
               <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-                {['todos', 'Aguardando', 'Em Produção', 'Finalizado'].map((status) => (
+                {['todos', 'Aguardando', 'Em Produção', 'Em Prova', 'Finalizado'].map((status) => (
                   <button
                     key={status}
                     onClick={() => setStatusFilter(status)}
@@ -168,7 +171,10 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{pedido.servico}</td>
                       <td className="px-6 py-4">
                         <Badge variant={getStatusVariant(pedido.status)}>
-                          {pedido.status}
+                          {pedido.status === 'Em Prova' ? '🧪 Em Prova' :
+                           pedido.status === 'Retornou - Ajustes' ? '🔄 Retornou (Ajustes)' :
+                           pedido.status === 'Retornou - Aprovado' ? '✅ Aprovado!' :
+                           pedido.status}
                         </Badge>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{pedido.etapa}</p>
                       </td>

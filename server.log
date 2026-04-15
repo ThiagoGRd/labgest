@@ -154,3 +154,57 @@
 [1] ✓ Compiled in 73ms
 [1] ✓ Compiled in 66ms
 [1] ✓ Compiled in 578ms
+[1] ✓ Compiled in 244ms
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] ✓ Compiled in 5ms
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1]  GET /login 200 in 616ms (compile: 128ms, proxy.ts: 411ms, render: 76ms)
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1] AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+[1]     at ignore-listed frames {
+[1]   __isAuthError: true,
+[1]   status: 400,
+[1]   code: 'refresh_token_not_found'
+[1] }
+[1]  GET /login 200 in 282ms (compile: 1497µs, proxy.ts: 250ms, render: 31ms)
+[1]  GET /login 200 in 9ms (compile: 1080µs, proxy.ts: 1540µs, render: 7ms)
+[1]  GET /login 200 in 141ms (compile: 1401µs, proxy.ts: 1693µs, render: 138ms)

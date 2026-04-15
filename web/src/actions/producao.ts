@@ -4,6 +4,7 @@ import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { abaterEstoquePorServico } from './estoque'
+export { enviarParaProva } from './ciclos'
 
 export async function getProducao() {
   await requireUser()
@@ -13,25 +14,41 @@ export async function getProducao() {
       where: {
         status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] },
       },
-      orderBy: { prioridade: 'asc' }, // Urgente primeiro (se mapeado corretamente)
+      orderBy: { prioridade: 'asc' },
       include: {
         cliente: { select: { nome: true } },
-        servico: { select: { nome: true } }
-      }
+        servico: { select: { nome: true } },
+        ciclos: {
+          where: { status: { in: ['no_lab', 'em_prova'] } },
+          orderBy: { numeroCiclo: 'desc' },
+          take: 1
+        }
+      } as any
     })
 
-    return ordens.map(o => ({
-      id: o.id,
-      paciente: o.nomePaciente,
-      dentista: o.clienteNome || o.cliente?.nome || 'Desconhecido',
-      servico: o.servicoNome || o.servico?.nome || 'Serviço',
-      etapa: o.etapaAtual || 'Recebimento',
-      prioridade: o.prioridade || 'Normal',
-      entrega: o.dataEntrega.toISOString(),
-      cor: o.corDentes,
-      elementos: o.elementos,
-      foto: null
-    }))
+    return ordens.map((o: any) => {
+      const cicloAtivo = o.ciclos?.[0] ?? null
+      return {
+        id: o.id,
+        paciente: o.nomePaciente,
+        dentista: o.clienteNome || o.cliente?.nome || 'Desconhecido',
+        servico: o.servicoNome || o.servico?.nome || 'Serviço',
+        etapa: o.etapaAtual || 'Recebimento',
+        prioridade: o.prioridade || 'Normal',
+        entrega: o.dataEntrega.toISOString(),
+        cor: o.corDentes,
+        elementos: o.elementos,
+        foto: null,
+        tipoWorkflow: (o as any).tipoWorkflow || 'simples',
+        cicloAtivoId: cicloAtivo?.id ?? null,
+        cicloStatus: cicloAtivo?.status ?? null,
+        cicloNumero: cicloAtivo?.numeroCiclo ?? null,
+        cicloComprometido: cicloAtivo?.dataComprometida?.toISOString() ?? null,
+        cicloDentistaDeci: cicloAtivo?.decisao ?? null,
+        cicloObs: cicloAtivo?.observacoesDentista ?? null,
+        cicloFotos: (cicloAtivo?.fotosProva as string[]) ?? [],
+      }
+    })
   } catch (error) {
     console.error('Erro ao buscar produção:', error)
     return []
