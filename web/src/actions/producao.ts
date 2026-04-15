@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { abaterEstoquePorServico } from './estoque'
 import { gerarCobrancaAutomatica } from './financeiro'
-export { enviarParaProva } from './ciclos'
 
 export async function getProducao() {
   await requireUser()
