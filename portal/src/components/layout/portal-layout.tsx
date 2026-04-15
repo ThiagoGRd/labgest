@@ -12,10 +12,13 @@ import {
   LogOut,
   Menu,
   X,
+  Sparkles,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
+import { WhatsNewPortal } from '@/components/ui/whats-new-portal'
+import { VERSAO_ATUAL } from '@/lib/release-notes'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -37,6 +40,13 @@ interface PortalLayoutProps {
 export function PortalLayout({ children, user }: PortalLayoutProps) {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  const [hasNew, setHasNew] = useState(false)
+
+  useEffect(() => {
+    const seen = localStorage.getItem('labgest_portal_seen_version')
+    setHasNew(seen !== VERSAO_ATUAL)
+  }, [])
 
   return (
     <div className="min-h-screen mesh-bg selection:bg-emerald-500/30 selection:text-emerald-400">
@@ -86,6 +96,15 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
                   <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter">{user.cro}</p>
                 </div>
               </div>
+              <button
+                onClick={() => { setWhatsNewOpen(true); setHasNew(false) }}
+                className="relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-zinc-400 hover:bg-white/5 hover:text-white"
+                title="Novidades"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span className="hidden lg:inline">Novidades</span>
+                {hasNew && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+              </button>
               <button
                 onClick={() => logout()}
                 className="p-2.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
@@ -146,6 +165,10 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
           </p>
         </div>
       </footer>
+      <WhatsNewPortal
+        forceOpen={whatsNewOpen}
+        onClose={() => setWhatsNewOpen(false)}
+      />
     </div>
   )
 }

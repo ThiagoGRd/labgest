@@ -24,6 +24,8 @@ import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
 import { useSidebar } from '@/components/providers/sidebar-provider'
+import { WhatsNewModal } from '@/components/ui/whats-new-modal'
+import { VERSAO_ATUAL } from '@/lib/release-notes'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -50,6 +52,13 @@ interface SidebarProps {
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
   const { collapsed, setCollapsed, isOpenMobile, setIsOpenMobile } = useSidebar()
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  const [hasNew, setHasNew] = useState(false)
+
+  useEffect(() => {
+    const seen = localStorage.getItem('labgest_seen_version')
+    setHasNew(seen !== VERSAO_ATUAL)
+  }, [])
 
   // Fechar o menu mobile ao navegar
   useEffect(() => {
@@ -143,6 +152,28 @@ export function Sidebar({ user }: SidebarProps) {
           </div>
         )}
 
+        {/* Botão de Novidades */}
+        <button
+          onClick={() => {
+            setWhatsNewOpen(true)
+            setHasNew(false)
+          }}
+          className={cn(
+            "flex items-center gap-2 w-full py-2.5 px-3 rounded-xl text-muted-foreground hover:bg-indigo-500/10 hover:text-indigo-400 transition-all duration-300 mb-2 relative",
+            collapsed && "justify-center px-0"
+          )}
+          title="Novidades do sistema"
+        >
+          <Sparkles className="h-4 w-4 flex-shrink-0" />
+          {!collapsed && <span className="text-xs font-bold uppercase tracking-widest">Novidades</span>}
+          {hasNew && (
+            <span className={cn(
+              "h-2 w-2 rounded-full bg-indigo-500 animate-pulse flex-shrink-0",
+              collapsed ? "absolute top-1.5 right-1.5" : "ml-auto"
+            )} />
+          )}
+        </button>
+
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
@@ -161,6 +192,10 @@ export function Sidebar({ user }: SidebarProps) {
         </button>
       </div>
     </aside>
+    <WhatsNewModal
+      forceOpen={whatsNewOpen}
+      onClose={() => setWhatsNewOpen(false)}
+    />
     </>
   )
 }
