@@ -76,6 +76,7 @@ model Ordem {
   progresso       Int?           @default(0)
   tentativaAtual  Int?           @default(0) @map("tentativa_atual")
   tipoWorkflow    String?        @map("tipo_workflow") @db.VarChar(50)
+  workflowTipo    String?        @default("simples") @map("workflow_tipo") @db.VarChar(20)
   historicoEtapas Json?          @default("[]") @map("historico_etapas")
   checklistEstetico Json?        @default("{}") @map("checklist_estetico")
   fotosProva      Json?          @default("[]") @map("fotos_prova")
@@ -83,6 +84,7 @@ model Ordem {
   createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   contasReceber   ContaReceber[]
+  ciclos          CicloProducao[]
   cliente         Cliente?       @relation(fields: [clienteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   servico         Servico?       @relation(fields: [servicoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -91,6 +93,30 @@ model Ordem {
   @@index([prioridade], map: "idx_ordens_prioridade")
   @@index([status], map: "idx_ordens_status")
   @@map("ordens")
+}
+
+model CicloProducao {
+  id                   Int       @id @default(autoincrement())
+  ordemId              Int       @map("ordem_id")
+  numeroCiclo          Int       @default(1) @map("numero_ciclo")
+  etapa                String?   @db.VarChar(255)
+  dataEntrada          DateTime  @default(dbgenerated("CURRENT_DATE")) @map("data_entrada") @db.Date
+  prazoDias            Int       @default(7) @map("prazo_dias")
+  dataComprometida     DateTime  @map("data_comprometida") @db.Date
+  dataSaida            DateTime? @map("data_saida") @db.Date
+  dataRetorno          DateTime? @map("data_retorno") @db.Date
+  observacoesDentista  String?   @map("observacoes_dentista")
+  fotosProva           Json?     @default("[]") @map("fotos_prova")
+  decisao              String?   @db.VarChar(20)
+  status               String    @default("no_lab") @db.VarChar(20)
+  registradoPor        String?   @map("registrado_por") @db.VarChar(255)
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  ordem                Ordem     @relation(fields: [ordemId], references: [id], onDelete: Cascade)
+
+  @@index([ordemId], map: "idx_ciclos_ordem_id")
+  @@index([status], map: "idx_ciclos_status")
+  @@map("ciclos_producao")
 }
 
 model ItemOrdem {

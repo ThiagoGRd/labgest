@@ -24,6 +24,8 @@ import {
   Loader2
 } from 'lucide-react'
 import { CHECKLIST_LABELS, isEtapaProva, isChecklistCompleto, type ChecklistEstetico, getWorkflowForServico } from '@/lib/workflow-config'
+import { FeedbackProva } from '@/components/pedidos/feedback-prova'
+import { TimelineCiclos } from '@/components/pedidos/timeline-ciclos'
 
 interface Pedido {
   id: number
@@ -39,6 +41,8 @@ interface Pedido {
   historicoEtapas?: any[]
   arquivos?: string[]
   checklistEstetico?: Partial<ChecklistEstetico>
+  ciclos?: any[]
+  cicloAtivoId?: number | null
 }
 
 interface VisualizarPedidoModalProps {
@@ -125,92 +129,61 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Timeline Visual (Esquerda) */}
+        {/* Linha do Tempo + Ciclos */}
         <div className="lg:col-span-1 border-r border-slate-100 dark:border-zinc-800 pr-0 lg:pr-8">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6 flex items-center gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
             <MapPin className="h-3 w-3" />
-            Status do Pedido
+            Histórico do Caso
           </h3>
 
-          <div className="relative pl-4 border-l-2 border-emerald-100 dark:border-emerald-900/30 space-y-8">
-            {/* Status Atual */}
-            <div className="relative">
-              <div className="absolute -left-[21px] top-0 h-4 w-4 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-zinc-900 shadow-sm animate-pulse" />
-              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/20">
-                <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Etapa Atual</p>
-                <p className="font-bold text-slate-900 dark:text-white">{pedido.etapa}</p>
-                <p className="text-xs text-slate-500 mt-1">{pedido.status}</p>
-              </div>
-            </div>
-
-            {/* Histórico */}
-            {historico.length > 0 ? historico.map((h, i) => (
-              <div key={i} className="relative">
-                <div className="absolute -left-[19px] top-1.5 h-3 w-3 rounded-full bg-slate-300 dark:bg-zinc-700 ring-4 ring-white dark:ring-zinc-900" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-slate-400 mb-0.5">
-                    {formatDateTime(h.data)}
-                  </span>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {h.acao === 'avancou' && `Iniciou: ${h.para}`}
-                    {h.acao === 'devolveu' && `Devolvido: ${h.para}`}
-                    {h.acao === 'aprovou_prova' && `Prova Aprovada`}
-                    {h.acao === 'criou' && 'Pedido Criado'}
-                  </p>
-                  {h.motivo && (
-                    <p className="text-xs text-red-500 mt-1">Motivo: {h.motivo}</p>
-                  )}
+          {/* Timeline de Ciclos (se tiver) */}
+          {pedido.ciclos && pedido.ciclos.length > 0 ? (
+            <TimelineCiclos ciclos={pedido.ciclos} />
+          ) : (
+            <div className="relative pl-4 border-l-2 border-emerald-100 dark:border-emerald-900/30 space-y-8">
+              {/* Status Atual */}
+              <div className="relative">
+                <div className="absolute -left-[21px] top-0 h-4 w-4 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-zinc-900 shadow-sm animate-pulse" />
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/20">
+                  <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Etapa Atual</p>
+                  <p className="font-bold text-slate-900 dark:text-white">{pedido.etapa}</p>
+                  <p className="text-xs text-slate-500 mt-1">{pedido.status}</p>
                 </div>
               </div>
-            )) : (
-              <p className="text-xs text-slate-400 italic">Sem histórico detalhado.</p>
-            )}
-          </div>
-        </div>
+              {historico.length > 0 ? historico.map((h, i) => (
+                <div key={i} className="relative">
+                  <div className="absolute -left-[19px] top-1.5 h-3 w-3 rounded-full bg-slate-300 dark:bg-zinc-700 ring-4 ring-white dark:ring-zinc-900" />
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-medium text-slate-400 mb-0.5">{formatDateTime(h.data)}</span>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {h.acao === 'avancou' && `Iniciou: ${h.para}`}
+                      {h.acao === 'devolveu' && `Devolvido: ${h.para}`}
+                      {h.acao === 'aprovou_prova' && 'Prova Aprovada'}
+                      {h.acao === 'criou' && 'Pedido Criado'}
+                    </p>
+                    {h.motivo && <p className="text-xs text-red-500 mt-1">Motivo: {h.motivo}</p>}
+                  </div>
+                </div>
+              )) : <p className="text-xs text-slate-400 italic">Sem histórico detalhado.</p>}
+            </div>
+          )}
+        </div>{/* fim col-span-1 */}
 
         {/* Detalhes (Direita) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Alerta de Prova (Se for etapa de prova) */}
-          {isProva && (
+          {/* Feedback de Prova (ciclo ativo em prova) */}
+          {pedido.status === 'Em Prova' && pedido.cicloAtivoId && (
             <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-5">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="space-y-4 w-full">
-                  <div>
-                    <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">Aprovação de Prova Necessária</h3>
-                    <p className="text-xs text-amber-700 dark:text-amber-500/80 mt-1">
-                      Para devolver este trabalho ao laboratório, por favor preencha o checklist abaixo confirmando a prova.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 bg-white/50 dark:bg-black/20 p-3 rounded-lg">
-                    {(Object.keys(CHECKLIST_LABELS) as (keyof ChecklistEstetico)[]).map((key) => (
-                      <div key={key} className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={key} 
-                          checked={mergedChecklist[key] || false}
-                          onCheckedChange={(checked) => handleCheck(key, checked as boolean)}
-                        />
-                        <label
-                          htmlFor={key}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-700 dark:text-slate-300"
-                        >
-                          {CHECKLIST_LABELS[key]}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-
-                  <Button 
-                    onClick={handleAprovarProva} 
-                    disabled={!podeAprovar || loading}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-                  >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Prova e Devolver'}
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2 mb-4">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">Registre o Resultado da Prova</h3>
               </div>
+              <FeedbackProva
+                cicloId={pedido.cicloAtivoId}
+                numeroCiclo={pedido.ciclos?.length || 1}
+                onSubmit={onClose}
+              />
             </div>
           )}
 
