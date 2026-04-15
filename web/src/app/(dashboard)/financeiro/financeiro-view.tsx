@@ -37,6 +37,8 @@ interface Conta {
 interface FinanceiroViewProps {
   receber: Conta[]
   pagar: Conta[]
+  totalReceberMes: number
+  qtdReceberMes: number
 }
 
 function formatCurrency(value: number) {
@@ -47,10 +49,12 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('pt-BR')
 }
 
-export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
+export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes }: FinanceiroViewProps) {
   const [activeTab, setActiveTab] = useState('receber')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState<'receber' | 'pagar'>('receber')
+
+  const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 
   const totalReceber = receber.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
   const totalPagar = pagar.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
@@ -86,7 +90,8 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
 
       <div className="p-6 space-y-6">
         {/* Cards Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Card 1: A Receber Total */}
           <Card className="bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -94,7 +99,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
                   <ArrowUpRight className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-500/10 px-2 py-1 rounded">
-                  A Receber
+                  Total A Receber
                 </span>
               </div>
               <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 opacity-70">Previsão de Entrada</p>
@@ -102,6 +107,29 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
             </CardContent>
           </Card>
 
+          {/* Card 2: A Receber Este Mês — destaque */}
+          <Card className="bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg">
+                  <Calendar className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-500/10 px-2 py-1 rounded">
+                  Este Mês
+                </span>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 opacity-70">Vence em {mesAtual}</p>
+              <h3 className="text-3xl font-bold text-indigo-900 dark:text-indigo-50 mt-1">{formatCurrency(totalReceberMes)}</h3>
+              {qtdReceberMes > 0 && (
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 font-medium">
+                  {qtdReceberMes} {qtdReceberMes === 1 ? 'cobrança pendente' : 'cobranças pendentes'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 3: A Pagar */}
           <Card className="bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -117,6 +145,7 @@ export function FinanceiroView({ receber, pagar }: FinanceiroViewProps) {
             </CardContent>
           </Card>
 
+          {/* Card 4: Saldo */}
           <Card className="bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">

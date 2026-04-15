@@ -20,35 +20,22 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 
     if (contaExistente) return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
 
-    // Cria a conta a receber
-    // Vencimento padrão: dia 10 do mês seguinte (padrão de laboratórios)
-    // Mas para MVP, vamos colocar para 30 dias a partir de hoje
-    const vencimento = new Date()
-    vencimento.setDate(vencimento.getDate() + 30)
+    // Vencimento padrão laboratório: dia 10 do mês seguinte à finalização
+    const hoje = new Date()
+    const vencimento = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 10)
 
     await prisma.contaReceber.create({
       data: {
         ordemId: ordem.id,
-        descricao: `Serviço: ${ordem.servicoNome} - Paciente: ${ordem.nomePaciente}`,
+        descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
         clienteId: ordem.clienteId,
         clienteNome: ordem.clienteNome,
         valor: ordem.valorFinal,
         dataVencimento: vencimento,
         status: 'Pendente',
-        observacoes: `Gerado automaticamente a partir da Ordem #${ordem.id}`,
+        observacoes: `Gerado automaticamente — Ordem #${ordem.id} finalizada em ${hoje.toLocaleDateString('pt-BR')}`,
       }
     })
-
-    // Atualiza saldo do cliente (opcional, se tivermos campo de saldo)
-    if (ordem.clienteId) {
-      await prisma.cliente.update({
-        where: { id: ordem.clienteId },
-        data: {
-          valorTotal: { increment: ordem.valorFinal }, // Total histórico
-          // totalDevido: { increment: ordem.valorFinal } // Se existisse esse campo
-        }
-      })
-    }
 
     revalidatePath('/financeiro')
     revalidatePath('/ordens')
@@ -63,14 +50,31 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 export async function getContas() {
   await requireUser()
   try {
-    const [aReceber, aPagar] = await Promise.all([
+    // Limites do mês corrente
+    const hoje = new Date()
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59)
+
+    const [aReceber, aPagar, receberMes] = await Promise.all([
       prisma.contaReceber.findMany({
         orderBy: { dataVencimento: 'asc' },
         include: { cliente: { select: { nome: true } } }
       }),
       prisma.contaPagar.findMany({
         orderBy: { dataVencimento: 'asc' },
-      })
+      }),
+      // Contas a receber com vencimento neste mês ainda pendentes
+      prisma.contaReceber.aggregate({
+        where: {
+          status: { not: 'Pago' },
+          dataVencimento: {
+            gte: inicioMes,
+            lte: fimMes,
+          }
+        },
+        _sum: { valor: true },
+        _count: true,
+      }),
     ])
 
     return {
@@ -92,13 +96,16 @@ export async function getContas() {
         vencimento: c.dataVencimento.toISOString(),
         status: c.status || 'Pendente',
         observacoes: c.observacoes || '',
-      }))
+      })),
+      totalReceberMes: Number(receberMes._sum.valor || 0),
+      qtdReceberMes: receberMes._count,
     }
   } catch (error) {
     console.error('Erro ao buscar contas:', error)
-    return { receber: [], pagar: [] }
+    return { receber: [], pagar: [], totalReceberMes: 0, qtdReceberMes: 0 }
   }
 }
+
 
 export async function createConta(data: {
   tipo: 'receber' | 'pagar'

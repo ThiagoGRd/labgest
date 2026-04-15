@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import { gerarCobrancaAutomatica } from './financeiro'
 import {
   getWorkflowForServico,
   getNextEtapa,
@@ -300,6 +301,11 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
         checklistEstetico: {},
       }
     })
+
+    // Se finalizou, gera cobrança automaticamente
+    if (novoStatus === 'Finalizado') {
+      await gerarCobrancaAutomatica(ordemId).catch(() => {})
+    }
 
     console.log('[avancarEtapa] Sucesso!')
     revalidatePath('/ordens')

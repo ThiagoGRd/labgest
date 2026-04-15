@@ -4,6 +4,7 @@ import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { abaterEstoquePorServico } from './estoque'
+import { gerarCobrancaAutomatica } from './financeiro'
 export { enviarParaProva } from './ciclos'
 
 export async function getProducao() {
@@ -69,9 +70,13 @@ export async function moverOrdem(id: number, novaEtapa: string) {
       select: { servicoId: true }
     })
 
-    // Se finalizou, abate estoque
+    // Se finalizou, abate estoque e gera cobrança automaticamente
     if (novaEtapa === 'Finalizado' && ordem.servicoId) {
       await abaterEstoquePorServico(ordem.servicoId)
+    }
+    if (novaEtapa === 'Finalizado') {
+      // Gera conta a receber (ignora erro se já existir)
+      await gerarCobrancaAutomatica(id).catch(() => {})
     }
 
     revalidatePath('/producao')
