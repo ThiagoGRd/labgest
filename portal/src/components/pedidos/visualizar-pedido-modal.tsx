@@ -107,6 +107,10 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
     setChecklist(prev => ({ ...prev, [key]: checked }))
   }
 
+  // Extrair Ficha Clínica
+  const chk: any = pedido.checklistEstetico || {}
+  const hasFichaClinica = Object.values(chk).some(val => val === true || (typeof val === 'string' && val.trim() !== ''))
+
   const handleAprovarProva = async () => {
     setLoading(true)
     try {
@@ -232,6 +236,56 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
               )}
             </div>
           </div>
+
+          {/* Ficha Clínica do Portal */}
+          {hasFichaClinica && (
+            <div>
+              <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                <Activity className="h-3 w-3" />
+                Quadro Clínico Solicitado
+              </h4>
+              <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-xl space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Dados Clínicos Enviados</span>
+                    <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                      {chk.dvo && <li><CheckCircle2 className="inline h-3 w-3 text-blue-500 mr-1" /> D.V.O.</li>}
+                      {chk.registroMordida && <li><CheckCircle2 className="inline h-3 w-3 text-blue-500 mr-1" /> Registro de Mordida</li>}
+                      {chk.linhaMedia && <li><CheckCircle2 className="inline h-3 w-3 text-blue-500 mr-1" /> Linha Média</li>}
+                      {chk.oclusao && <li><CheckCircle2 className="inline h-3 w-3 text-blue-500 mr-1" /> Oclusão</li>}
+                      {chk.corredorBucal && <li><CheckCircle2 className="inline h-3 w-3 text-blue-500 mr-1" /> Corredor Bucal</li>}
+                      {!chk.dvo && !chk.registroMordida && !chk.linhaMedia && !chk.oclusao && !chk.corredorBucal && (
+                        <li className="text-slate-400 italic">Nenhum dado assinalado</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Solicitação Específica</span>
+                    <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                      {chk.moldeiraIndividual && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Moldeira Individual</li>}
+                      {chk.planoCera && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Plano de Cera</li>}
+                      {chk.montagemDente && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Montagem de Dente</li>}
+                      {chk.barraProtocolo && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Barra de Protocolo</li>}
+                      {chk.acrilizacao && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Acrilização</li>}
+                      {chk.conserto && <li><CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1" /> Conserto</li>}
+                      {!chk.moldeiraIndividual && !chk.planoCera && !chk.montagemDente && !chk.barraProtocolo && !chk.acrilizacao && !chk.conserto && (
+                        <li className="text-slate-400 italic">Nenhuma solicitação assinalada</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+                {chk.corGengiva && (
+                  <div className="pt-2 border-t border-blue-100 dark:border-blue-900/30">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Escala de Gengiva</span>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Palette className="h-4 w-4 text-pink-500" />
+                      {chk.corGengiva}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Observações */}
           {pedido.observacoes && (
