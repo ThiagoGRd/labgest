@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { enviarParaProva } from '@/actions/ciclos'
 import { getOrdemById } from '@/actions/ordens'
+import { normalizarEtapa } from '@/lib/workflow-config'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
@@ -26,16 +27,18 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 
-// Etapas de produção
+// Etapas de produção — IDs canônicos (mesmos gravados no banco)
 const etapas = [
-  { id: 'Recebimento', nome: 'Recebimento', cor: '#6366f1' },
-  { id: 'Planejamento', nome: 'Planejamento/CAD', cor: '#8b5cf6' },
-  { id: 'Impressão', nome: 'Impressão/Fresagem', cor: '#a855f7' },
-  { id: 'EmProva', nome: 'Em Prova (Clínica)', cor: '#f59e0b' },
-  { id: 'Acabamento', nome: 'Acabamento', cor: '#d946ef' },
-  { id: 'Conferência', nome: 'Conferência Final', cor: '#ec4899' },
-  { id: 'Finalizado', nome: 'Pronto p/ Entrega', cor: '#22c55e' },
+  { id: 'recebimento', nome: 'Recebimento',           cor: '#6366f1' },
+  { id: 'modelagem',   nome: 'Modelagem/Planejamento', cor: '#8b5cf6' },
+  { id: 'confeccao',   nome: 'Confecção/Impressão',    cor: '#a855f7' },
+  { id: 'em_prova',    nome: 'Em Prova (Clínica)',      cor: '#f59e0b' },
+  { id: 'ajuste',      nome: 'Ajustes',                 cor: '#f97316' },
+  { id: 'acabamento',  nome: 'Acabamento/Polimento',    cor: '#d946ef' },
+  { id: 'conferencia', nome: 'Conferência Final',       cor: '#ec4899' },
+  { id: 'pronto',      nome: 'Pronto p/ Entrega',       cor: '#22c55e' },
 ]
+
 
 interface Ordem {
   id: number
@@ -258,11 +261,12 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     })
 
     ordensFiltradas.forEach(o => {
-      // Ordens em prova vão para coluna EmProva
-      let etapaKey = etapas.find(e => e.nome === o.etapa || e.id === o.etapa)?.id || 'Recebimento'
-      if (o.cicloStatus === 'em_prova') etapaKey = 'EmProva'
-      if (!agrupado[etapaKey]) agrupado[etapaKey] = []
-      agrupado[etapaKey].push(o)
+      // Usa normalizarEtapa para converter dados legados para o ID canônico
+      let etapaKey = normalizarEtapa(o.etapa || 'recebimento')
+      // Ordens com ciclo em_prova sempre vão para coluna em_prova
+      if (o.cicloStatus === 'em_prova') etapaKey = 'em_prova'
+      if (!agrupado[etapaKey]) agrupado['recebimento'].push(o) // fallback para recebimento
+      else agrupado[etapaKey].push(o)
     })
 
     setOrdensPorEtapa(agrupado)
@@ -282,8 +286,8 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     e.preventDefault()
     if (!draggedItem || draggedItem.fromEtapa === toEtapa) return
 
-    // Se arrastar para EmProva → aciona enviarParaProva se tiver ciclo
-    if (toEtapa === 'EmProva' && draggedItem.ordem.cicloAtivoId) {
+    // Se arrastar para em_prova → aciona enviarParaProva se tiver ciclo
+    if (toEtapa === 'em_prova' && draggedItem.ordem.cicloAtivoId) {
       await handleEnviarProva(draggedItem.ordem)
       setDraggedItem(null)
       return
@@ -312,12 +316,12 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const handleEnviarProva = async (ordem: Ordem) => {
     if (!ordem.cicloAtivoId) return
     await enviarParaProva(ordem.cicloAtivoId)
-    // Move visualmente para EmProva
+    // Move visualmente para em_prova
     setOrdensPorEtapa(prev => {
       const newOrdens = { ...prev }
       const etapaOrigem = Object.keys(newOrdens).find(k => newOrdens[k].some(o => o.id === ordem.id)) || ''
       if (etapaOrigem) newOrdens[etapaOrigem] = newOrdens[etapaOrigem].filter(o => o.id !== ordem.id)
-      newOrdens['EmProva'] = [...(newOrdens['EmProva'] || []), { ...ordem, cicloStatus: 'em_prova' }]
+      newOrdens['em_prova'] = [...(newOrdens['em_prova'] || []), { ...ordem, cicloStatus: 'em_prova' }]
       return newOrdens
     })
   }

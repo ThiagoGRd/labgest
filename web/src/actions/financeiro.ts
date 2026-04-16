@@ -4,6 +4,63 @@ import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 
+/**
+ * Cria ContasReceber para TODAS as ordens com status 'Finalizado'
+ * que ainda não têm cobrança associada.
+ * Deve ser chamada ONE-TIME via trigger ou admin panel.
+ */
+export async function sincronizarFinanceiroRetroativo() {
+  await requireUser()
+  try {
+    // Busca ordens finalizadas sem ContaReceber
+    const ordensSemCobranca = await prisma.ordem.findMany({
+      where: {
+        status: { in: ['Finalizado', 'Entregue'] },
+        contasReceber: { none: {} },
+        valorFinal: { gt: 0 },
+      },
+      select: {
+        id: true,
+        servicoNome: true,
+        nomePaciente: true,
+        clienteId: true,
+        clienteNome: true,
+        valorFinal: true,
+        dataFinalizacao: true,
+        updatedAt: true,
+      }
+    } as any)
+
+    let criadas = 0
+    for (const ordem of (ordensSemCobranca as any[])) {
+      // Vencimento: dia 10 do mês seguinte à finalização (ou hoje se não tiver data)
+      const base = ordem.dataFinalizacao ? new Date(ordem.dataFinalizacao) : new Date(ordem.updatedAt || Date.now())
+      const vencimento = new Date(base.getFullYear(), base.getMonth() + 1, 10)
+
+      await prisma.contaReceber.create({
+        data: {
+          ordemId: ordem.id,
+          descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
+          clienteId: ordem.clienteId,
+          clienteNome: ordem.clienteNome,
+          valor: ordem.valorFinal,
+          dataVencimento: vencimento,
+          status: 'Pendente',
+          observacoes: `Gerado retroativamente — Ordem #${ordem.id}`,
+        }
+      })
+      criadas++
+    }
+
+    revalidatePath('/financeiro')
+    return { success: true, criadas }
+  } catch (error) {
+    console.error('Erro na sincronização retroativa:', error)
+    return { success: false, error: 'Erro ao sincronizar financeiro' }
+  }
+}
+
+
 export async function gerarCobrancaAutomatica(ordemId: number) {
   try {
     const ordem = await prisma.ordem.findUnique({

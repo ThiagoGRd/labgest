@@ -1,68 +1,82 @@
 // ============================================================
-// workflow-config.ts — Configuração do Workflow de Etapas
-// Controla o fluxo de ida e volta para Protocolo, Prótese Total
-// e Parcial Removível.
+// workflow-config.ts — Fonte ÚNICA de Verdade para Etapas
+// IDs canônicos curtos são gravados no banco.
+// Labels são por contexto (lab vs portal).
 // ============================================================
 
 export type TipoWorkflow = 'protocolo' | 'protese_total' | 'parcial_removivel' | null
 
-export interface EtapaConfig {
-  nome: string
-  /** Essa etapa é uma "prova" que exige checklist estético? */
-  isProva: boolean
-  /** Se reprovada, volta para qual índice? (null = etapa anterior) */
-  retornoIndex?: number
+// ---- IDs Canônicos (o que vai no banco) ----
+export const ETAPA_IDS = [
+  'recebimento',
+  'modelagem',
+  'confeccao',
+  'em_prova',
+  'ajuste',
+  'acabamento',
+  'conferencia',
+  'pronto',
+  'entregue',
+] as const
+
+export type EtapaId = typeof ETAPA_IDS[number]
+
+// ---- Mapeamento ID → Labels por contexto ----
+export const ETAPA_LABELS: Record<EtapaId, { lab: string; portal: string }> = {
+  recebimento: { lab: 'Recebimento',           portal: 'Recebido pelo laboratório' },
+  modelagem:   { lab: 'Modelagem/Planejamento', portal: 'Em Planejamento' },
+  confeccao:   { lab: 'Confecção/Impressão',    portal: 'Em Produção' },
+  em_prova:    { lab: 'Em Prova (Clínica)',      portal: 'Aguardando sua avaliação 🧪' },
+  ajuste:      { lab: 'Ajustes',                 portal: 'Em Ajuste' },
+  acabamento:  { lab: 'Acabamento/Polimento',    portal: 'Finalizando' },
+  conferencia: { lab: 'Conferência Final',       portal: 'Controle de Qualidade' },
+  pronto:      { lab: 'Pronto p/ Entrega',       portal: 'Pronto! Aguardando retirada ✅' },
+  entregue:    { lab: 'Entregue',                portal: 'Entregue ✓' },
 }
 
-// ---- Etapas por tipo de workflow ----
-
-export const WORKFLOW_ETAPAS: Record<string, EtapaConfig[]> = {
-  protocolo: [
-    { nome: 'Recebimento (Scanner + Fotos)', isProva: false },
-    { nome: 'Planejamento Digital', isProva: false },
-    { nome: 'Confecção da Estrutura/Barra', isProva: false },
-    { nome: 'Prova da Estrutura', isProva: true, retornoIndex: 2 },
-    { nome: 'Montagem dos Dentes', isProva: false },
-    { nome: 'Prova Estética', isProva: true, retornoIndex: 4 },
-    { nome: 'Acrilização / Fresagem Final', isProva: false },
-    { nome: 'Acabamento / Polimento', isProva: false },
-    { nome: 'Conferência Final', isProva: false },
-    { nome: 'Pronto para Entrega', isProva: false },
-  ],
-  protese_total: [
-    { nome: 'Recebimento (Moldagem/Scanner + Fotos)', isProva: false },
-    { nome: 'Confecção de Rodete / Base de Prova', isProva: false },
-    { nome: 'Registro de Oclusão (DVO + Linha Média)', isProva: true },
-    { nome: 'Montagem dos Dentes', isProva: false },
-    { nome: 'Prova em Cera', isProva: true, retornoIndex: 3 },
-    { nome: 'Acrilização', isProva: false },
-    { nome: 'Acabamento / Remontagem', isProva: false },
-    { nome: 'Conferência Final', isProva: false },
-    { nome: 'Pronto para Entrega', isProva: false },
-  ],
-  parcial_removivel: [
-    { nome: 'Recebimento (Modelo/Scanner)', isProva: false },
-    { nome: 'Delineamento', isProva: false },
-    { nome: 'Confecção da Estrutura Metálica', isProva: false },
-    { nome: 'Prova da Estrutura', isProva: true, retornoIndex: 2 },
-    { nome: 'Montagem dos Dentes', isProva: false },
-    { nome: 'Prova Estética', isProva: true, retornoIndex: 4 },
-    { nome: 'Acrilização', isProva: false },
-    { nome: 'Acabamento / Polimento', isProva: false },
-    { nome: 'Conferência Final', isProva: false },
-    { nome: 'Pronto para Entrega', isProva: false },
-  ],
+/**
+ * Retorna o label da etapa de acordo com o contexto.
+ * Se o ID não for canônico (dados legados), retorna o valor original.
+ */
+export function etapaLabel(id: string, contexto: 'lab' | 'portal' = 'lab'): string {
+  const entry = ETAPA_LABELS[id as EtapaId]
+  if (entry) return entry[contexto]
+  // Legado: retorna o valor bruto que veio do banco
+  return id
 }
 
-/** Etapas do fluxo simples (outros serviços) */
-export const ETAPAS_SIMPLES = [
-  'Recebimento',
-  'Modelagem',
-  'Impressão',
-  'Acabamento',
-  'Conferência',
-  'Pronto para Entrega',
+/**
+ * Normaliza um valor antigo do banco (string longa, ID do kanban antigo, etc.)
+ * para o ID canônico equivalente. Usado na migração e no fallback de leitura.
+ */
+export function normalizarEtapa(valor: string): EtapaId {
+  const v = valor.toLowerCase().trim()
+  if (v === 'recebimento' || v.startsWith('recebimento')) return 'recebimento'
+  if (v === 'modelagem' || v.includes('planejamento') || v.includes('delineamento')) return 'modelagem'
+  if (v === 'impressão' || v === 'impressao' || v.includes('impressão') || v.includes('confecção') || v.includes('confeccao') || v.includes('fresagem') || v.includes('acriliza') || v.includes('estrutura metálica') || v.includes('estrutura/barra') || v.includes('rodete')) return 'confeccao'
+  if (v === 'emprova' || v === 'em_prova' || v.includes('prova') ) return 'em_prova'
+  if (v === 'ajuste' || v.includes('ajuste') || v.includes('remontagem')) return 'ajuste'
+  if (v === 'acabamento' || v.includes('acabamento') || v.includes('polimento') || v.includes('montagem')) return 'acabamento'
+  if (v === 'conferência' || v === 'conferencia' || v.includes('conferência') || v.includes('controle')) return 'conferencia'
+  if (v === 'pronto' || v.includes('pronto para entrega') || v === 'finalizado') return 'pronto'
+  if (v === 'entregue') return 'entregue'
+  return 'recebimento' // fallback seguro
+}
+
+// ---- Sequência canônica de etapas no lab ----
+export const SEQUENCIA_ETAPAS: EtapaId[] = [
+  'recebimento',
+  'modelagem',
+  'confeccao',
+  'em_prova',
+  'ajuste',
+  'acabamento',
+  'conferencia',
+  'pronto',
 ]
+
+// Etapa final que aciona faturamento
+export const ETAPA_FINAL: EtapaId = 'pronto'
 
 // ---- Checklist de Registro Estético (para etapas de prova) ----
 
@@ -105,69 +119,58 @@ export const CHECKLIST_LABELS: Record<keyof ChecklistEstetico, string> = {
 export function getWorkflowForServico(servicoNome: string): TipoWorkflow {
   const nome = servicoNome.toLowerCase()
   if (nome.includes('protocolo')) return 'protocolo'
-  if (nome.includes('total')) return 'protese_total'
+  if (nome.includes('total') && (nome.includes('prótese') || nome.includes('protese'))) return 'protese_total'
   if (nome.includes('parcial') || nome.includes('removível') || nome.includes('removivel') || nome.includes('ppr'))
     return 'parcial_removivel'
   return null
 }
 
-export function getEtapas(tipoWorkflow: TipoWorkflow): EtapaConfig[] | string[] {
-  if (!tipoWorkflow) return ETAPAS_SIMPLES
-  return WORKFLOW_ETAPAS[tipoWorkflow] || ETAPAS_SIMPLES
+/** Etapas de prova por tipo de workflow (usadas para identificar se precisa de ciclo) */
+export const ETAPAS_PROVA_DO_WORKFLOW: Record<string, EtapaId[]> = {
+  protocolo:          ['em_prova'],
+  protese_total:      ['em_prova'],
+  parcial_removivel:  ['em_prova'],
 }
 
-export function getEtapaNome(etapa: EtapaConfig | string): string {
-  return typeof etapa === 'string' ? etapa : etapa.nome
-}
-
-export function getEtapaIndex(tipoWorkflow: TipoWorkflow, etapaNome: string): number {
-  const etapas = getEtapas(tipoWorkflow)
-  // Tenta match exato primeiro
-  let idx = etapas.findIndex(e => getEtapaNome(e) === etapaNome)
-  if (idx >= 0) return idx
-  
-  // Fallback: match parcial (para compatibilidade com nomes antigos do banco)
-  idx = etapas.findIndex(e => getEtapaNome(e).toLowerCase().includes(etapaNome.toLowerCase()) || etapaNome.toLowerCase().includes(getEtapaNome(e).toLowerCase()))
-  return idx
+export function isEtapaProva(tipoWorkflow: TipoWorkflow, etapaId: string): boolean {
+  if (!tipoWorkflow) return false
+  return (ETAPAS_PROVA_DO_WORKFLOW[tipoWorkflow] || []).includes(etapaId as EtapaId)
 }
 
 export function getNextEtapa(tipoWorkflow: TipoWorkflow, etapaAtual: string): string | null {
-  const etapas = getEtapas(tipoWorkflow)
-  const idx = etapas.findIndex(e => getEtapaNome(e) === etapaAtual)
-  if (idx < 0 || idx >= etapas.length - 1) return null
-  return getEtapaNome(etapas[idx + 1])
+  // Para todos os workflows, usa a sequência canônica
+  const etapaId = normalizarEtapa(etapaAtual)
+  const idx = SEQUENCIA_ETAPAS.indexOf(etapaId)
+  if (idx < 0 || idx >= SEQUENCIA_ETAPAS.length - 1) return null
+  return SEQUENCIA_ETAPAS[idx + 1]
 }
 
 export function getRetornoEtapa(tipoWorkflow: TipoWorkflow, etapaAtual: string): string | null {
-  if (!tipoWorkflow) return null
-  const etapas = WORKFLOW_ETAPAS[tipoWorkflow]
-  if (!etapas) return null
-  const idx = etapas.findIndex(e => e.nome === etapaAtual)
-  if (idx < 0) return null
-  const config = etapas[idx]
-  if (config.retornoIndex !== undefined) {
-    return etapas[config.retornoIndex].nome
-  }
-  // Se não tem retornoIndex definido mas é uma prova, volta uma etapa
-  if (config.isProva && idx > 0) {
-    return etapas[idx - 1].nome
-  }
-  return idx > 0 ? etapas[idx - 1].nome : null
+  const etapaId = normalizarEtapa(etapaAtual)
+  const idx = SEQUENCIA_ETAPAS.indexOf(etapaId)
+  if (idx <= 0) return null
+  // Volta da prova para confeccao
+  if (etapaId === 'em_prova') return 'confeccao'
+  // Volta para etapa anterior
+  return SEQUENCIA_ETAPAS[idx - 1]
 }
 
-export function isEtapaProva(tipoWorkflow: TipoWorkflow, etapaNome: string): boolean {
-  if (!tipoWorkflow) return false
-  const etapas = WORKFLOW_ETAPAS[tipoWorkflow]
-  if (!etapas) return false
-  const etapa = etapas.find(e => e.nome === etapaNome)
-  return etapa?.isProva ?? false
+export function getEtapas(tipoWorkflow: TipoWorkflow): string[] {
+  // Todos os workflows usam a mesma sequência canônica
+  return [...SEQUENCIA_ETAPAS]
+}
+
+export function getEtapaNome(etapa: string): string {
+  return etapa
+}
+
+export function getEtapaIndex(tipoWorkflow: TipoWorkflow, etapa: string): number {
+  const id = normalizarEtapa(etapa)
+  return SEQUENCIA_ETAPAS.indexOf(id)
 }
 
 export function isChecklistCompleto(checklist: Partial<ChecklistEstetico>): boolean {
-  return Object.values(CHECKLIST_LABELS).every((_, i) => {
-    const key = Object.keys(CHECKLIST_LABELS)[i] as keyof ChecklistEstetico
-    return checklist[key] === true
-  })
+  return Object.keys(CHECKLIST_LABELS).every(key => checklist[key as keyof ChecklistEstetico] === true)
 }
 
 export function canAdvance(
@@ -175,7 +178,6 @@ export function canAdvance(
   etapaAtual: string,
   checklistEstetico?: Partial<ChecklistEstetico>
 ): boolean {
-  // Se é etapa de prova, exige checklist completo
   if (isEtapaProva(tipoWorkflow, etapaAtual)) {
     if (!checklistEstetico) return false
     return isChecklistCompleto(checklistEstetico)
@@ -184,7 +186,6 @@ export function canAdvance(
 }
 
 export function canReturn(tipoWorkflow: TipoWorkflow, etapaAtual: string): boolean {
-  if (!tipoWorkflow) return false
   return getRetornoEtapa(tipoWorkflow, etapaAtual) !== null
 }
 
@@ -198,8 +199,15 @@ export function getWorkflowLabel(tipoWorkflow: TipoWorkflow): string {
 }
 
 export function getProgresso(tipoWorkflow: TipoWorkflow, etapaAtual: string): number {
-  const etapas = getEtapas(tipoWorkflow)
-  const idx = etapas.findIndex(e => getEtapaNome(e) === etapaAtual)
+  const id = normalizarEtapa(etapaAtual)
+  const idx = SEQUENCIA_ETAPAS.indexOf(id)
   if (idx < 0) return 0
-  return Math.round((idx / (etapas.length - 1)) * 100)
+  return Math.round((idx / (SEQUENCIA_ETAPAS.length - 1)) * 100)
+}
+
+// Compat: mantém EtapaConfig para código legado
+export interface EtapaConfig {
+  nome: string
+  isProva: boolean
+  retornoIndex?: number
 }

@@ -13,6 +13,8 @@ import {
   getProgresso,
   isEtapaProva,
   canAdvance,
+  normalizarEtapa,
+  ETAPA_FINAL,
   type ChecklistEstetico,
   type TipoWorkflow,
 } from '@/lib/workflow-config'
@@ -82,8 +84,7 @@ export async function createBatchOrdens(data: {
 
       const valor = Number(servico.preco)
       const tipoWorkflow = getWorkflowForServico(servico.nome)
-      const etapas = getEtapas(tipoWorkflow)
-      const primeiraEtapa = getEtapaNome(etapas[0])
+      const primeiraEtapa = 'recebimento'
 
       return prisma.ordem.create({
         data: {
@@ -133,25 +134,33 @@ export async function updateOrdem(id: number, data: {
 }) {
   await requireUser()
   try {
-    console.log('[updateOrdem] Atualizando ordem ID:', id, 'dados:', data)
+    // Normaliza etapaAtual para ID canônico antes de salvar
+    const etapaCanonica = normalizarEtapa(data.etapaAtual)
+    const novoStatus = etapaCanonica === ETAPA_FINAL ? 'Finalizado' : data.status
+
     await prisma.ordem.update({
       where: { id },
       data: {
         nomePaciente: data.paciente,
         dataEntrega: new Date(data.dataEntrega),
         prioridade: data.prioridade,
-        status: data.status,
-        etapaAtual: data.etapaAtual,
+        status: novoStatus,
+        etapaAtual: etapaCanonica,
         corDentes: data.corDentes,
         material: data.material,
         observacoes: data.observacoes,
       }
     })
-    console.log('[updateOrdem] Sucesso!')
+
+    // Se entrou em status Finalizado via edição, gera cobrança
+    if (novoStatus === 'Finalizado') {
+      await gerarCobrancaAutomatica(id).catch(() => {})
+    }
+
     revalidatePath('/ordens')
+    revalidatePath('/producao')
     return { success: true }
   } catch (error) {
-    console.error('[updateOrdem] Erro detalhado:', error)
     const errorMsg = error instanceof Error ? error.message : String(error)
     return { success: false, error: `Erro ao atualizar ordem: ${errorMsg}` }
   }
@@ -254,42 +263,33 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
     }
 
     const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
-    const etapaAtual = ordem.etapaAtual || 'Recebimento'
-    console.log('[avancarEtapa] Workflow:', tipoWorkflow, 'Etapa atual:', etapaAtual)
-    
-    const proxima = getNextEtapa(tipoWorkflow, etapaAtual)
-    console.log('[avancarEtapa] Próxima etapa:', proxima)
+    // Normaliza etapa atual para ID canônico (lida com dados legados)
+    const etapaAtualCanonica = normalizarEtapa(ordem.etapaAtual || 'recebimento')
 
+    const proxima = getNextEtapa(tipoWorkflow, etapaAtualCanonica)
     if (!proxima) return { success: false, error: 'Já está na última etapa' }
 
     // Se é etapa de prova, verificar checklist
-    if (isEtapaProva(tipoWorkflow, etapaAtual)) {
+    if (isEtapaProva(tipoWorkflow, etapaAtualCanonica)) {
       const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
-      console.log('[avancarEtapa] Checklist:', checklist)
-      if (!canAdvance(tipoWorkflow, etapaAtual, checklist)) {
+      if (!canAdvance(tipoWorkflow, etapaAtualCanonica, checklist)) {
         return { success: false, error: 'Complete o checklist de registro estético antes de avançar' }
       }
     }
 
     const historico = (ordem.historicoEtapas as any[]) || []
     historico.push({
-      etapa: etapaAtual,
+      etapa: etapaAtualCanonica,
       acao: 'avancou',
       para: proxima,
       data: new Date().toISOString(),
       observacao: observacao || undefined,
-      tentativa: ordem.tentativaAtual || 0,
     })
 
-    // Determinar novo status
-    const etapas = getEtapas(tipoWorkflow)
-    const lastEtapaNome = getEtapaNome(etapas[etapas.length - 1])
-    const novoStatus = proxima === lastEtapaNome ? 'Finalizado' : 'Em Produção'
-
-    // Calcular progresso
+    // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
+    const novoStatus = proxima === ETAPA_FINAL ? 'Finalizado' : 'Em Produção'
     const progresso = getProgresso(tipoWorkflow, proxima)
 
-    console.log('[avancarEtapa] Atualizando banco com etapa:', proxima, 'status:', novoStatus)
     await prisma.ordem.update({
       where: { id: ordemId },
       data: {
@@ -297,7 +297,6 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
         historicoEtapas: historico,
         status: novoStatus,
         progresso: progresso,
-        // Limpar checklist ao avançar (próxima prova precisa preencher de novo)
         checklistEstetico: {},
       }
     })

@@ -6,6 +6,38 @@ import { revalidatePath } from 'next/cache'
 
 const prisma = new PrismaClient()
 
+// Mapeamento de IDs canônicos para labels amigáveis no portal
+const ETAPA_LABELS_PORTAL: Record<string, string> = {
+  recebimento:  'Recebido pelo laboratório',
+  modelagem:    'Em Planejamento',
+  confeccao:    'Em Produção',
+  em_prova:     'Aguardando sua avaliação 🧪',
+  ajuste:       'Em Ajuste',
+  acabamento:   'Finalizando',
+  conferencia:  'Controle de Qualidade',
+  pronto:       'Pronto! Aguardando retirada ✅',
+  entregue:     'Entregue ✓',
+}
+
+function etapaLabel(id: string): string {
+  return ETAPA_LABELS_PORTAL[id] || id
+}
+
+// Normaliza valor legado do banco para ID canônico
+function normalizarEtapa(valor: string): string {
+  const v = valor.toLowerCase().trim()
+  if (v.startsWith('recebimento')) return 'recebimento'
+  if (v.includes('planejamento') || v === 'modelagem' || v.includes('delineamento')) return 'modelagem'
+  if (v === 'impressão' || v === 'impressao' || v.includes('confecção') || v.includes('confeccao') || v.includes('fresagem') || v.includes('acriliza') || v.includes('rodete')) return 'confeccao'
+  if (v.includes('prova')) return 'em_prova'
+  if (v.includes('ajuste') || v.includes('remontagem')) return 'ajuste'
+  if (v.includes('acabamento') || v.includes('polimento') || v.includes('montagem')) return 'acabamento'
+  if (v.includes('conferência') || v.includes('conferencia')) return 'conferencia'
+  if (v.includes('pronto') || v === 'finalizado') return 'pronto'
+  if (v === 'entregue') return 'entregue'
+  return v
+}
+
 // Utilitário para pegar o cliente logado
 async function getClienteLogado() {
   const supabase = await createClient()
@@ -53,17 +85,11 @@ export async function criarPedidoBatch(data: {
       let tipoWorkflow = null
       const nomeLower = servico.nome.toLowerCase()
       if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
-      else if (nomeLower.includes('total')) tipoWorkflow = 'protese_total'
+      else if (nomeLower.includes('total') && nomeLower.includes('prótese')) tipoWorkflow = 'protese_total'
       else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
 
-      // Etapas básicas
-      const etapasMap: Record<string, string[]> = {
-        protocolo: ['Recebimento (Scanner + Fotos)', 'Planejamento Digital'],
-        protese_total: ['Recebimento (Moldagem/Scanner + Fotos)', 'Confecção de Rodete / Base de Prova'],
-        parcial_removivel: ['Recebimento (Modelo/Scanner)', 'Delineamento']
-      }
-      
-      const primeiraEtapa = tipoWorkflow && etapasMap[tipoWorkflow] ? etapasMap[tipoWorkflow][0] : 'Recebimento'
+      // SEMPRE inicia em 'recebimento' (ID canônico)
+      const primeiraEtapa = 'recebimento'
 
       return prisma.ordem.create({
         data: {
@@ -128,24 +154,14 @@ export async function criarPedido(data: {
     if (!servico) return { success: false, error: 'Serviço inválido' }
 
     // Detectar workflow
-    // Importação dinâmica ou duplicada pois workflow-config está no web
-    // Por enquanto vamos usar defaults simples se não conseguirmos importar
-    
-    // Tentar mapear workflow básico pelo nome (lógica simplificada do workflow-config)
     let tipoWorkflow = null
     const nomeLower = servico.nome.toLowerCase()
     if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
-    else if (nomeLower.includes('total')) tipoWorkflow = 'protese_total'
+    else if (nomeLower.includes('total') && nomeLower.includes('prótese')) tipoWorkflow = 'protese_total'
     else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
 
-    // Etapas básicas por tipo
-    const etapasMap: Record<string, string[]> = {
-      protocolo: ['Recebimento (Scanner + Fotos)', 'Planejamento Digital'],
-      protese_total: ['Recebimento (Moldagem/Scanner + Fotos)', 'Confecção de Rodete / Base de Prova'],
-      parcial_removivel: ['Recebimento (Modelo/Scanner)', 'Delineamento']
-    }
-    
-    const primeiraEtapa = tipoWorkflow && etapasMap[tipoWorkflow] ? etapasMap[tipoWorkflow][0] : 'Recebimento'
+    // SEMPRE inicia em 'recebimento' (ID canônico)
+    const primeiraEtapa = 'recebimento'
 
     await prisma.ordem.create({
       data: {
@@ -262,7 +278,9 @@ export async function getPedidoById(id: number) {
       status: pedido.status || 'Aguardando',
       dataEntrega: pedido.dataEntrega.toISOString(),
       valor: Number(pedido.valorFinal),
-      etapa: pedido.etapaAtual || 'Recebimento',
+      // Normaliza legado e exibe label amigável
+      etapaId: normalizarEtapa(pedido.etapaAtual || 'recebimento'),
+      etapa: etapaLabel(normalizarEtapa(pedido.etapaAtual || 'recebimento')),
       corDentes: pedido.corDentes || '',
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
@@ -295,7 +313,8 @@ export async function getMeusPedidos() {
       status: p.status || 'Aguardando',
       dataEntrega: p.dataEntrega.toISOString(),
       valor: Number(p.valorFinal),
-      etapa: p.etapaAtual || 'Recebimento'
+      etapaId: normalizarEtapa(p.etapaAtual || 'recebimento'),
+      etapa: etapaLabel(normalizarEtapa(p.etapaAtual || 'recebimento')),
     }))
   } catch (error) {
     console.error('Erro ao buscar pedidos:', error)

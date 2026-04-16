@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { baixarConta } from '@/actions/financeiro'
+import { baixarConta, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
+import { RefreshCw } from 'lucide-react'
 import {
   TrendingUp,
   TrendingDown,
@@ -55,6 +56,20 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
   const [modalType, setModalType] = useState<'receber' | 'pagar'>('receber')
 
   const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const [sincronizando, setSincronizando] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  const handleSincronizar = async () => {
+    setSincronizando(true)
+    setSyncMsg(null)
+    const res = await sincronizarFinanceiroRetroativo()
+    if (res.success) {
+      setSyncMsg(res.criadas === 0 ? 'Tudo sincronizado! Nenhuma cobrança pendente encontrada.' : `${res.criadas} cobranças criadas com sucesso!`)
+    } else {
+      setSyncMsg('Erro ao sincronizar. Tente novamente.')
+    }
+    setSincronizando(false)
+  }
 
   const totalReceber = receber.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
   const totalPagar = pagar.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
@@ -89,6 +104,26 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
       />
 
       <div className="p-6 space-y-6">
+        {/* Banner de sincronização retroativa */}
+        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-5 py-3">
+          <div>
+            <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">Sincronizar ordens finalizadas</p>
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
+              {syncMsg || 'Gera cobranças retroativas para ordens já finalizadas sem registro financeiro.'}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSincronizar}
+            disabled={sincronizando}
+            className="border-indigo-300 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-500/20 shrink-0 ml-4"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${sincronizando ? 'animate-spin' : ''}`} />
+            {sincronizando ? 'Sincronizando...' : 'Sincronizar Agora'}
+          </Button>
+        </div>
+
         {/* Cards Resumo */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1: A Receber Total */}

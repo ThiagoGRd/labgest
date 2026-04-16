@@ -208,3 +208,6 @@
 [1]  GET /login 200 in 282ms (compile: 1497µs, proxy.ts: 250ms, render: 31ms)
 [1]  GET /login 200 in 9ms (compile: 1080µs, proxy.ts: 1540µs, render: 7ms)
 [1]  GET /login 200 in 141ms (compile: 1401µs, proxy.ts: 1693µs, render: 138ms)
+[1]  GET /login 200 in 122ms (compile: 9ms, proxy.ts: 62ms, render: 51ms)
+[1]  GET /login 200 in 14ms (compile: 1095µs, proxy.ts: 4ms, render: 9ms)
+[1] ✓ Compiled in 287ms
