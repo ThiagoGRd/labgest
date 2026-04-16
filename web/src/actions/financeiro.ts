@@ -124,7 +124,7 @@ export async function getContas() {
       // Contas a receber com vencimento neste mês ainda pendentes
       prisma.contaReceber.aggregate({
         where: {
-          status: { not: 'Pago' },
+          status: { not: 'Recebido' },
           dataVencimento: {
             gte: inicioMes,
             lte: fimMes,
@@ -264,7 +264,7 @@ export async function baixarConta(id: number, tipo: 'receber' | 'pagar') {
       await prisma.contaReceber.update({
         where: { id },
         data: { 
-          status: 'Pago',
+          status: 'Recebido',
           dataRecebimento: new Date()
         }
       })

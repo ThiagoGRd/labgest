@@ -104,7 +104,7 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
     setSincronizando(false)
   }
 
-  const totalReceber = receber.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
+  const totalReceber = receber.reduce((acc, curr) => curr.status !== 'Recebido' ? acc + curr.valor : acc, 0)
   const totalPagar = pagar.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
   const saldoPrevisto = totalReceber - totalPagar
 
@@ -360,8 +360,8 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
                               </div>
                             </td>
                             <td className="p-4">
-                              <Badge variant={conta.status === 'Pago' ? 'success' : 'warning'}>
-                                {conta.status === 'Pago' ? 'Recebido' : 'Pendente'}
+                              <Badge variant={conta.status === 'Recebido' ? 'success' : 'warning'}>
+                                {conta.status === 'Recebido' ? 'Recebido' : 'Pendente'}
                               </Badge>
                             </td>
                             <td className="p-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
@@ -378,7 +378,7 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                {conta.status !== 'Pago' && (
+                                {conta.status !== 'Recebido' && (
                                   <Button 
                                     size="sm" 
                                     variant="ghost" 
