@@ -123,6 +123,8 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null)
   const [printOrdem, setPrintOrdem] = useState<any>(null)
   const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
@@ -179,6 +181,16 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     const matchStatus = statusFilter === 'todos' || ordem.status === statusFilter
     return matchSearch && matchStatus
   })
+
+  const totalPages = Math.ceil(filteredOrdens.length / ITEMS_PER_PAGE)
+  const paginatedOrdens = filteredOrdens.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  )
+
+  // Reseta para página 1 ao mudar filtros
+  const handleSearchChange = (value: string) => { setSearch(value); setCurrentPage(1) }
+  const handleStatusChange = (value: string) => { setStatusFilter(value); setCurrentPage(1) }
 
   const handleView = (ordem: Ordem) => {
     setSelectedOrdem(ordem)
@@ -282,7 +294,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                 <Input
                   placeholder="Buscar por paciente, dentista ou serviço..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9"
                 />
               </div>
@@ -292,7 +304,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                 {['todos', 'Aguardando', 'Em Produção', 'Finalizado', 'Pausado'].map((status) => (
                   <button
                     key={status}
-                    onClick={() => setStatusFilter(status)}
+                    onClick={() => handleStatusChange(status)}
                     className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                       statusFilter === status
                         ? 'bg-indigo-600 text-white'
@@ -351,7 +363,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                     </td>
                   </tr>
                 ) : (
-                  filteredOrdens.map((ordem) => {
+                  paginatedOrdens.map((ordem) => {
                     const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
                     return (
                       <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
@@ -492,21 +504,58 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200">
-            <p className="text-sm text-slate-500">
-              Mostrando <span className="font-medium">{filteredOrdens.length}</span> de <span className="font-medium">{ordens.length}</span> ordens
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-white/10">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Mostrando{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredOrdens.length)}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredOrdens.length)}
+              </span>{' '}
+              de <span className="font-semibold text-slate-700 dark:text-slate-200">{filteredOrdens.length}</span> ordens
             </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+                className="h-8 w-8 p-0"
+              >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" className="bg-indigo-600 text-white border-indigo-600">
-                1
-              </Button>
-              <Button variant="outline" size="sm">
-                2
-              </Button>
-              <Button variant="outline" size="sm">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="h-8 w-8 flex items-center justify-center text-slate-400 text-sm">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p as number)}
+                      className={`h-8 w-8 p-0 text-sm font-medium ${
+                        currentPage === p
+                          ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                          : ''
+                      }`}
+                    >
+                      {p}
+                    </Button>
+                  )
+                )
+              }
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === totalPages || totalPages === 0}
+                onClick={() => setCurrentPage(p => p + 1)}
+                className="h-8 w-8 p-0"
+              >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
