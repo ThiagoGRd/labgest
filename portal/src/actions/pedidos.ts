@@ -6,6 +6,12 @@ import { revalidatePath } from 'next/cache'
 
 const prisma = new PrismaClient()
 
+// Importa parseDateLocal para evitar bug de fuso horário
+function parseDateLocal(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day, 12, 0, 0)
+}
+
 // Mapeamento de IDs canônicos para labels amigáveis no portal
 const ETAPA_LABELS_PORTAL: Record<string, string> = {
   recebimento:  'Recebido pelo laboratório',
@@ -98,7 +104,7 @@ export async function criarPedidoBatch(data: {
           servicoId: servico.id,
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
-          dataEntrega: new Date(data.dataEntrega),
+          dataEntrega: parseDateLocal(data.dataEntrega),
           valor: servico.preco,
           valorFinal: servico.preco,
           prioridade: 'Normal',
@@ -170,7 +176,7 @@ export async function criarPedido(data: {
         servicoId: servico.id,
         servicoNome: servico.nome,
         nomePaciente: data.paciente,
-        dataEntrega: new Date(data.dataEntrega),
+        dataEntrega: parseDateLocal(data.dataEntrega),
         valor: servico.preco,
         valorFinal: servico.preco,
         prioridade: 'Normal',

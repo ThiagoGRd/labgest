@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import { parseDateLocal } from '@/lib/date-utils'
 
 /**
  * Cria ContasReceber para TODAS as ordens com status 'Finalizado'
@@ -174,18 +175,20 @@ export async function createConta(data: {
   observacoes?: string
 }) {
   try {
+    // Usa parseDateLocal para evitar bug de fuso horário (UTC vs BRT)
+    const dataVencimento = parseDateLocal(data.vencimento)
+
     if (data.tipo === 'receber') {
       let clienteId = null
       if (data.cliente) {
         const cliente = await prisma.cliente.findFirst({ where: { nome: data.cliente } })
         if (cliente) clienteId = cliente.id
       }
-
       await prisma.contaReceber.create({
         data: {
           descricao: data.descricao,
           valor: data.valor,
-          dataVencimento: new Date(data.vencimento),
+          dataVencimento,
           clienteNome: data.cliente,
           clienteId,
           observacoes: data.observacoes,
@@ -197,19 +200,61 @@ export async function createConta(data: {
         data: {
           descricao: data.descricao,
           valor: data.valor,
-          dataVencimento: new Date(data.vencimento),
+          dataVencimento,
           categoria: data.categoria,
           observacoes: data.observacoes,
           status: 'Pendente',
         }
       })
     }
-    
+
     revalidatePath('/financeiro')
     return { success: true }
   } catch (error) {
     console.error('Erro ao criar conta:', error)
     return { success: false, error: 'Erro ao criar conta' }
+  }
+}
+
+export async function editarConta(id: number, tipo: 'receber' | 'pagar', data: {
+  descricao: string
+  valor: number
+  vencimento: string
+  categoria?: string
+  observacoes?: string
+}) {
+  await requireUser()
+  try {
+    const dataVencimento = parseDateLocal(data.vencimento)
+
+    if (tipo === 'receber') {
+      await prisma.contaReceber.update({
+        where: { id },
+        data: {
+          descricao: data.descricao,
+          valor: data.valor,
+          dataVencimento,
+          observacoes: data.observacoes,
+        }
+      })
+    } else {
+      await prisma.contaPagar.update({
+        where: { id },
+        data: {
+          descricao: data.descricao,
+          valor: data.valor,
+          dataVencimento,
+          categoria: data.categoria,
+          observacoes: data.observacoes,
+        }
+      })
+    }
+
+    revalidatePath('/financeiro')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao editar conta:', error)
+    return { success: false, error: 'Erro ao editar conta' }
   }
 }
 

@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
+import { formatDate, formatCurrency } from '@/lib/date-utils'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
@@ -97,17 +98,6 @@ function getPriorityVariant(priority: string) {
   return map[priority] || 'normal'
 }
 
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('pt-BR')
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value)
-}
 
 function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
   if (isFinished) return { text: 'Concluído', color: 'text-emerald-600' }

@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
-import { getEtapas, getEtapaNome } from '@/lib/workflow-config'
-import type { TipoWorkflow } from '@/lib/workflow-config'
+import { ETAPA_IDS, ETAPA_LABELS, etapaLabel } from '@/lib/workflow-config'
+import type { TipoWorkflow, EtapaId } from '@/lib/workflow-config'
 
 interface Ordem {
   id: number
@@ -54,16 +54,14 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     observacoes: '',
   })
 
-  // Get dynamic etapas based on workflow type
-  const workflowType = (ordem?.tipoWorkflow as TipoWorkflow) || null
-  const etapasRaw = getEtapas(workflowType)
-  const etapas = etapasRaw.map(e => getEtapaNome(e))
+  // Etapas canônicas disponíveis para seleção
+  const etapaOpcoes = ETAPA_IDS.map(id => ({ id, label: etapaLabel(id, 'lab') }))
 
   useEffect(() => {
     if (ordem) {
       setFormData({
         paciente: ordem.paciente || '',
-        dataEntrega: ordem.dataEntrega ? new Date(ordem.dataEntrega).toISOString().split('T')[0] : '',
+        dataEntrega: ordem.dataEntrega ? ordem.dataEntrega.split('T')[0] : '',
         prioridade: ordem.prioridade || 'Normal',
         status: ordem.status || 'Aguardando',
         etapaAtual: ordem.etapaAtual || 'Recebimento',
@@ -178,7 +176,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
             <Select name="etapaAtual" value={formData.etapaAtual} onValueChange={(val) => setFormData(p => ({ ...p, etapaAtual: val }))}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {etapas.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                {etapaOpcoes.map(({ id, label }) => <SelectItem key={id} value={id}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

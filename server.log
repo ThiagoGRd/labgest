@@ -211,3 +211,12 @@
 [1]  GET /login 200 in 122ms (compile: 9ms, proxy.ts: 62ms, render: 51ms)
 [1]  GET /login 200 in 14ms (compile: 1095µs, proxy.ts: 4ms, render: 9ms)
 [1] ✓ Compiled in 287ms
+[1] ✓ Compiled in 151ms
+[1]  GET /login 200 in 134ms (compile: 6ms, proxy.ts: 10ms, render: 118ms)
+[1]  GET /login 200 in 39ms (compile: 10ms, proxy.ts: 5ms, render: 24ms)
+[1]  GET /login 200 in 24ms (compile: 4ms, proxy.ts: 1638µs, render: 18ms)
+[1]  GET /login 200 in 14ms (compile: 1154µs, proxy.ts: 2ms, render: 11ms)
+[1] ✓ Compiled in 55ms
+[1]  GET /login 200 in 42ms (compile: 5ms, proxy.ts: 24ms, render: 13ms)
+[1]  GET /login 200 in 14ms (compile: 1180µs, proxy.ts: 2ms, render: 11ms)
+[1] ✓ Compiled in 109ms

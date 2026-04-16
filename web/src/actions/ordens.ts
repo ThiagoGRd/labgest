@@ -4,6 +4,7 @@ import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { gerarCobrancaAutomatica } from './financeiro'
+import { parseDateLocal } from '@/lib/date-utils'
 import {
   getWorkflowForServico,
   getNextEtapa,
@@ -93,7 +94,7 @@ export async function createBatchOrdens(data: {
           servicoId: servico.id,
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
-          dataEntrega: new Date(data.dataEntrega),
+          dataEntrega: parseDateLocal(data.dataEntrega),
           valor: valor,
           valorFinal: valor,
           prioridade: data.prioridade,
@@ -142,7 +143,7 @@ export async function updateOrdem(id: number, data: {
       where: { id },
       data: {
         nomePaciente: data.paciente,
-        dataEntrega: new Date(data.dataEntrega),
+        dataEntrega: parseDateLocal(data.dataEntrega),
         prioridade: data.prioridade,
         status: novoStatus,
         etapaAtual: etapaCanonica,

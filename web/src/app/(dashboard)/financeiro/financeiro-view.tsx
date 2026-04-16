@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { baixarConta, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
+import { baixarConta, sincronizarFinanceiroRetroativo, editarConta } from '@/actions/financeiro'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Pencil } from 'lucide-react'
+import { formatDate, formatCurrency } from '@/lib/date-utils'
 import {
   TrendingUp,
   TrendingDown,
@@ -42,13 +43,6 @@ interface FinanceiroViewProps {
   qtdReceberMes: number
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-}
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('pt-BR')
-}
 
 export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes }: FinanceiroViewProps) {
   const [activeTab, setActiveTab] = useState('receber')
@@ -58,6 +52,45 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
   const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
   const [sincronizando, setSincronizando] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  // Estado do modal de edição
+  const [editando, setEditando] = useState<{
+    id: number
+    tipo: 'receber' | 'pagar'
+    descricao: string
+    valor: string
+    vencimento: string
+    categoria: string
+    observacoes: string
+  } | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+
+  const abrirEdicao = (conta: any, tipo: 'receber' | 'pagar') => {
+    setEditando({
+      id: conta.id,
+      tipo,
+      descricao: conta.descricao,
+      valor: String(conta.valor),
+      vencimento: conta.vencimento.split('T')[0], // yyyy-mm-dd
+      categoria: conta.categoria || '',
+      observacoes: conta.observacoes || '',
+    })
+  }
+
+  const handleSalvarEdicao = async () => {
+    if (!editando) return
+    setEditLoading(true)
+    const res = await editarConta(editando.id, editando.tipo, {
+      descricao: editando.descricao,
+      valor: Number(editando.valor),
+      vencimento: editando.vencimento,
+      categoria: editando.categoria,
+      observacoes: editando.observacoes,
+    })
+    setEditLoading(false)
+    if (res.success) setEditando(null)
+    else alert('Erro ao salvar edição.')
+  }
 
   const handleSincronizar = async () => {
     setSincronizando(true)
@@ -84,6 +117,7 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
   const openNewModal = (type: 'receber' | 'pagar') => {
     setModalType(type)
     setModalOpen(true)
+
   }
 
   return (
@@ -93,6 +127,77 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
         onClose={() => setModalOpen(false)}
         tipoInicial={modalType}
       />
+
+      {/* Modal de Edição de Conta */}
+      {editando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 space-y-4">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              Editar {editando.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}
+            </h2>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Descrição</label>
+                <input
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={editando.descricao}
+                  onChange={e => setEditando(prev => prev ? { ...prev, descricao: e.target.value } : null)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Valor (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editando.valor}
+                    onChange={e => setEditando(prev => prev ? { ...prev, valor: e.target.value } : null)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Vencimento</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editando.vencimento}
+                    onChange={e => setEditando(prev => prev ? { ...prev, vencimento: e.target.value } : null)}
+                  />
+                </div>
+              </div>
+              {editando.tipo === 'pagar' && (
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Categoria</label>
+                  <input
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editando.categoria}
+                    onChange={e => setEditando(prev => prev ? { ...prev, categoria: e.target.value } : null)}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Observações</label>
+                <textarea
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  value={editando.observacoes}
+                  onChange={e => setEditando(prev => prev ? { ...prev, observacoes: e.target.value } : null)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditando(null)} disabled={editLoading}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleSalvarEdicao} disabled={editLoading}>
+                {editLoading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Header 
         title="Financeiro" 
@@ -263,17 +368,28 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
                               {formatCurrency(conta.valor)}
                             </td>
                             <td className="p-4 text-right">
-                              {conta.status !== 'Pago' && (
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold text-xs"
-                                  onClick={() => handleBaixa(conta.id, 'receber')}
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                                  onClick={() => abrirEdicao(conta, 'receber')}
+                                  title="Editar conta"
                                 >
-                                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                                  Receber
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                              )}
+                                {conta.status !== 'Pago' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold text-xs"
+                                    onClick={() => handleBaixa(conta.id, 'receber')}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Receber
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -327,17 +443,28 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
                               {formatCurrency(conta.valor)}
                             </td>
                             <td className="p-4 text-right">
-                              {conta.status !== 'Pago' && (
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold text-xs"
-                                  onClick={() => handleBaixa(conta.id, 'pagar')}
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                                  onClick={() => abrirEdicao(conta, 'pagar')}
+                                  title="Editar conta"
                                 >
-                                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                                  Pagar
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                              )}
+                                {conta.status !== 'Pago' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold text-xs"
+                                    onClick={() => handleBaixa(conta.id, 'pagar')}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Pagar
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
