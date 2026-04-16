@@ -34,9 +34,9 @@ export async function sincronizarFinanceiroRetroativo() {
 
     let criadas = 0
     for (const ordem of (ordensSemCobranca as any[])) {
-      // Vencimento: dia 10 do mês seguinte à finalização (ou hoje se não tiver data)
+      // Vencimento: último dia do mês da finalização da ordem
       const base = ordem.dataFinalizacao ? new Date(ordem.dataFinalizacao) : new Date(ordem.updatedAt || Date.now())
-      const vencimento = new Date(base.getFullYear(), base.getMonth() + 1, 10)
+      const vencimento = new Date(base.getFullYear(), base.getMonth() + 1, 0)
 
       await prisma.contaReceber.create({
         data: {
@@ -78,9 +78,9 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 
     if (contaExistente) return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
 
-    // Vencimento padrão laboratório: dia 10 do mês seguinte à finalização
+    // Vencimento: último dia do mês da finalização
     const hoje = new Date()
-    const vencimento = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 10)
+    const vencimento = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
 
     await prisma.contaReceber.create({
       data: {
