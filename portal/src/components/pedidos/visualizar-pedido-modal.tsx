@@ -26,6 +26,7 @@ import {
 import { CHECKLIST_LABELS, isEtapaProva, isChecklistCompleto, type ChecklistEstetico, getWorkflowForServico } from '@/lib/workflow-config'
 import { FeedbackProva } from '@/components/pedidos/feedback-prova'
 import { TimelineCiclos } from '@/components/pedidos/timeline-ciclos'
+import { ChatPedido } from '@/components/pedidos/chat-pedido'
 
 interface Pedido {
   id: number
@@ -43,6 +44,7 @@ interface Pedido {
   checklistEstetico?: Partial<ChecklistEstetico>
   ciclos?: any[]
   cicloAtivoId?: number | null
+  mensagens?: any[]
 }
 
 interface VisualizarPedidoModalProps {
@@ -290,12 +292,21 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
           {/* Observações */}
           {pedido.observacoes && (
             <div>
-              <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Observações</h4>
+              <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Observações Iniciais</h4>
               <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-slate-100 dark:border-zinc-800">
                 {pedido.observacoes}
               </p>
             </div>
           )}
+
+          {/* Chat do Pedido */}
+          <div className="pt-2">
+            <ChatPedido 
+              ordemId={pedido.id} 
+              mensagensIniciais={pedido.mensagens || []} 
+              dentistaNome="" 
+            />
+          </div>
 
           {/* Botão Fechar */}
           <div className="flex justify-end pt-4">

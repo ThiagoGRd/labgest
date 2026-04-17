@@ -1,5 +1,5 @@
 // Versão atual do sistema — incrementar a cada release
-export const VERSAO_ATUAL = '2.4.0'
+export const VERSAO_ATUAL = '2.5.0'
 
 export interface NotaRelease {
   versao: string
@@ -12,6 +12,16 @@ export interface NotaRelease {
 }
 
 export const HISTORICO_RELEASES: NotaRelease[] = [
+  {
+    versao: '2.5.0',
+    data: '17 de Abril de 2026',
+    titulo: '🚀 Portal do Dentista & Comunicação',
+    novidades: [
+      { tipo: 'novo', texto: 'Aba Financeiro: Painel dedicado para acompanhamento de pagamentos em aberto, simplificando o processo de cobrança.' },
+      { tipo: 'novo', texto: 'Chat Integrado na O.S: Dentista e Laboratório podem trocar mensagens diretamente dentro do rastreamento/detalhe de cada ordem.' },
+      { tipo: 'novo', texto: 'Sino de Notificações Inteligentes: Fique de olho em faturas pendentes e casos "Em Prova" rapidamente!' }
+    ]
+  },
   {
     versao: '2.4.0',
     data: '15 de Abril de 2025',

@@ -291,6 +291,7 @@ export async function getPedidoById(id: number) {
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
       historicoEtapas: (pedido.historicoEtapas as any[]) || [],
+      mensagens: Array.isArray((pedido as any).mensagens) ? (pedido as any).mensagens : [],
       arquivos: (pedido.arquivoStl as string[]) || [],
       ciclos,
       cicloAtivoId: cicloAtivo?.id ?? null,

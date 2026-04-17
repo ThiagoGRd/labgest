@@ -19,6 +19,7 @@ import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
 import { WhatsNewPortal } from '@/components/ui/whats-new-portal'
+import { PortalNotifications } from '@/components/ui/portal-notifications'
 import { VERSAO_ATUAL } from '@/lib/release-notes'
 
 const navigation = [
@@ -98,6 +99,7 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
                   <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter">{user.cro}</p>
                 </div>
               </div>
+              <PortalNotifications />
               <button
                 onClick={() => { setWhatsNewOpen(true); setHasNew(false) }}
                 className="relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-zinc-400 hover:bg-white/5 hover:text-white"

@@ -26,6 +26,7 @@ import {
   MapPin
 } from 'lucide-react'
 import { getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
+import { ChatOrdem } from '@/components/ordens/chat-ordem'
 
 interface Ordem {
   id: number
@@ -47,6 +48,7 @@ interface Ordem {
   tentativaAtual?: number
   historicoEtapas?: any[]
   checklistEstetico?: any
+  mensagens?: any[]
 }
 
 interface VisualizarOrdemModalProps {
@@ -306,6 +308,14 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                 </div>
               </div>
             )}
+
+            {/* Chat do Pedido */}
+            <div className="pt-2 pb-4">
+              <ChatOrdem 
+                ordemId={ordem.id} 
+                mensagensIniciais={ordem.mensagens || []} 
+              />
+            </div>
 
             {/* Arquivos */}
             <div>
