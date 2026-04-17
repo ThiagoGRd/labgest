@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Sparkles,
+  DollarSign
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Meus Pedidos', href: '/pedidos', icon: ClipboardList },
   { name: 'Novo Pedido', href: '/novo-pedido', icon: PlusCircle },
   { name: 'Histórico', href: '/historico', icon: History },
+  { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
   { name: 'Meu Perfil', href: '/perfil', icon: User },
 ]
 
