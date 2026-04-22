@@ -1,10 +1,20 @@
-import { getContas } from '@/actions/financeiro'
+import { getContas, getMesesDisponiveis } from '@/actions/financeiro'
 import { FinanceiroView } from './financeiro-view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function FinanceiroPage() {
-  const contas = await getContas()
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string }>
+}) {
+  const params = await searchParams
+  const filtroMes = params.mes
+
+  const [contas, meses] = await Promise.all([
+    getContas(filtroMes),
+    getMesesDisponiveis(),
+  ])
 
   return (
     <FinanceiroView
@@ -12,6 +22,8 @@ export default async function FinanceiroPage() {
       pagar={contas.pagar}
       totalReceberMes={contas.totalReceberMes}
       qtdReceberMes={contas.qtdReceberMes}
+      mesesDisponiveis={meses}
+      mesSelecionado={filtroMes}
     />
   )
 }

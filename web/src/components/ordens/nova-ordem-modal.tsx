@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, Plus, Trash2, Package } from 'lucide-react'
 import { createBatchOrdens } from '@/actions/ordens'
+import { addDaysSkippingSundays, toDateInputValue } from '@/lib/date-utils'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
   onClose: () => void
   clientes: { id: number; nome: string }[]
-  servicos: { id: number; nome: string; preco: number }[]
+  servicos: { id: number; nome: string; preco: number; tempoProducao?: number }[]
   onSuccess?: () => void
 }
 
@@ -68,6 +69,18 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
         preco: servico?.preco || 0
       }
     ])
+
+    // Auto-calcula a data de entrega baseada no tempoProducao (se globalData estiver vazia ou for menor que a calculada)
+    if (servico && servico.tempoProducao) {
+      const dataSugerida = toDateInputValue(addDaysSkippingSundays(servico.tempoProducao))
+      // Se não tem dataEntrega ou a nova data for maior que a atual, atualiza
+      setGlobalData(prev => {
+        if (!prev.dataEntrega || new Date(dataSugerida) > new Date(prev.dataEntrega)) {
+          return { ...prev, dataEntrega: dataSugerida }
+        }
+        return prev
+      })
+    }
 
     // Limpar campos do item (mantendo cor e material pois geralmente repetem)
     setCurrentItem(prev => ({

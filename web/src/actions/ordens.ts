@@ -53,6 +53,7 @@ export async function getOrdens() {
       historicoEtapas: (o.historicoEtapas as any[]) || [],
       checklistEstetico: (o.checklistEstetico as Partial<ChecklistEstetico>) || {},
       fotosProva: (o.fotosProva as any[]) || [],
+      fotosCaso: Array.isArray((o as any).fotosCaso) ? (o as any).fotosCaso : [],
       mensagens: Array.isArray((o as any).mensagens) ? (o as any).mensagens : [],
     }))
   } catch (error) {

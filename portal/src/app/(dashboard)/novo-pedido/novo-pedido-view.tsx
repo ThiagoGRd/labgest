@@ -22,12 +22,14 @@ import {
   Trash2,
 } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
+import { addDaysSkippingSundays, toDateInputValue } from '@/lib/utils'
 
 interface Servico {
   id: number
   nome: string
   categoria: string
   preco: number
+  tempoProducao?: number
 }
 
 interface NovoPedidoViewProps {
@@ -103,6 +105,17 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
         preco: servico?.preco || 0
       }
     ])
+
+    // Auto-calculo da Data Sugerida pulando domingos
+    if (servico && servico.tempoProducao) {
+      const dataSugerida = toDateInputValue(addDaysSkippingSundays(servico.tempoProducao))
+      setGlobalData(prev => {
+        if (!prev.dataEntrega || new Date(dataSugerida) > new Date(prev.dataEntrega)) {
+          return { ...prev, dataEntrega: dataSugerida }
+        }
+        return prev
+      })
+    }
 
     setCurrentItem(prev => ({ ...prev, servicoId: '', elementos: '' }))
   }

@@ -82,6 +82,7 @@ model Ordem {
   tentativaAtual                                         Int?            @default(0) @map("tentativa_atual")
   tipoWorkflow                                           String?         @map("tipo_workflow") @db.VarChar(50)
   fotosProva                                             Json?           @default("[]") @map("fotos_prova")
+  fotosCaso                                              Json?           @default("[]") @map("fotos_caso")
   elementos                                              String?         @db.VarChar(100)
   workflowTipo                                           String?         @default("simples") @map("workflow_tipo") @db.VarChar(20)
   ciclo_id_atual                                         Int?
@@ -110,6 +111,7 @@ model CicloProducao {
   dataRetorno                                   DateTime? @map("data_retorno") @db.Date
   observacoesDentista                           String?   @map("observacoes_dentista")
   fotosProva                                    Json?     @default("[]") @map("fotos_prova")
+  fotosCaso                                     Json?     @default("[]") @map("fotos_caso")
   decisao                                       String?   @db.VarChar(20)
   status                                        String    @default("no_lab") @db.VarChar(20)
   registradoPor                                 String?   @map("registrado_por") @db.VarChar(255)

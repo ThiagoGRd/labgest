@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { baixarConta, sincronizarFinanceiroRetroativo, editarConta } from '@/actions/financeiro'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
-import { RefreshCw, Pencil } from 'lucide-react'
+import { RefreshCw, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
 import {
   TrendingUp,
@@ -41,17 +42,36 @@ interface FinanceiroViewProps {
   pagar: Conta[]
   totalReceberMes: number
   qtdReceberMes: number
+  mesesDisponiveis?: string[]
+  mesSelecionado?: string
 }
 
 
-export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes }: FinanceiroViewProps) {
+function formatMesLabel(mesStr: string) {
+  const [ano, mes] = mesStr.split('-').map(Number)
+  return new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
+
+export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes, mesesDisponiveis = [], mesSelecionado }: FinanceiroViewProps) {
   const [activeTab, setActiveTab] = useState('receber')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState<'receber' | 'pagar'>('receber')
+  const router = useRouter()
 
   const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
   const [sincronizando, setSincronizando] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  // Navegação entre meses
+  const idxAtual = mesSelecionado ? mesesDisponiveis.indexOf(mesSelecionado) : -1
+  const mesAnterior = idxAtual < mesesDisponiveis.length - 1 ? mesesDisponiveis[idxAtual + 1] : null
+  const mesProximo = idxAtual > 0 ? mesesDisponiveis[idxAtual - 1] : null
+  const labelMesFiltro = mesSelecionado ? formatMesLabel(mesSelecionado) : 'Todos os períodos'
+
+  const navegarMes = (mes: string | null) => {
+    if (mes) router.push(`/financeiro?mes=${mes}`)
+    else router.push('/financeiro')
+  }
 
   // Estado do modal de edição
   const [editando, setEditando] = useState<{
@@ -209,6 +229,28 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes 
       />
 
       <div className="p-6 space-y-6">
+        {/* Seletor de Mês */}
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-5 py-3">
+          <button
+            onClick={() => navegarMes(mesAnterior)}
+            disabled={!mesAnterior}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+          >
+            <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+          </button>
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Período</p>
+            <p className="text-base font-bold text-slate-900 dark:text-white capitalize">{labelMesFiltro}</p>
+          </div>
+          <button
+            onClick={() => navegarMes(mesProximo)}
+            disabled={!mesProximo}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+          >
+            <ChevronRight className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+          </button>
+        </div>
+
         {/* Banner de sincronização retroativa */}
         <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-5 py-3">
           <div>

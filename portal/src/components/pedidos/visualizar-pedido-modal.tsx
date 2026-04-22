@@ -21,12 +21,16 @@ import {
   MapPin,
   AlertTriangle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Camera
 } from 'lucide-react'
 import { CHECKLIST_LABELS, isEtapaProva, isChecklistCompleto, type ChecklistEstetico, getWorkflowForServico } from '@/lib/workflow-config'
 import { FeedbackProva } from '@/components/pedidos/feedback-prova'
 import { TimelineCiclos } from '@/components/pedidos/timeline-ciclos'
 import { ChatPedido } from '@/components/pedidos/chat-pedido'
+import { CameraUpload } from '@/components/ui/camera-upload'
+import { adicionarFotoCaso } from '@/actions/pedidos'
+import { toast } from 'sonner'
 
 interface Pedido {
   id: number
@@ -45,6 +49,7 @@ interface Pedido {
   ciclos?: any[]
   cicloAtivoId?: number | null
   mensagens?: any[]
+  fotosCaso?: string[]
 }
 
 interface VisualizarPedidoModalProps {
@@ -91,8 +96,11 @@ function formatCurrency(value: number) {
 export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPedidoModalProps) {
   const [loading, setLoading] = useState(false)
   const [checklist, setChecklist] = useState<Partial<ChecklistEstetico>>({})
-
+  
   if (!pedido) return null
+
+  // Imagens locais do caso
+  const [fotosCaso, setFotosCaso] = useState<string[]>(pedido.fotosCaso || [])
 
   // Histórico reverso (mais recente primeiro)
   const historico = [...(pedido.historicoEtapas || [])].reverse()
@@ -298,6 +306,49 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
               </p>
             </div>
           )}
+
+          {/* Fotos do Caso - Aberto a Qualquer Momento */}
+          <div>
+            <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+              <Camera className="h-4 w-4" />
+              Fotos Clínicas do Caso
+            </h4>
+            
+            <div className="bg-slate-50/50 dark:bg-zinc-800/30 border border-slate-200 dark:border-zinc-700 rounded-xl p-4 space-y-4">
+              {fotosCaso.length > 0 && (
+                <div className="flex flex-wrap gap-3 mb-4">
+                  {fotosCaso.map((url: string, idx: number) => (
+                    <a 
+                      key={idx} 
+                      href={url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="relative h-20 w-20 rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden group"
+                    >
+                      <img 
+                        src={url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`} 
+                        alt="Foto do Caso" 
+                        className="object-cover h-full w-full group-hover:scale-110 transition-transform"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+              
+              <CameraUpload 
+                onUploadComplete={async (path: string) => {
+                  if (!path) return;
+                  const res = await adicionarFotoCaso(pedido.id, path)
+                  if (res.success) {
+                    setFotosCaso(prev => [...prev, path])
+                    toast.success("Foto enviada com sucesso!")
+                  } else {
+                    toast.error("Falha ao salvar a foto na Ordem.")
+                  }
+                }}
+              />
+            </div>
+          </div>
 
           {/* Chat do Pedido */}
           <div className="pt-2">

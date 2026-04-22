@@ -34,9 +34,10 @@ export async function sincronizarFinanceiroRetroativo() {
 
     let criadas = 0
     for (const ordem of (ordensSemCobranca as any[])) {
-      // Vencimento: último dia do mês da finalização da ordem
+      // CORREÇÃO: usa data de finalização para determinar o mês correto
+      // Vencimento: dia 15 do mês SEGUINTE ao da finalização
       const base = ordem.dataFinalizacao ? new Date(ordem.dataFinalizacao) : new Date(ordem.updatedAt || Date.now())
-      const vencimento = new Date(base.getFullYear(), base.getMonth() + 1, 0)
+      const vencimento = new Date(base.getFullYear(), base.getMonth() + 1, 15)
 
       await prisma.contaReceber.create({
         data: {
@@ -47,7 +48,7 @@ export async function sincronizarFinanceiroRetroativo() {
           valor: ordem.valorFinal,
           dataVencimento: vencimento,
           status: 'Pendente',
-          observacoes: `Gerado retroativamente — Ordem #${ordem.id}`,
+          observacoes: `Gerado retroativamente — Ordem #${ordem.id} (finalizada em ${base.toLocaleDateString('pt-BR')})`,
         }
       })
       criadas++
@@ -78,9 +79,16 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 
     if (contaExistente) return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
 
-    // Vencimento: último dia do mês da finalização
-    const hoje = new Date()
-    const vencimento = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+    // CORREÇÃO: usa a data de finalização da ordem (não "hoje") para calcular o mês correto
+    // Isso evita o bug onde uma ordem finalizada em março gera vencimento em abril
+    const dataBase = (ordem as any).dataFinalizacao
+      ? new Date((ordem as any).dataFinalizacao)
+      : new Date()
+
+    // Vencimento: dia 15 do mês SEGUINTE ao da finalização (padrão boleto laboratorial)
+    const vencimento = new Date(dataBase.getFullYear(), dataBase.getMonth() + 1, 15)
+
+    const dataFmt = dataBase.toLocaleDateString('pt-BR')
 
     await prisma.contaReceber.create({
       data: {
@@ -91,7 +99,7 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
         valor: ordem.valorFinal,
         dataVencimento: vencimento,
         status: 'Pendente',
-        observacoes: `Gerado automaticamente — Ordem #${ordem.id} finalizada em ${hoje.toLocaleDateString('pt-BR')}`,
+        observacoes: `Gerado automaticamente — Ordem #${ordem.id} finalizada em ${dataFmt}`,
       }
     })
 
@@ -105,30 +113,42 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
   }
 }
 
-export async function getContas() {
+export async function getContas(filtroMes?: string) {
   await requireUser()
   try {
-    // Limites do mês corrente
     const hoje = new Date()
+
+    // Se filtroMes for passado no formato "YYYY-MM", filtra por aquele mês
+    // Caso contrário, retorna todos os registros
+    let whereReceber: any = {}
+    let wherePagar: any = {}
+    if (filtroMes) {
+      const [ano, mes] = filtroMes.split('-').map(Number)
+      const inicio = new Date(ano, mes - 1, 1)
+      const fim = new Date(ano, mes, 0, 23, 59, 59)
+      whereReceber = { dataVencimento: { gte: inicio, lte: fim } }
+      wherePagar = { dataVencimento: { gte: inicio, lte: fim } }
+    }
+
+    // Limites do mês corrente (para o card de resumo)
     const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59)
 
     const [aReceber, aPagar, receberMes] = await Promise.all([
       prisma.contaReceber.findMany({
-        orderBy: { dataVencimento: 'asc' },
+        where: whereReceber,
+        orderBy: { dataVencimento: 'desc' },
         include: { cliente: { select: { nome: true } } }
       }),
       prisma.contaPagar.findMany({
-        orderBy: { dataVencimento: 'asc' },
+        where: wherePagar,
+        orderBy: { dataVencimento: 'desc' },
       }),
       // Contas a receber com vencimento neste mês ainda pendentes
       prisma.contaReceber.aggregate({
         where: {
           status: { not: 'Recebido' },
-          dataVencimento: {
-            gte: inicioMes,
-            lte: fimMes,
-          }
+          dataVencimento: { gte: inicioMes, lte: fimMes },
         },
         _sum: { valor: true },
         _count: true,
@@ -144,7 +164,7 @@ export async function getContas() {
         vencimento: c.dataVencimento.toISOString(),
         status: c.status || 'Pendente',
         observacoes: c.observacoes || '',
-        ordemId: c.ordemId
+        ordemId: c.ordemId,
       })),
       pagar: aPagar.map(c => ({
         id: c.id,
@@ -161,6 +181,27 @@ export async function getContas() {
   } catch (error) {
     console.error('Erro ao buscar contas:', error)
     return { receber: [], pagar: [], totalReceberMes: 0, qtdReceberMes: 0 }
+  }
+}
+
+/**
+ * Retorna os meses disponíveis no histórico financeiro (para o filtro de mês)
+ */
+export async function getMesesDisponiveis() {
+  await requireUser()
+  try {
+    const contas = await prisma.contaReceber.findMany({
+      select: { dataVencimento: true },
+      orderBy: { dataVencimento: 'desc' },
+    })
+    const meses = new Set<string>()
+    contas.forEach(c => {
+      const d = new Date(c.dataVencimento)
+      meses.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    })
+    return Array.from(meses).sort().reverse()
+  } catch {
+    return []
   }
 }
 

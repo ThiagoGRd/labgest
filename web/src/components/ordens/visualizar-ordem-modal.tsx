@@ -23,7 +23,8 @@ import {
   Circle,
   Truck,
   AlertCircle,
-  MapPin
+  MapPin,
+  Camera
 } from 'lucide-react'
 import { getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
 import { ChatOrdem } from '@/components/ordens/chat-ordem'
@@ -49,6 +50,7 @@ interface Ordem {
   historicoEtapas?: any[]
   checklistEstetico?: any
   mensagens?: any[]
+  fotosCaso?: string[]
 }
 
 interface VisualizarOrdemModalProps {
@@ -305,6 +307,38 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                 <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Observações Adicionais</h4>
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-xl text-amber-900 dark:text-amber-100 text-sm">
                   {ordem.observacoes}
+                </div>
+              </div>
+            )}
+
+            {/* Fotos do Caso (Enviadas pela Clínica) */}
+            {ordem.fotosCaso && ordem.fotosCaso.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                  <Camera className="h-4 w-4" />
+                  Fotos Clínicas do Caso
+                </h4>
+                <div className="bg-slate-50/50 dark:bg-zinc-800/30 border border-slate-200 dark:border-zinc-700 rounded-xl p-4">
+                  <div className="flex flex-wrap gap-3">
+                    {ordem.fotosCaso.map((url: string, idx: number) => {
+                      const fullUrl = url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`
+                      return (
+                        <a 
+                          key={idx} 
+                          href={fullUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="relative h-24 w-24 rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden group shadow-sm hover:shadow-md transition-all"
+                        >
+                          <img 
+                            src={fullUrl} 
+                            alt={`Foto do Caso ${idx+1}`} 
+                            className="object-cover h-full w-full group-hover:scale-110 transition-transform duration-300"
+                          />
+                        </a>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}

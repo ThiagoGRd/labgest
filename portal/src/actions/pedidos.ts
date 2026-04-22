@@ -293,6 +293,7 @@ export async function getPedidoById(id: number) {
       historicoEtapas: (pedido.historicoEtapas as any[]) || [],
       mensagens: Array.isArray((pedido as any).mensagens) ? (pedido as any).mensagens : [],
       arquivos: (pedido.arquivoStl as string[]) || [],
+      fotosCaso: Array.isArray((pedido as any).fotosCaso) ? (pedido as any).fotosCaso : [],
       ciclos,
       cicloAtivoId: cicloAtivo?.id ?? null,
     }
@@ -391,15 +392,40 @@ export async function getServicosDisponiveis() {
     const servicos = await prisma.servico.findMany({
       where: { ativo: true },
       orderBy: { nome: 'asc' },
-      select: { id: true, nome: true, categoria: true, preco: true }
+      select: { id: true, nome: true, categoria: true, preco: true, tempoProducao: true }
     })
     
     return servicos.map(s => ({
       ...s,
       categoria: s.categoria || 'Geral',
-      preco: Number(s.preco)
+      preco: Number(s.preco),
+      tempoProducao: s.tempoProducao ?? 0
     }))
   } catch (error) {
     return []
+  }
+}
+
+export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
+  try {
+    const ordem = await prisma.ordem.findUnique({
+      where: { id: ordemId }
+    })
+    
+    if (!ordem) throw new Error('Ordem não encontrada')
+    
+    const fotosAntigas = Array.isArray((ordem as any).fotosCaso) ? (ordem as any).fotosCaso : []
+    const novasFotos = [...fotosAntigas, fotoUrl]
+
+    await (prisma.ordem as any).update({
+      where: { id: ordemId },
+      data: { fotosCaso: novasFotos }
+    })
+    
+    revalidatePath('/')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar foto:', error)
+    return { success: false, error: 'Erro ao salvar a foto do caso' }
   }
 }

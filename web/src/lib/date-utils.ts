@@ -52,3 +52,21 @@ export function parseDateLocal(dateStr: string): Date {
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
+
+/**
+ * Adiciona um determinado número de dias corridos, pulando apenas os Domingos (0).
+ */
+export function addDaysSkippingSundays(days: number, startDate: Date = new Date()): Date {
+  let count = 0
+  const dateObj = new Date(startDate) // clone
+
+  // Loop incrementando até alcançar os dias alvos (que não são domingo)
+  while (count < days) {
+    dateObj.setDate(dateObj.getDate() + 1)
+    if (dateObj.getDay() !== 0) {
+      count++
+    }
+  }
+
+  return dateObj
+}

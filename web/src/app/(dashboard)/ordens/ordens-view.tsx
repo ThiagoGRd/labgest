@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -125,6 +125,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 20
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter])
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
