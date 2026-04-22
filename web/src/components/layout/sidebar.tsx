@@ -25,13 +25,14 @@ import { Avatar } from '@/components/ui/avatar'
 import { logout } from '@/actions/auth'
 import { useSidebar } from '@/components/providers/sidebar-provider'
 import { WhatsNewModal } from '@/components/ui/whats-new-modal'
+import { MensagensBadge } from '@/components/ui/mensagens-badge'
 import { VERSAO_ATUAL } from '@/lib/release-notes'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Prioridades', href: '/prioridades', icon: Clock },
-  { name: 'Ordens', href: '/ordens', icon: ClipboardList },
-  { name: 'Produção', href: '/producao', icon: Kanban },
+  { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
+  { name: 'Produção', href: '/producao', icon: Kanban, hasBadge: true },
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },
@@ -127,6 +128,9 @@ export function Sidebar({ user }: SidebarProps) {
               )}
               {!collapsed && item.hasAI && (
                 <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
+              )}
+              {!collapsed && (item as any).hasBadge && (
+                <MensagensBadge />
               )}
             </Link>
           )
