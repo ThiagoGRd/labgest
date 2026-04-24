@@ -258,3 +258,23 @@
 [1] ✓ Compiled in 88ms
 [1] ✓ Compiled in 57ms
 [1] ✓ Compiled in 112ms
+[1] ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+[1] ⚠ `eslint` configuration in next.config.ts is no longer supported. See more info here: https://nextjs.org/docs/app/api-reference/cli/next#next-lint-options
+[1] ⚠ Invalid next.config.ts options detected: 
+[1] ⚠     Unrecognized key(s) in object: 'eslint'
+[1] ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+[1] ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+[1]  We detected multiple lockfiles and selected the directory of /Users/thiagocruz/labgest/package-lock.json as the root directory.
+[1]  To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+[1]    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+[1]  Detected additional lockfiles: 
+[1]    * /Users/thiagocruz/labgest/portal/package-lock.json
+[1] 
+[1] ▲ Next.js 16.1.6 (Turbopack)
+[1] - Local:         http://localhost:3002
+[1] - Network:       http://192.168.18.173:3002
+[1] - Environments: .env.local
+[1] 
+[1] ✓ Starting...
+[1] ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[1] ✓ Ready in 1192ms
