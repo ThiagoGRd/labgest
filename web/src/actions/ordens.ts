@@ -40,7 +40,7 @@ export async function getOrdens() {
       prioridade: o.prioridade || 'Normal',
       dataEntrada: o.dataPedido ? o.dataPedido.toISOString() : new Date().toISOString(),
       dataEntrega: o.dataEntrega && !isNaN(o.dataEntrega.getTime()) ? o.dataEntrega.toISOString() : new Date().toISOString(),
-      etapaAtual: o.etapaAtual || 'Recebimento',
+      etapaAtual: normalizarEtapa(o.etapaAtual || 'recebimento'),
       valor: Number(o.valorFinal || o.valor),
       corDentes: o.corDentes || '',
       material: o.material || '',

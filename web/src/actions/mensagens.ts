@@ -4,7 +4,7 @@ import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 
-export async function enviarMensagemLab(ordemId: number, texto: string) {
+export async function enviarMensagemLab(ordemId: number, texto: string, fotoUrl?: string) {
   const usuario = await requireUser()
 
   const ordem = await (prisma.ordem as any).findFirst({
@@ -15,14 +15,22 @@ export async function enviarMensagemLab(ordemId: number, texto: string) {
     return { success: false, error: 'Ordem não encontrada' }
   }
 
+  if (!texto.trim() && !fotoUrl) {
+    return { success: false, error: 'Mensagem vazia' }
+  }
+
   const mensagensAtuais = Array.isArray(ordem.mensagens) ? ordem.mensagens : []
   
-  const novaMensagem = {
+  const novaMensagem: Record<string, any> = {
     id: Date.now().toString(),
     role: 'lab',
     nome: (usuario as any).nome || 'Equipe LabGest',
-    texto,
-    createdAt: new Date().toISOString()
+    texto: texto.trim(),
+    createdAt: new Date().toISOString(),
+  }
+
+  if (fotoUrl) {
+    novaMensagem.fotoUrl = fotoUrl
   }
 
   const novasMensagens = [...mensagensAtuais, novaMensagem]

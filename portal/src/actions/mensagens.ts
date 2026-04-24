@@ -19,7 +19,7 @@ async function getClienteLogado() {
   return { user, cliente }
 }
 
-export async function enviarMensagem(ordemId: number, texto: string) {
+export async function enviarMensagem(ordemId: number, texto: string, fotoUrl?: string) {
   const logado = await getClienteLogado()
   
   if (!logado?.cliente) {
@@ -38,14 +38,23 @@ export async function enviarMensagem(ordemId: number, texto: string) {
     return { success: false, error: 'Ordem não encontrada' }
   }
 
+  // Valida: precisa ter texto ou foto
+  if (!texto.trim() && !fotoUrl) {
+    return { success: false, error: 'Mensagem vazia' }
+  }
+
   const mensagensAtuais = Array.isArray((ordem as any).mensagens) ? (ordem as any).mensagens : []
   
-  const novaMensagem = {
+  const novaMensagem: Record<string, any> = {
     id: Date.now().toString(),
     role: 'dentista',
     nome: logado.user.user_metadata?.full_name || 'Dentista',
-    texto,
-    createdAt: new Date().toISOString()
+    texto: texto.trim(),
+    createdAt: new Date().toISOString(),
+  }
+
+  if (fotoUrl) {
+    novaMensagem.fotoUrl = fotoUrl
   }
 
   const novasMensagens = [...mensagensAtuais, novaMensagem]

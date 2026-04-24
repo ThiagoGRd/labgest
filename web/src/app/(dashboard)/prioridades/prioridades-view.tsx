@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, Clock, Calendar, CheckCircle2, User, AlertCircle } from 'lucide-react'
+import { etapaLabel } from '@/lib/workflow-config'
 
 interface Ordem {
   id: number
@@ -54,7 +55,7 @@ function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 
         </div>
         <div className="text-right">
           <Badge variant="outline" className="mb-2 bg-white/50 dark:bg-black/20 border-black/5 dark:border-white/10">
-            {ordem.etapaAtual || 'Em produção'}
+            {etapaLabel(ordem.etapaAtual || 'recebimento', 'lab')}
           </Badge>
           <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400" suppressHydrationWarning>
             Entrega: {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR')}

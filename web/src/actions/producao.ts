@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { abaterEstoquePorServico } from './estoque'
 import { gerarCobrancaAutomatica } from './financeiro'
+import { normalizarEtapa } from '@/lib/workflow-config'
 
 export async function getProducao() {
   await requireUser()
@@ -33,7 +34,7 @@ export async function getProducao() {
         paciente: o.nomePaciente,
         dentista: o.clienteNome || o.cliente?.nome || 'Desconhecido',
         servico: o.servicoNome || o.servico?.nome || 'Serviço',
-        etapa: o.etapaAtual || 'Recebimento',
+        etapa: normalizarEtapa(o.etapaAtual || 'recebimento'),
         prioridade: o.prioridade || 'Normal',
         entrega: o.dataEntrega.toISOString(),
         cor: o.corDentes,
