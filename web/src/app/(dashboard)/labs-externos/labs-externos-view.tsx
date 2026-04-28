@@ -4,10 +4,10 @@ import { useState, useTransition } from 'react'
 import {
   Building2, Clock, AlertTriangle, RefreshCw, CheckCircle2,
   PackageCheck, Send, Plus, ChevronRight, Search, X, Loader2,
-  Calendar, User, Stethoscope, FileText, ArrowRightLeft, Undo2
+  Calendar, User, Stethoscope, FileText, ArrowRightLeft, Undo2, Pencil
 } from 'lucide-react'
 import {
-  criarPedido, atualizarSituacao, marcarRetrabalho, excluirPedido,
+  criarPedido, atualizarSituacao, marcarRetrabalho, excluirPedido, atualizarPedido,
   type LabExternoPedido, type LabExterno, type SituacaoPedido
 } from '@/actions/labs-externos'
 
@@ -30,11 +30,11 @@ interface Props {
 
 type Aba = 'todos' | 'enviados' | 'provando' | 'prontos' | 'entregues' | 'atrasados' | 'retrabalhos'
 
-const SITUACAO_CONFIG: Record<SituacaoPedido, { label: string; color: string; bg: string; next?: SituacaoPedido }> = {
+const SITUACAO_CONFIG: Record<SituacaoPedido, { label: string; color: string; bg: string; next?: SituacaoPedido; prev?: SituacaoPedido }> = {
   Enviado:  { label: 'Enviado',  color: 'text-blue-400',   bg: 'bg-blue-500/20',   next: 'Provando' },
-  Provando: { label: 'Provando', color: 'text-purple-400', bg: 'bg-purple-500/20', next: 'Pronto'   },
-  Pronto:   { label: 'Pronto',   color: 'text-green-400',  bg: 'bg-green-500/20',  next: 'Entregue' },
-  Entregue: { label: 'Entregue', color: 'text-gray-400',   bg: 'bg-gray-500/20'                     },
+  Provando: { label: 'Provando', color: 'text-purple-400', bg: 'bg-purple-500/20', next: 'Pronto',   prev: 'Enviado' },
+  Pronto:   { label: 'Pronto',   color: 'text-green-400',  bg: 'bg-green-500/20',  next: 'Entregue', prev: 'Provando' },
+  Entregue: { label: 'Entregue', color: 'text-gray-400',   bg: 'bg-gray-500/20',                     prev: 'Pronto' },
 }
 
 function formatDate(date: Date | null | undefined): string {
@@ -48,12 +48,14 @@ function isOverdue(pedido: LabExternoPedido): boolean {
 }
 
 function PedidoCard({
-  pedido, onAvancar, onRetrabalho, onExcluir, isPending
+  pedido, onAvancar, onVoltar, onRetrabalho, onExcluir, onEdit, isPending
 }: {
   pedido: LabExternoPedido
   onAvancar: (id: number, next: SituacaoPedido) => void
+  onVoltar: (id: number, prev: SituacaoPedido) => void
   onRetrabalho: (id: number) => void
   onExcluir: (id: number) => void
+  onEdit: (pedido: LabExternoPedido) => void
   isPending: boolean
 }) {
   const cfg     = SITUACAO_CONFIG[pedido.situacao]
@@ -116,34 +118,55 @@ function PedidoCard({
           )}
         </div>
 
-        {pedido.situacao !== 'Entregue' ? (
-          <div className="flex flex-col gap-1 shrink-0">
-            {cfg.next && (
-              <button
-                onClick={() => onAvancar(pedido.id, cfg.next!)}
-                disabled={isPending}
-                className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white transition-colors disabled:opacity-50"
-                title={`Avançar para ${cfg.next}`}
-              >
-                {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
-                {cfg.next}
-              </button>
-            )}
-            {!pedido.isRetrabalho && (
-              <button
-                onClick={() => onRetrabalho(pedido.id)}
-                disabled={isPending}
-                className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-600 dark:bg-orange-500/20 dark:hover:bg-orange-500/30 dark:text-orange-400 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Retrab.
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1 shrink-0">
+        <div className="flex flex-col gap-1 shrink-0">
+          <button
+            onClick={() => onEdit(pedido)}
+            disabled={isPending}
+            className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white transition-colors disabled:opacity-50"
+            title="Editar pedido"
+          >
+            <Pencil className="w-3 h-3" />
+            Editar
+          </button>
+          
+          {pedido.situacao !== 'Entregue' ? (
+            <>
+              {cfg.next && (
+                <button
+                  onClick={() => onAvancar(pedido.id, cfg.next!)}
+                  disabled={isPending}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white transition-colors disabled:opacity-50"
+                  title={`Avançar para ${cfg.next}`}
+                >
+                  {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
+                  {cfg.next}
+                </button>
+              )}
+              {!pedido.isRetrabalho && (
+                <button
+                  onClick={() => onRetrabalho(pedido.id)}
+                  disabled={isPending}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-600 dark:bg-orange-500/20 dark:hover:bg-orange-500/30 dark:text-orange-400 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Retrab.
+                </button>
+              )}
+              {cfg.prev && (
+                <button
+                  onClick={() => onVoltar(pedido.id, cfg.prev!)}
+                  disabled={isPending}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-400 transition-colors disabled:opacity-50"
+                  title={`Voltar para ${cfg.prev}`}
+                >
+                  <Undo2 className="w-3 h-3" />
+                  Voltar
+                </button>
+              )}
+            </>
+          ) : (
             <button
-              onClick={() => onAvancar(pedido.id, 'Pronto')}
+              onClick={() => onVoltar(pedido.id, 'Pronto')}
               disabled={isPending}
               className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-400 transition-colors disabled:opacity-50"
               title="Desfazer entrega"
@@ -151,25 +174,27 @@ function PedidoCard({
               {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
               Desfazer
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-function ModalNovoPedido({ labs, onClose, onSave }: {
+function ModalPedido({ labs, pedidoEdicao, onClose, onSave }: {
   labs: LabExterno[]
+  pedidoEdicao?: LabExternoPedido
   onClose: () => void
   onSave: (data: any) => void
 }) {
   const [form, setForm] = useState({
-    labId:     String(labs[0]?.id ?? ''),
-    paciente:  '',
-    dentista:  '',
-    dataEnvio: '',
-    prazo:     '',
-    servico:   '',
+    labId:     pedidoEdicao?.labId ? String(pedidoEdicao.labId) : String(labs[0]?.id ?? ''),
+    paciente:  pedidoEdicao?.paciente ?? '',
+    dentista:  pedidoEdicao?.dentista ?? '',
+    dataEnvio: pedidoEdicao?.dataEnvio ? new Date(pedidoEdicao.dataEnvio).toISOString().split('T')[0] : '',
+    prazo:     pedidoEdicao?.prazo ? new Date(pedidoEdicao.prazo).toISOString().split('T')[0] : '',
+    servico:   pedidoEdicao?.servico ?? '',
+    situacao:  pedidoEdicao?.situacao ?? 'Enviado',
   })
 
   const lab = labs.find(l => l.id === Number(form.labId))
@@ -185,8 +210,8 @@ function ModalNovoPedido({ labs, onClose, onSave }: {
       <div className="glass-card rounded-2xl border border-slate-200 dark:border-white/20 bg-white dark:bg-gray-900 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Plus className="w-5 h-5 text-blue-500 dark:text-blue-400" />
-            Novo Pedido — Lab Externo
+            {pedidoEdicao ? <Pencil className="w-5 h-5 text-blue-500 dark:text-blue-400" /> : <Plus className="w-5 h-5 text-blue-500 dark:text-blue-400" />}
+            {pedidoEdicao ? 'Editar Pedido' : 'Novo Pedido — Lab Externo'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-white transition-colors">
             <X className="w-5 h-5" />
@@ -194,17 +219,35 @@ function ModalNovoPedido({ labs, onClose, onSave }: {
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-slate-500 dark:text-gray-400 mb-1 block">Laboratório *</label>
-            <select
-              value={form.labId}
-              onChange={e => setForm(f => ({ ...f, labId: e.target.value }))}
-              className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
-            >
-              {labs.map(l => (
-                <option key={l.id} value={l.id} className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">{l.nome} — {l.cidade}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-500 dark:text-gray-400 mb-1 block">Laboratório *</label>
+              <select
+                value={form.labId}
+                onChange={e => setForm(f => ({ ...f, labId: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
+              >
+                {labs.map(l => (
+                  <option key={l.id} value={l.id} className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">{l.nome} — {l.cidade}</option>
+                ))}
+              </select>
+            </div>
+            
+            {pedidoEdicao && (
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-gray-400 mb-1 block">Situação</label>
+                <select
+                  value={form.situacao}
+                  onChange={e => setForm(f => ({ ...f, situacao: e.target.value as SituacaoPedido }))}
+                  className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
+                >
+                  <option value="Enviado" className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">Enviado</option>
+                  <option value="Provando" className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">Provando</option>
+                  <option value="Pronto" className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">Pronto</option>
+                  <option value="Entregue" className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">Entregue</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -285,6 +328,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   const [aba, setAba]               = useState<Aba>('todos')
   const [busca, setBusca]           = useState('')
   const [showModal, setShowModal]   = useState(false)
+  const [pedidoEditando, setPedidoEditando] = useState<LabExternoPedido | undefined>(undefined)
   const [isPending, startTransition] = useTransition()
 
   function getPedidosFiltrados(): LabExternoPedido[] {
@@ -311,16 +355,25 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
     startTransition(() => atualizarSituacao(id, next))
   }
 
+  function handleVoltar(id: number, prev: SituacaoPedido) {
+    startTransition(() => atualizarSituacao(id, prev))
+  }
+
   function handleRetrabalho(id: number) {
     const motivo = prompt('Motivo do retrabalho:')
     if (motivo === null) return
     startTransition(() => marcarRetrabalho(id, motivo))
   }
 
-  function handleNovoPedido(data: any) {
+  function handleSalvarPedido(data: any) {
     startTransition(async () => {
-      await criarPedido(data)
+      if (pedidoEditando) {
+        await atualizarPedido(pedidoEditando.id, data)
+      } else {
+        await criarPedido(data)
+      }
       setShowModal(false)
+      setPedidoEditando(undefined)
     })
   }
 
@@ -349,7 +402,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => { setPedidoEditando(undefined); setShowModal(true) }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -429,8 +482,10 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
               key={pedido.id}
               pedido={pedido}
               onAvancar={handleAvancar}
+              onVoltar={handleVoltar}
               onRetrabalho={handleRetrabalho}
               onExcluir={(id) => startTransition(() => excluirPedido(id))}
+              onEdit={(p) => { setPedidoEditando(p); setShowModal(true) }}
               isPending={isPending}
             />
           ))}
@@ -438,10 +493,11 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
       )}
 
       {showModal && (
-        <ModalNovoPedido
+        <ModalPedido
           labs={labs}
-          onClose={() => setShowModal(false)}
-          onSave={handleNovoPedido}
+          pedidoEdicao={pedidoEditando}
+          onClose={() => { setShowModal(false); setPedidoEditando(undefined) }}
+          onSave={handleSalvarPedido}
         />
       )}
     </div>
