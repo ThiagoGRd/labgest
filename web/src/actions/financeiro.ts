@@ -299,6 +299,22 @@ export async function editarConta(id: number, tipo: 'receber' | 'pagar', data: {
   }
 }
 
+export async function excluirConta(id: number, tipo: 'receber' | 'pagar') {
+  await requireUser()
+  try {
+    if (tipo === 'receber') {
+      await prisma.contaReceber.delete({ where: { id } })
+    } else {
+      await prisma.contaPagar.delete({ where: { id } })
+    }
+    revalidatePath('/financeiro')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao excluir conta:', error)
+    return { success: false, error: 'Erro ao excluir conta' }
+  }
+}
+
 export async function baixarConta(id: number, tipo: 'receber' | 'pagar') {
   try {
     if (tipo === 'receber') {

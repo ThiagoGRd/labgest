@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { baixarConta, sincronizarFinanceiroRetroativo, editarConta } from '@/actions/financeiro'
+import { baixarConta, sincronizarFinanceiroRetroativo, editarConta, excluirConta } from '@/actions/financeiro'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
-import { RefreshCw, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
 import {
   TrendingUp,
@@ -131,6 +131,13 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
   const handleBaixa = async (id: number, tipo: 'receber' | 'pagar') => {
     if (confirm('Confirmar recebimento/pagamento desta conta?')) {
       await baixarConta(id, tipo)
+    }
+  }
+
+  const handleExcluir = async (id: number, tipo: 'receber' | 'pagar') => {
+    if (confirm('Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.')) {
+      const res = await excluirConta(id, tipo)
+      if (!res.success) alert('Erro ao excluir lançamento.')
     }
   }
 
@@ -420,10 +427,19 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                  onClick={() => handleExcluir(conta.id, 'receber')}
+                                  title="Excluir lançamento"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                                 {conta.status !== 'Recebido' && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold text-xs"
                                     onClick={() => handleBaixa(conta.id, 'receber')}
                                   >
@@ -495,10 +511,19 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                  onClick={() => handleExcluir(conta.id, 'pagar')}
+                                  title="Excluir lançamento"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                                 {conta.status !== 'Pago' && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold text-xs"
                                     onClick={() => handleBaixa(conta.id, 'pagar')}
                                   >
