@@ -17,8 +17,9 @@ import { formatDate, formatCurrency } from '@/lib/date-utils'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
+import { NotaEntrega } from '@/components/ordens/nota-entrega'
 import { notificarMudancaStatus } from '@/actions/notificacoes'
-import { deleteOrdem } from '@/actions/ordens'
+import { deleteOrdem, marcarEntregue } from '@/actions/ordens'
 import {
   Search,
   Filter,
@@ -39,6 +40,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 
+import { CheckCircle2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -132,6 +134,8 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
+  const notaEntregaRef = useRef<HTMLDivElement>(null)
+  const [notaEntregaDados, setNotaEntregaDados] = useState<any>(null)
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
@@ -139,6 +143,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
 
   const handlePrintEtiqueta = useReactToPrint({
     contentRef: etiquetaRef,
+  })
+
+  const handlePrintNotaEntrega = useReactToPrint({
+    contentRef: notaEntregaRef,
   })
 
   const onPrintEtiquetaClick = (ordem: Ordem) => {
@@ -231,12 +239,33 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     }
   }
 
+  const handleMarcarEntregue = async (ordem: Ordem) => {
+    if (!confirm(`Confirmar entrega da OS #${ordem.id} para ${ordem.paciente}?`)) return
+    const result = await marcarEntregue(ordem.id)
+    if (!result.success) {
+      alert('Erro ao marcar como entregue: ' + (result.error || 'Tente novamente'))
+      return
+    }
+    setNotaEntregaDados({
+      id: ordem.id,
+      paciente: ordem.paciente,
+      cliente: { nome: ordem.cliente.nome },
+      servico: ordem.servico,
+      valor: ordem.valor,
+      dataEntrega: new Date().toISOString(),
+    })
+    setTimeout(() => {
+      handlePrintNotaEntrega()
+    }, 100)
+  }
+
   return (
     <DashboardLayout>
       {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
         {printEtiqueta && <EtiquetaImpressao ref={etiquetaRef} ordem={printEtiqueta} />}
+        {notaEntregaDados && <NotaEntrega ref={notaEntregaRef} ordem={notaEntregaDados} />}
       </div>
 
       <NovaOrdemModal 
@@ -466,7 +495,20 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl">
                               <DropdownMenuLabel className="text-xs font-bold text-slate-500 uppercase px-2 py-1.5">Ações</DropdownMenuLabel>
-                              
+
+                              {ordem.status === 'Finalizado' && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => handleMarcarEntregue(ordem)}
+                                    className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 focus:bg-emerald-50 dark:focus:bg-emerald-900/20"
+                                  >
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Marcar como Entregue
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                                </>
+                              )}
+
                               <DropdownMenuItem onClick={() => handleView(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
                                 <Eye className="mr-2 h-4 w-4 text-slate-400" />
                                 Visualizar Detalhes

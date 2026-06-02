@@ -319,6 +319,38 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
   }
 }
 
+export async function marcarEntregue(ordemId: number) {
+  await requireUser()
+  try {
+    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+
+    const historico = (ordem.historicoEtapas as any[]) || []
+    historico.push({
+      etapa: ordem.etapaAtual || 'pronto',
+      acao: 'avancou',
+      para: 'entregue',
+      data: new Date().toISOString(),
+    })
+
+    await prisma.ordem.update({
+      where: { id: ordemId },
+      data: {
+        etapaAtual: 'entregue',
+        status: 'Entregue',
+        historicoEtapas: historico,
+        progresso: 100,
+      }
+    })
+
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('[marcarEntregue] Erro:', error)
+    return { success: false, error: 'Erro ao marcar como entregue' }
+  }
+}
+
 export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
   await requireUser()
   try {
