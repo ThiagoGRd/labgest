@@ -320,8 +320,8 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
 }
 
 export async function marcarEntregue(ordemId: number) {
-  await requireUser()
   try {
+    await requireUser()
     const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
@@ -340,14 +340,16 @@ export async function marcarEntregue(ordemId: number) {
         status: 'Entregue',
         historicoEtapas: historico,
         progresso: 100,
+        dataFinalizacao: new Date(),
       }
     })
 
     revalidatePath('/ordens')
     return { success: true }
   } catch (error) {
-    console.error('[marcarEntregue] Erro:', error)
-    return { success: false, error: 'Erro ao marcar como entregue' }
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[marcarEntregue] Erro:', msg)
+    return { success: false, error: msg }
   }
 }
 
