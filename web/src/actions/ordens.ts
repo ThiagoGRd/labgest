@@ -337,7 +337,6 @@ export async function marcarEntregue(ordemId: number) {
       where: { id: ordemId },
       data: {
         etapaAtual: 'entregue',
-        status: 'Entregue',
         historicoEtapas: historico,
         progresso: 100,
         dataFinalizacao: new Date(),
