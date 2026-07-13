@@ -54,6 +54,7 @@ import {
 interface Ordem {
   id: number
   paciente: string
+  cpfPaciente?: string
   cliente: { nome: string }
   servico: string
   status: string
@@ -186,8 +187,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
   const ordens = initialData || []
 
   const filteredOrdens = ordens.filter(ordem => {
+    const cpfSearch = search.replace(/\D/g, '')
     const matchSearch = 
       ordem.paciente.toLowerCase().includes(search.toLowerCase()) ||
+      (cpfSearch.length > 0 && (ordem.cpfPaciente || '').replace(/\D/g, '').includes(cpfSearch)) ||
       ordem.cliente.nome.toLowerCase().includes(search.toLowerCase()) ||
       ordem.servico.toLowerCase().includes(search.toLowerCase())
     const matchStatus = statusFilter === 'todos' || ordem.status === statusFilter

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Plus, Trash2, Package } from 'lucide-react'
 import { createBatchOrdens } from '@/actions/ordens'
 import { addDaysSkippingSundays, toDateInputValue } from '@/lib/date-utils'
+import { formatarCpf } from '@/lib/cpf'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
@@ -37,6 +38,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
   const [globalData, setGlobalData] = useState({
     clienteId: '',
     paciente: '',
+    cpfPaciente: '',
     dataEntrega: '',
     prioridade: 'Normal',
     observacoes: '',
@@ -116,7 +118,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
       })
 
       if (result.success) {
-        setGlobalData({ clienteId: '', paciente: '', dataEntrega: '', prioridade: 'Normal', observacoes: '' })
+        setGlobalData({ clienteId: '', paciente: '', cpfPaciente: '', dataEntrega: '', prioridade: 'Normal', observacoes: '' })
         setItens([])
         setCurrentItem({ servicoId: '', elementos: '', corDentes: '', material: '' })
         onSuccess?.()
@@ -147,8 +149,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
         )}
 
         {/* Seção 1: Dados do Paciente */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-3">
             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Dentista / Clínica</label>
             <Select 
               value={globalData.clienteId} 
@@ -170,6 +172,20 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
               onChange={e => setGlobalData(p => ({ ...p, paciente: e.target.value }))}
               className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
               placeholder="Ex: Maria Silva"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">CPF do Paciente</label>
+            <Input
+              value={globalData.cpfPaciente}
+              onChange={e => setGlobalData(p => ({ ...p, cpfPaciente: formatarCpf(e.target.value) }))}
+              className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
+              placeholder="000.000.000-00"
+              inputMode="numeric"
+              maxLength={14}
+              required
             />
           </div>
 
@@ -180,6 +196,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
               value={globalData.dataEntrega}
               onChange={e => setGlobalData(p => ({ ...p, dataEntrega: e.target.value }))}
               className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
+              required
             />
           </div>
         </div>

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
 import { addDaysSkippingSundays, toDateInputValue } from '@/lib/utils'
+import { formatarCpf } from '@/lib/cpf'
 
 interface Servico {
   id: number
@@ -56,6 +57,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   // Dados Globais
   const [globalData, setGlobalData] = useState({
     paciente: '',
+    cpfPaciente: '',
     dataEntrega: '',
     observacoes: '',
     arquivos: [] as string[],
@@ -152,6 +154,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     try {
       const result = await criarPedidoBatch({
         paciente: globalData.paciente,
+        cpfPaciente: globalData.cpfPaciente,
         dataEntrega: globalData.dataEntrega,
         observacoes: globalData.observacoes,
         arquivos: globalData.arquivos,
@@ -242,6 +245,20 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    CPF do Paciente *
+                  </label>
+                  <Input
+                    placeholder="000.000.000-00"
+                    value={globalData.cpfPaciente}
+                    onChange={(e) => setGlobalData(prev => ({ ...prev, cpfPaciente: formatarCpf(e.target.value) }))}
+                    inputMode="numeric"
+                    maxLength={14}
+                    className="dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:placeholder-zinc-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Data de Entrega Desejada *
                   </label>
                   <Input
@@ -256,7 +273,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 <div className="flex justify-end">
                   <Button 
                     onClick={() => setStep(2)}
-                    disabled={!globalData.paciente || !globalData.dataEntrega}
+                    disabled={!globalData.paciente || !globalData.cpfPaciente || !globalData.dataEntrega}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     Próximo
@@ -503,6 +520,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl p-4">
                   <h4 className="font-bold text-sm mb-2">Resumo</h4>
                   <p className="text-sm">Paciente: <span className="font-medium">{globalData.paciente}</span></p>
+                  <p className="text-sm">CPF: <span className="font-medium">{globalData.cpfPaciente}</span></p>
                   <p className="text-sm">Itens: <span className="font-medium">{itens.length}</span></p>
                   <p className="text-sm">Total Estimado: <span className="font-medium text-emerald-600">{formatCurrency(itens.reduce((acc, i) => acc + i.preco, 0))}</span></p>
                 </div>

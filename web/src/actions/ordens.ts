@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { gerarCobrancaAutomatica } from './financeiro'
 import { parseDateLocal } from '@/lib/date-utils'
+import { isCpfValido, normalizarCpf } from '@/lib/cpf'
 import {
   getWorkflowForServico,
   getNextEtapa,
@@ -34,6 +35,7 @@ export async function getOrdens() {
     return ordens.map(o => ({
       id: o.id,
       paciente: o.nomePaciente,
+      cpfPaciente: o.cpfPaciente || '',
       cliente: { nome: o.clienteNome || o.cliente?.nome || 'Cliente Desconhecido' },
       servico: o.servicoNome || o.servico?.nome || 'Serviço',
       status: o.status || 'Aguardando',
@@ -65,6 +67,7 @@ export async function getOrdens() {
 export async function createBatchOrdens(data: {
   clienteId: string
   paciente: string
+  cpfPaciente: string
   dataEntrega: string
   prioridade: string
   observacoes: string
@@ -77,6 +80,9 @@ export async function createBatchOrdens(data: {
   }>
 }) {
   try {
+    const cpfPaciente = normalizarCpf(data.cpfPaciente)
+    if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+
     const cliente = await prisma.cliente.findUnique({ where: { id: Number(data.clienteId) } })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
@@ -96,6 +102,7 @@ export async function createBatchOrdens(data: {
           servicoId: servico.id,
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
+          cpfPaciente,
           dataEntrega: parseDateLocal(data.dataEntrega),
           valor: valor,
           valorFinal: valor,
@@ -127,6 +134,7 @@ export async function createBatchOrdens(data: {
 
 export async function updateOrdem(id: number, data: {
   paciente: string
+  cpfPaciente: string
   dataEntrega: string
   prioridade: string
   status: string
@@ -137,6 +145,9 @@ export async function updateOrdem(id: number, data: {
 }) {
   await requireUser()
   try {
+    const cpfPaciente = normalizarCpf(data.cpfPaciente)
+    if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+
     // Normaliza etapaAtual para ID canônico antes de salvar
     const etapaCanonica = normalizarEtapa(data.etapaAtual)
     const novoStatus = etapaCanonica === ETAPA_FINAL ? 'Finalizado' : data.status
@@ -145,6 +156,7 @@ export async function updateOrdem(id: number, data: {
       where: { id },
       data: {
         nomePaciente: data.paciente,
+        cpfPaciente,
         dataEntrega: parseDateLocal(data.dataEntrega),
         prioridade: data.prioridade,
         status: novoStatus,

@@ -9,10 +9,12 @@ import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
 import { ETAPA_IDS, ETAPA_LABELS, etapaLabel } from '@/lib/workflow-config'
 import type { TipoWorkflow, EtapaId } from '@/lib/workflow-config'
+import { formatarCpf } from '@/lib/cpf'
 
 interface Ordem {
   id: number
   paciente: string
+  cpfPaciente?: string
   cliente: { nome: string }
   clienteId?: number
   servico: string
@@ -45,6 +47,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     paciente: '',
+    cpfPaciente: '',
     dataEntrega: '',
     prioridade: 'Normal',
     status: 'Aguardando',
@@ -61,6 +64,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     if (ordem) {
       setFormData({
         paciente: ordem.paciente || '',
+        cpfPaciente: formatarCpf(ordem.cpfPaciente || ''),
         dataEntrega: ordem.dataEntrega ? ordem.dataEntrega.split('T')[0] : '',
         prioridade: ordem.prioridade || 'Normal',
         status: ordem.status || 'Aguardando',
@@ -87,6 +91,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     try {
       const result = await updateOrdem(ordem.id, {
         paciente: formData.paciente,
+        cpfPaciente: formData.cpfPaciente,
         dataEntrega: formData.dataEntrega,
         prioridade: formData.prioridade,
         status: formData.status,
@@ -145,6 +150,20 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
               value={formData.paciente}
               onChange={handleChange}
               className="h-11 rounded-xl"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">CPF do Paciente</label>
+            <Input
+              name="cpfPaciente"
+              value={formData.cpfPaciente}
+              onChange={(event) => setFormData(prev => ({ ...prev, cpfPaciente: formatarCpf(event.target.value) }))}
+              className="h-11 rounded-xl"
+              placeholder="000.000.000-00"
+              inputMode="numeric"
+              maxLength={14}
               required
             />
           </div>

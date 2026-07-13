@@ -58,6 +58,7 @@ model Ordem {
   servicoId                                              Int?            @map("servico_id")
   servicoNome                                            String          @map("servico_nome") @db.VarChar(255)
   nomePaciente                                           String          @map("nome_paciente") @db.VarChar(255)
+  cpfPaciente                                            String?         @map("cpf_paciente") @db.VarChar(11)
   dataPedido                                             DateTime?       @default(dbgenerated("CURRENT_DATE")) @map("data_pedido") @db.Date
   dataEntrega                                            DateTime        @map("data_entrega") @db.Date
   dataFinalizacao                                        DateTime?       @map("data_finalizacao") @db.Date
@@ -93,6 +94,7 @@ model Ordem {
   servico                                                Servico?        @relation(fields: [servicoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([clienteId], map: "idx_ordens_cliente_id")
+  @@index([cpfPaciente], map: "idx_ordens_cpf_paciente")
   @@index([dataEntrega], map: "idx_ordens_data_entrega")
   @@index([prioridade], map: "idx_ordens_prioridade")
   @@index([status], map: "idx_ordens_status")

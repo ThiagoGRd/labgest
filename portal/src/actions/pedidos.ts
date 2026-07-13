@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { isCpfValido, normalizarCpf } from '@/lib/cpf'
 
 const prisma = new PrismaClient()
 
@@ -61,6 +62,7 @@ async function getClienteLogado() {
 
 export async function criarPedidoBatch(data: {
   paciente: string
+  cpfPaciente: string
   dataEntrega: string
   observacoes: string
   arquivos: string[]
@@ -80,6 +82,9 @@ export async function criarPedidoBatch(data: {
   const { cliente } = logado
 
   try {
+    const cpfPaciente = normalizarCpf(data.cpfPaciente)
+    if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+
     const promises = data.itens.map(async (item) => {
       const servico = await prisma.servico.findUnique({
         where: { id: item.servicoId }
@@ -104,6 +109,7 @@ export async function criarPedidoBatch(data: {
           servicoId: servico.id,
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
+          cpfPaciente,
           dataEntrega: parseDateLocal(data.dataEntrega),
           valor: servico.preco,
           valorFinal: servico.preco,
@@ -136,6 +142,7 @@ export async function criarPedidoBatch(data: {
 
 export async function criarPedido(data: {
   paciente: string
+  cpfPaciente: string
   servicoId: number
   servicoNome: string
   corDentes: string
@@ -152,6 +159,9 @@ export async function criarPedido(data: {
   const { cliente } = logado
 
   try {
+    const cpfPaciente = normalizarCpf(data.cpfPaciente)
+    if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+
     // Pegar preço do serviço
     const servico = await prisma.servico.findUnique({
       where: { id: data.servicoId }
@@ -176,6 +186,7 @@ export async function criarPedido(data: {
         servicoId: servico.id,
         servicoNome: servico.nome,
         nomePaciente: data.paciente,
+        cpfPaciente,
         dataEntrega: parseDateLocal(data.dataEntrega),
         valor: servico.preco,
         valorFinal: servico.preco,
