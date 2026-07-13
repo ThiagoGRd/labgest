@@ -4,14 +4,17 @@ import { PrioridadesView } from './prioridades-view'
 export const dynamic = 'force-dynamic'
 
 export default async function PrioridadesPage() {
-  const hoje = new Date()
-  const amanha = new Date(hoje)
-  amanha.setDate(amanha.getDate() + 1)
+  const inicioHoje = new Date()
+  inicioHoje.setHours(0, 0, 0, 0)
+  const inicioAmanha = new Date(inicioHoje)
+  inicioAmanha.setDate(inicioAmanha.getDate() + 1)
+  const inicioDepoisAmanha = new Date(inicioAmanha)
+  inicioDepoisAmanha.setDate(inicioDepoisAmanha.getDate() + 1)
 
   // 1. Pedidos Atrasados (Data Entrega < Hoje) e não finalizados
   const atrasados = await prisma.ordem.findMany({
     where: {
-      dataEntrega: { lt: hoje },
+      dataEntrega: { lt: inicioHoje },
       status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] }
     },
     orderBy: { dataEntrega: 'asc' },
@@ -21,7 +24,7 @@ export default async function PrioridadesPage() {
   // 2. Para Hoje
   const paraHoje = await prisma.ordem.findMany({
     where: {
-      dataEntrega: { equals: hoje },
+      dataEntrega: { gte: inicioHoje, lt: inicioAmanha },
       status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] }
     },
     include: { cliente: true, servico: true }
@@ -32,7 +35,7 @@ export default async function PrioridadesPage() {
     where: {
       prioridade: 'Urgente',
       status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] },
-      dataEntrega: { gt: hoje } // Não duplicar com os de hoje/atrasados
+      dataEntrega: { gte: inicioAmanha } // Não duplicar com os de hoje/atrasados
     },
     orderBy: { dataEntrega: 'asc' },
     include: { cliente: true, servico: true }
@@ -41,7 +44,7 @@ export default async function PrioridadesPage() {
   // 4. Próximos (Amanhã)
   const proximos = await prisma.ordem.findMany({
     where: {
-      dataEntrega: { equals: amanha },
+      dataEntrega: { gte: inicioAmanha, lt: inicioDepoisAmanha },
       status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] }
     },
     include: { cliente: true, servico: true }

@@ -1,30 +1,24 @@
 'use client'
 
+import { useRef } from 'react'
+import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, Clock, Calendar, CheckCircle2, User, AlertCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { RelatorioPrioridades, type OrdemPrioridade } from '@/components/prioridades/relatorio-prioridades'
+import { AlertTriangle, Clock, Calendar, CheckCircle2, User, AlertCircle, FileText } from 'lucide-react'
 import { etapaLabel } from '@/lib/workflow-config'
 
-interface Ordem {
-  id: number
-  nomePaciente: string
-  servicoNome: string
-  clienteNome: string
-  dataEntrega: Date
-  etapaAtual: string | null
-  status: string | null
-}
-
 interface PrioridadesViewProps {
-  atrasados: Ordem[]
-  hoje: Ordem[]
-  urgentes: Ordem[]
-  proximos: Ordem[]
+  atrasados: OrdemPrioridade[]
+  hoje: OrdemPrioridade[]
+  urgentes: OrdemPrioridade[]
+  proximos: OrdemPrioridade[]
 }
 
-function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 'urgente' | 'proximo' }) {
+function OrdemCard({ ordem, type }: { ordem: OrdemPrioridade; type: 'atrasado' | 'hoje' | 'urgente' | 'proximo' }) {
   const colors = {
     atrasado: 'border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-500/10',
     hoje: 'border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-500/10',
@@ -58,7 +52,7 @@ function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 
             {etapaLabel(ordem.etapaAtual || 'recebimento', 'lab')}
           </Badge>
           <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400" suppressHydrationWarning>
-            Entrega: {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR')}
+            Entrega: {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
           </p>
         </div>
       </div>
@@ -67,16 +61,38 @@ function OrdemCard({ ordem, type }: { ordem: Ordem; type: 'atrasado' | 'hoje' | 
 }
 
 export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: PrioridadesViewProps) {
-  const totalPrioridades = atrasados.length + hoje.length + urgentes.length
+  const relatorioRef = useRef<HTMLDivElement>(null)
+  const totalPrioridades = new Set([...atrasados, ...hoje, ...urgentes].map((ordem) => ordem.id)).size
+  const gerarRelatorio = useReactToPrint({
+    contentRef: relatorioRef,
+    documentTitle: `relatorio-prioridades-${new Date().toISOString().slice(0, 10)}`,
+  })
 
   return (
     <DashboardLayout>
+      <div className="hidden">
+        <RelatorioPrioridades
+          ref={relatorioRef}
+          atrasados={atrasados}
+          hoje={hoje}
+          urgentes={urgentes}
+          proximos={proximos}
+        />
+      </div>
+
       <Header 
         title="Cronograma de Prioridades" 
         subtitle={`Você tem ${totalPrioridades} entregas críticas para gerenciar.`}
       />
 
-      <div className="p-6 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="px-6 pt-6 flex justify-end">
+        <Button onClick={() => gerarRelatorio()}>
+          <FileText className="h-4 w-4" />
+          Gerar relatório
+        </Button>
+      </div>
+
+      <div className="p-6 pt-4 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         
         {/* Coluna 1: Críticos (Atrasados + Urgentes) */}
         <div className="space-y-6">
