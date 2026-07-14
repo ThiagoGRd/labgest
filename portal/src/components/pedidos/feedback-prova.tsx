@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { salvarFeedbackProva } from '@/actions/ciclos'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +20,7 @@ interface FeedbackProvaProps {
 }
 
 export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaProps) {
+  const router = useRouter()
   const [decisao, setDecisao] = useState<'ajustes' | 'aprovado' | null>(null)
   const [observacoes, setObservacoes] = useState('')
   const [fotos, setFotos] = useState<string[]>([])
@@ -66,6 +68,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         return
       }
       setEnviado(true)
+      router.refresh()
       onSubmit?.()
     } catch {
       setError('Não foi possível enviar o resultado da prova.')
@@ -82,7 +85,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         </div>
         <div>
           <p className="font-bold text-white">Feedback enviado!</p>
-          <p className="text-sm text-zinc-400">O laboratório já fue notificado.</p>
+          <p className="text-sm text-zinc-400">O laboratório já foi notificado.</p>
         </div>
       </div>
     )
@@ -192,8 +195,8 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
             }`}
           >
             <CheckCircle2 className="h-6 w-6" />
-            <span className="text-sm font-bold">Aprovado!</span>
-            <span className="text-[10px] text-center opacity-70">Pode finalizar</span>
+            <span className="text-sm font-bold">Aprovado</span>
+            <span className="text-[10px] text-center opacity-70">Seguir para finalização</span>
           </button>
         </div>
       </div>
@@ -204,7 +207,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
       >
         {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-        Enviar Feedback ao Laboratório
+        {decisao === 'aprovado' ? 'Aprovar e enviar ao laboratório' : decisao === 'ajustes' ? 'Solicitar ajustes' : 'Enviar decisão ao laboratório'}
       </Button>
     </div>
   )

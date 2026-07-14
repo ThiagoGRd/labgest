@@ -13,15 +13,19 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
     return { success: false, error: 'Informe um prazo válido' }
   }
 
-  // Conta quantos ciclos já existem para numerar o novo
-  const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId } })
+  const [totalCiclos, ordem] = await Promise.all([
+    prisma.cicloProducao.count({ where: { ordemId } }),
+    prisma.ordem.findUnique({ where: { id: ordemId }, select: { etapaAtual: true } }),
+  ])
+  if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
   const dataEntrada = new Date()
   const dataComprometida = new Date()
   dataComprometida.setDate(dataComprometida.getDate() + prazoDias)
 
   const subetapa = etapa?.trim() || 'Produção'
-  const macroetapa = normalizarEtapa(subetapa)
+  // Abrir um ciclo registra o detalhe técnico sem trocar a macroetapa do Kanban.
+  const macroetapa = normalizarEtapa(ordem.etapaAtual || 'confeccao')
   const [ciclo] = await prisma.$transaction([
     prisma.cicloProducao.create({
       data: {
@@ -77,52 +81,6 @@ export async function enviarParaProva(cicloId: number) {
   return { success: true, ciclo }
 }
 
-// Dentista registra resultado da prova via Portal
-export async function salvarFeedbackProva(
-  cicloId: number,
-  observacoes: string,
-  decisao: 'ajustes' | 'aprovado',
-  fotos: string[] = []
-) {
-  const observacoesNormalizadas = observacoes.trim()
-  if (decisao === 'ajustes' && !observacoesNormalizadas) {
-    return { success: false, error: 'Descreva quais ajustes precisam ser realizados' }
-  }
-
-  // Esta action pode ser chamada pelo portal (sem requireUser de lab)
-  const ciclo = await prisma.cicloProducao.update({
-    where: { id: cicloId },
-    data: {
-      observacoesDentista: observacoesNormalizadas,
-      decisao,
-      fotosProva: fotos,
-    },
-    include: { ordem: true }
-  })
-
-  // A etapa permanece em prova até o laboratório confirmar o retorno físico.
-  if (decisao === 'aprovado') {
-    await prisma.ordem.update({
-      where: { id: ciclo.ordemId },
-      data: {
-        status: 'Em Prova',
-        etapaAtual: 'em_prova',
-      }
-    })
-  } else {
-    await prisma.ordem.update({
-      where: { id: ciclo.ordemId },
-      data: {
-        status: 'Em Prova',
-        etapaAtual: 'em_prova',
-      }
-    })
-  }
-
-  revalidatePath('/pedidos')
-  return { success: true }
-}
-
 // Auxiliar confirma recebimento físico e abre novo ciclo
 export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, novaEtapa?: string) {
   await requireUser()
@@ -139,48 +97,106 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
   if (cicloAtual.decisao === 'ajustes' && !cicloAtual.observacoesDentista?.trim()) {
     return { success: false, error: 'A observação do ajuste é obrigatória antes de confirmar o retorno' }
   }
-
-  // Fecha o ciclo atual
-  const cicloClosed = await prisma.cicloProducao.update({
-    where: { id: cicloId },
-    data: {
-      dataRetorno: new Date(),
-      status: 'concluido',
-    },
-    include: { ordem: true }
-  })
+  if (cicloAtual.decisao === 'ajustes' && (!Number.isInteger(novoPrazoDias) || novoPrazoDias <= 0)) {
+    return { success: false, error: 'Informe um prazo válido para o ajuste' }
+  }
 
   // Se decisão foi 'aprovado', vai para finalização sem abrir novo ciclo
-  if (cicloClosed.decisao === 'aprovado') {
-    await prisma.ordem.update({
-      where: { id: cicloClosed.ordemId },
-      data: {
-        status: 'Em Produção',
-        etapaAtual: 'acabamento',
-        subetapaAtual: 'Acabamento e polimento',
-      }
-    })
+  if (cicloAtual.decisao === 'aprovado') {
+    await prisma.$transaction([
+      prisma.cicloProducao.update({
+        where: { id: cicloId },
+        data: { dataRetorno: new Date(), status: 'concluido' },
+      }),
+      prisma.ordem.update({
+        where: { id: cicloAtual.ordemId },
+        data: {
+          status: 'Em Produção',
+          etapaAtual: 'acabamento',
+          subetapaAtual: 'Acabamento e polimento',
+        },
+      }),
+    ])
     revalidatePath('/producao')
+    revalidatePath('/ordens')
+    revalidatePath('/prioridades')
     return { success: true, finalizar: true }
   }
 
-  // Caso contrário, abre novo ciclo (ajustes)
-  const resultado = await abrirCiclo(cicloClosed.ordemId, novoPrazoDias, novaEtapa || 'Ajustes solicitados pelo dentista')
-  if (!resultado.success) return resultado
+  const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId: cicloAtual.ordemId } })
+  const dataComprometida = new Date()
+  dataComprometida.setDate(dataComprometida.getDate() + novoPrazoDias)
+  const subetapa = novaEtapa?.trim() || 'Ajustes solicitados pelo dentista'
 
-  await prisma.ordem.update({
-    where: { id: cicloClosed.ordemId },
-    data: {
-      etapaAtual: 'ajuste',
-      subetapaAtual: novaEtapa?.trim() || 'Ajustes solicitados pelo dentista',
-      status: 'Em Produção',
-    }
-  })
+  // Ajuste e abertura do novo ciclo são atômicos: ou ambos acontecem, ou nenhum.
+  const [, novoCiclo] = await prisma.$transaction([
+    prisma.cicloProducao.update({
+      where: { id: cicloId },
+      data: { dataRetorno: new Date(), status: 'concluido' },
+    }),
+    prisma.cicloProducao.create({
+      data: {
+        ordemId: cicloAtual.ordemId,
+        numeroCiclo: totalCiclos + 1,
+        etapa: subetapa,
+        dataEntrada: new Date(),
+        prazoDias: novoPrazoDias,
+        dataComprometida,
+        status: 'no_lab',
+      },
+    }),
+    prisma.ordem.update({
+      where: { id: cicloAtual.ordemId },
+      data: {
+        etapaAtual: 'ajuste',
+        subetapaAtual: subetapa,
+        status: 'Em Produção',
+      },
+    }),
+  ])
 
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
-  return { success: true, novoCiclo: resultado.ciclo }
+  return { success: true, novoCiclo }
+}
+
+// Após executar o ajuste, permite seguir para acabamento sem exigir uma nova prova.
+export async function concluirAjusteSemNovaProva(cicloId: number) {
+  await requireUser()
+
+  const ciclo = await prisma.cicloProducao.findUnique({
+    where: { id: cicloId },
+    include: { ordem: true },
+  })
+
+  if (!ciclo) return { success: false, error: 'Ciclo de ajuste não encontrado' }
+  if (ciclo.status !== 'no_lab' || normalizarEtapa(ciclo.ordem.etapaAtual || '') !== 'ajuste') {
+    return { success: false, error: 'A ordem não está em um ajuste ativo' }
+  }
+
+  await prisma.$transaction([
+    prisma.cicloProducao.update({
+      where: { id: cicloId },
+      data: {
+        dataSaida: new Date(),
+        status: 'concluido',
+      },
+    }),
+    prisma.ordem.update({
+      where: { id: ciclo.ordemId },
+      data: {
+        etapaAtual: 'acabamento',
+        subetapaAtual: 'Acabamento e polimento',
+        status: 'Em Produção',
+      },
+    }),
+  ])
+
+  revalidatePath('/producao')
+  revalidatePath('/ordens')
+  revalidatePath('/prioridades')
+  return { success: true }
 }
 
 // Busca ciclos de uma ordem (para exibir no portal e no lab)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { confirmarRetorno } from '@/actions/ciclos'
@@ -25,6 +26,7 @@ export function ConfirmarRetornoModal({
   observacoesDentista,
   fotosProva = []
 }: ConfirmarRetornoModalProps) {
+  const router = useRouter()
   const [novoPrazo, setNovoPrazo] = useState(7)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -42,6 +44,7 @@ export function ConfirmarRetornoModal({
         setError(('error' in result && result.error) || 'Não foi possível confirmar o retorno')
         return
       }
+      router.refresh()
       onClose()
     } catch {
       setError('Não foi possível confirmar o retorno')
@@ -71,7 +74,7 @@ export function ConfirmarRetornoModal({
               : <RotateCcw className="h-5 w-5 text-amber-600" />
             }
             <span className={`text-sm font-bold ${isAprovado ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
-              {isAprovado ? 'Dentista aprovou — pode finalizar!' : 'Dentista solicitou ajustes'}
+              {isAprovado ? 'Dentista aprovou — seguir para acabamento' : 'Dentista solicitou ajustes'}
             </span>
           </div>
           {observacoesDentista && (
@@ -140,7 +143,7 @@ export function ConfirmarRetornoModal({
             className={`flex-1 text-white ${isAprovado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           >
             <PackageCheck className="h-4 w-4 mr-2" />
-            {loading ? 'Registrando...' : isAprovado ? 'Confirmar e Finalizar' : 'Confirmar Retorno'}
+            {loading ? 'Registrando...' : isAprovado ? 'Confirmar retorno e iniciar acabamento' : 'Confirmar retorno e iniciar ajustes'}
           </Button>
         </div>
       </div>

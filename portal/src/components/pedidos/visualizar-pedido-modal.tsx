@@ -4,27 +4,17 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { aprovarProva } from '@/actions/pedidos'
 import {
-  User,
   Calendar,
-  Clock,
   Palette,
-  FileText,
-  Package,
   DollarSign,
   Activity,
-  Paperclip,
-  Eye,
-  X,
   MapPin,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   Camera
 } from 'lucide-react'
-import { CHECKLIST_LABELS, isEtapaProva, isChecklistCompleto, type ChecklistEstetico, getWorkflowForServico } from '@/lib/workflow-config'
+import type { ChecklistEstetico } from '@/lib/workflow-config'
 import { FeedbackProva } from '@/components/pedidos/feedback-prova'
 import { TimelineCiclos } from '@/components/pedidos/timeline-ciclos'
 import { ChatPedido } from '@/components/pedidos/chat-pedido'
@@ -95,8 +85,6 @@ function formatCurrency(value: number) {
 }
 
 export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPedidoModalProps) {
-  const [loading, setLoading] = useState(false)
-  const [checklist, setChecklist] = useState<Partial<ChecklistEstetico>>({})
   const [fotosAdicionadas, setFotosAdicionadas] = useState<Record<number, string[]>>({})
   
   if (!pedido) return null
@@ -105,34 +93,12 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
 
   // Histórico reverso (mais recente primeiro)
   const historico = [...(pedido.historicoEtapas || [])].reverse()
-
-  // Detectar se é etapa de prova
-  const tipoWorkflow = getWorkflowForServico(pedido.servico)
-  const isProva = isEtapaProva(tipoWorkflow, pedido.etapaId || pedido.etapa)
-  
-  // Checklist combinado (existente + novo)
-  const mergedChecklist = { ...(pedido.checklistEstetico || {}), ...checklist }
-  const podeAprovar = isChecklistCompleto(mergedChecklist)
-
-  const handleCheck = (key: keyof ChecklistEstetico, checked: boolean) => {
-    setChecklist(prev => ({ ...prev, [key]: checked }))
-  }
+  const cicloEmProva = [...(pedido.ciclos || [])].reverse().find(ciclo => ciclo.status === 'em_prova')
+  const decisaoRegistrada = cicloEmProva?.decisao as 'ajustes' | 'aprovado' | null | undefined
 
   // Extrair Ficha Clínica
   const chk: any = pedido.checklistEstetico || {}
   const hasFichaClinica = Object.values(chk).some(val => val === true || (typeof val === 'string' && val.trim() !== ''))
-
-  const handleAprovarProva = async () => {
-    setLoading(true)
-    try {
-      await aprovarProva(pedido.id, mergedChecklist)
-      onClose()
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <Modal
@@ -188,7 +154,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
         <div className="lg:col-span-2 space-y-6">
           
           {/* Feedback de Prova (ciclo ativo em prova) */}
-          {pedido.status === 'Em Prova' && pedido.cicloAtivoId && (
+          {pedido.status === 'Em Prova' && pedido.cicloAtivoId && !decisaoRegistrada && (
             <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-4">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -199,6 +165,34 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
                 numeroCiclo={pedido.ciclos?.length || 1}
                 onSubmit={onClose}
               />
+            </div>
+          )}
+
+          {pedido.status === 'Em Prova' && decisaoRegistrada && (
+            <div className={`rounded-xl border p-5 ${
+              decisaoRegistrada === 'aprovado'
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-900/10'
+                : 'border-amber-200 bg-amber-50 dark:border-amber-900/30 dark:bg-amber-900/10'
+            }`}>
+              <div className="flex items-start gap-3">
+                {decisaoRegistrada === 'aprovado'
+                  ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                  : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                }
+                <div>
+                  <h3 className={`text-sm font-bold ${decisaoRegistrada === 'aprovado' ? 'text-emerald-800 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-400'}`}>
+                    {decisaoRegistrada === 'aprovado' ? 'Prova aprovada' : 'Ajustes solicitados'}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    Decisão enviada. Aguardando o laboratório confirmar o retorno físico do trabalho.
+                  </p>
+                  {cicloEmProva?.observacoesDentista && (
+                    <p className="mt-3 rounded-lg bg-white/70 p-3 text-sm text-slate-700 dark:bg-black/20 dark:text-slate-300">
+                      {cicloEmProva.observacoesDentista}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

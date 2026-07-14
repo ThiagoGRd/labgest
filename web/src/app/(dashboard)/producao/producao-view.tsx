@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
-import { enviarParaProva } from '@/actions/ciclos'
+import { concluirAjusteSemNovaProva, enviarParaProva } from '@/actions/ciclos'
 import { getOrdemById } from '@/actions/ordens'
 import { KANBAN_ETAPAS, etapaLabel, normalizarEtapa } from '@/lib/workflow-config'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
@@ -21,7 +22,6 @@ import {
   FileText,
   FlaskConical,
   PackageCheck,
-  Clock,
   RotateCcw,
   AlertTriangle,
   CheckCircle2,
@@ -83,6 +83,8 @@ function KanbanCard({
   onPatientClick,
   onEnviarProva,
   onConfirmarRetorno,
+  onAbrirCiclo,
+  onConcluirAjuste,
 }: {
   ordem: Ordem
   etapaId: string
@@ -90,9 +92,12 @@ function KanbanCard({
   onPatientClick: () => void
   onEnviarProva: () => void
   onConfirmarRetorno: () => void
+  onAbrirCiclo: () => void
+  onConcluirAjuste: () => void
 }) {
   const isEmProva = ordem.cicloStatus === 'em_prova' || etapaId === 'em_prova'
-  const hasRetorno = ordem.cicloDentistaDeci !== null && ordem.cicloStatus === 'em_prova'
+  const hasRetorno = Boolean(ordem.cicloDentistaDeci) && ordem.cicloStatus === 'em_prova'
+  const isAjusteNoLab = etapaId === 'ajuste' && ordem.cicloStatus === 'no_lab'
   const daysLeft = getDaysRemaining(
     ordem.cicloComprometido || ordem.entrega,
     isEmProva
@@ -187,25 +192,52 @@ function KanbanCard({
 
       {/* Ações de Ciclo */}
       <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex gap-2">
-        {/* Se está no lab → botão Enviar p/ Prova */}
-        {ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
+        {!ordem.cicloAtivoId && (etapaId === 'confeccao' || etapaId === 'ajuste') && (
           <button
-            onClick={(e) => { e.stopPropagation(); onEnviarProva() }}
-            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all"
+            onClick={(e) => { e.stopPropagation(); onAbrirCiclo() }}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
           >
-            <FlaskConical className="h-3.5 w-3.5" />
-            Enviar p/ Prova
+            <RotateCcw className="h-3.5 w-3.5" />
+            Iniciar ciclo de prova
           </button>
         )}
 
+        {/* Se está no lab → botão Enviar p/ Prova */}
+        {ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); onEnviarProva() }}
+              className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all"
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              {isAjusteNoLab ? 'Enviar para nova prova' : 'Enviar para prova'}
+            </button>
+            {isAjusteNoLab && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onConcluirAjuste() }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Seguir para acabamento
+              </button>
+            )}
+          </>
+        )}
+
+        {ordem.cicloAtivoId && ordem.cicloStatus === 'em_prova' && !hasRetorno && (
+          <span className="flex-1 py-1.5 text-center text-[11px] font-bold text-amber-600 dark:text-amber-400">
+            Aguardando decisão do dentista
+          </span>
+        )}
+
         {/* Se está em prova e dentista enviou feedback → confirmar retorno */}
-        {ordem.cicloAtivoId && (ordem.cicloStatus === 'em_prova' || hasRetorno) && (
+        {ordem.cicloAtivoId && hasRetorno && (
           <button
             onClick={(e) => { e.stopPropagation(); onConfirmarRetorno() }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
           >
             <PackageCheck className="h-3.5 w-3.5" />
-            Retornou
+            {ordem.cicloDentistaDeci === 'aprovado' ? 'Confirmar retorno aprovado' : 'Confirmar retorno para ajustes'}
           </button>
         )}
       </div>
@@ -213,8 +245,15 @@ function KanbanCard({
   )
 }
 
+interface ChecklistModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  etapaDestino: string
+}
+
 // Checklist modal simplificado para mover entre etapas
-function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino }: any) {
+function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino }: ChecklistModalProps) {
   if (!isOpen) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -231,12 +270,13 @@ function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino }: any) {
 }
 
 export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
+  const router = useRouter()
   const [ordensPorEtapa, setOrdensPorEtapa] = useState<Record<string, Ordem[]>>({})
   const [draggedItem, setDraggedItem] = useState<{ ordem: Ordem; fromEtapa: string } | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
-  const [selectedFullOrdem, setSelectedFullOrdem] = useState<any | null>(null)
+  const [selectedFullOrdem, setSelectedFullOrdem] = useState<Awaited<ReturnType<typeof getOrdemById>>>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('todas')
 
@@ -327,6 +367,17 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
       newOrdens['em_prova'] = [...(newOrdens['em_prova'] || []), { ...ordem, cicloStatus: 'em_prova' }]
       return newOrdens
     })
+  }
+
+  const handleConcluirAjuste = async (ordem: Ordem) => {
+    if (!ordem.cicloAtivoId) return
+    if (!window.confirm('O ajuste está concluído e pode seguir diretamente para acabamento?')) return
+    const result = await concluirAjusteSemNovaProva(ordem.cicloAtivoId)
+    if (!result.success) {
+      alert(result.error || 'Não foi possível concluir o ajuste.')
+      return
+    }
+    router.refresh()
   }
 
   const totalOrdens = Object.values(ordensPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
@@ -442,6 +493,8 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                     onPatientClick={() => handlePatientClick(ordem.id)}
                     onEnviarProva={() => handleEnviarProva(ordem)}
                     onConfirmarRetorno={() => setConfirmarRetornoOrdem(ordem)}
+                    onAbrirCiclo={() => setAbrirCicloOrdem(ordem)}
+                    onConcluirAjuste={() => handleConcluirAjuste(ordem)}
                   />
                 ))}
 

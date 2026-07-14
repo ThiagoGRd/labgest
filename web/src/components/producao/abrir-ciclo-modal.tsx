@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { abrirCiclo } from '@/actions/ciclos'
 import { SendHorizontal, Clock, Tag } from 'lucide-react'
 import { SUBETAPAS_POR_WORKFLOW, getWorkflowForServico } from '@/lib/workflow-config'
@@ -27,6 +27,7 @@ const etapasPadrao = [
 ]
 
 export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, numeroCicloAtual }: AbrirCicloModalProps) {
+  const router = useRouter()
   const tipoWorkflow = getWorkflowForServico(servico)
   const etapasOpcoes = tipoWorkflow
     ? [...SUBETAPAS_POR_WORKFLOW[tipoWorkflow].map(subetapa => subetapa.nome), 'Outro']
@@ -34,14 +35,21 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
   const [prazoDias, setPrazoDias] = useState(7)
   const [etapa, setEtapa] = useState(() => etapasOpcoes[0])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleConfirmar = async () => {
     setLoading(true)
+    setError('')
     try {
-      await abrirCiclo(ordemId, prazoDias, etapa)
+      const result = await abrirCiclo(ordemId, prazoDias, etapa)
+      if (!result.success) {
+        setError(result.error || 'Não foi possível iniciar o ciclo.')
+        return
+      }
+      router.refresh()
       onClose()
-    } catch (e) {
-      console.error(e)
+    } catch {
+      setError('Não foi possível iniciar o ciclo.')
     } finally {
       setLoading(false)
     }
@@ -56,6 +64,8 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
         <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-sm text-indigo-700 dark:text-indigo-300">
           📥 Registre a entrada deste trabalho no laboratório e defina o prazo de entrega para esta etapa.
         </div>
+
+        {error && <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>}
 
         <div>
           <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Etapa deste Ciclo</label>

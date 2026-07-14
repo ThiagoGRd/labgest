@@ -2,11 +2,18 @@
 
 import { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
 
-const prisma = new PrismaClient()
+let prismaInstance: PrismaClient | null = null
+
+function getPrisma() {
+  if (!prismaInstance) prismaInstance = new PrismaClient()
+  return prismaInstance
+}
 
 // Busca ciclos de um pedido — usado pelo Portal do Dentista
 export async function getCiclosByPedido(ordemId: number) {
+  const prisma = getPrisma()
   try {
     const ciclos = await prisma.cicloProducao.findMany({
       where: { ordemId },
@@ -32,30 +39,51 @@ export async function salvarFeedbackProva(
   decisao: 'ajustes' | 'aprovado',
   fotos: string[] = []
 ) {
+  const prisma = getPrisma()
   const observacoesNormalizadas = observacoes.trim()
   if (decisao === 'ajustes' && !observacoesNormalizadas) {
     return { success: false, error: 'Descreva quais ajustes precisam ser realizados' }
   }
 
   try {
-    const ciclo = await prisma.cicloProducao.update({
-      where: { id: cicloId },
-      data: {
-        observacoesDentista: observacoesNormalizadas,
-        decisao,
-        fotosProva: fotos,
-      },
-      include: { ordem: true }
-    })
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) return { success: false, error: 'Não autorizado' }
 
-    // Atualiza status da ordem para sinalizar ao lab
-    await prisma.ordem.update({
-      where: { id: ciclo.ordemId },
-      data: {
-        status: 'Em Prova',
-        etapaAtual: 'em_prova',
-      }
+    const cliente = await prisma.cliente.findFirst({
+      where: { email: user.email },
+      select: { id: true },
     })
+    if (!cliente) return { success: false, error: 'Cliente não encontrado' }
+
+    const cicloAtual = await prisma.cicloProducao.findUnique({
+      where: { id: cicloId },
+      include: { ordem: { select: { clienteId: true } } },
+    })
+    if (!cicloAtual || cicloAtual.ordem.clienteId !== cliente.id) {
+      return { success: false, error: 'Prova não encontrada' }
+    }
+    if (cicloAtual.status !== 'em_prova') {
+      return { success: false, error: 'Esta prova não está mais aguardando avaliação' }
+    }
+
+    await prisma.$transaction([
+      prisma.cicloProducao.update({
+        where: { id: cicloId },
+        data: {
+          observacoesDentista: observacoesNormalizadas,
+          decisao,
+          fotosProva: fotos,
+        },
+      }),
+      prisma.ordem.update({
+        where: { id: cicloAtual.ordemId },
+        data: {
+          status: 'Em Prova',
+          etapaAtual: 'em_prova',
+        },
+      }),
+    ])
 
     revalidatePath('/pedidos')
     revalidatePath('/historico')
