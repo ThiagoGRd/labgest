@@ -65,15 +65,66 @@ export async function moverOrdem(id: number, novaEtapa: string) {
 
   try {
     const novoStatus = statusParaEtapa(novaEtapa)
-    const ordem = await prisma.ordem.update({
-      where: { id },
-      data: {
-        etapaAtual: novaEtapa,
-        status: novoStatus,
-        dataFinalizacao: novaEtapa === 'pronto' ? new Date() : null,
-      },
-      select: { servicoId: true }
-    })
+    const ordem = novaEtapa === 'em_prova'
+      ? await prisma.$transaction(async (tx) => {
+          const ordemAtual = await tx.ordem.findUnique({
+            where: { id },
+            select: { id: true },
+          })
+          if (!ordemAtual) throw new Error('Ordem não encontrada')
+
+          const cicloAtivo = await tx.cicloProducao.findFirst({
+            where: { ordemId: id, status: { in: ['no_lab', 'em_prova'] } },
+            orderBy: { numeroCiclo: 'desc' },
+          })
+
+          if (cicloAtivo) {
+            await tx.cicloProducao.update({
+              where: { id: cicloAtivo.id },
+              data: {
+                status: 'em_prova',
+                dataSaida: cicloAtivo.dataSaida ?? new Date(),
+              },
+            })
+          } else {
+            const totalCiclos = await tx.cicloProducao.count({ where: { ordemId: id } })
+            const dataComprometida = new Date()
+            dataComprometida.setDate(dataComprometida.getDate() + 7)
+
+            await tx.cicloProducao.create({
+              data: {
+                ordemId: id,
+                numeroCiclo: totalCiclos + 1,
+                etapa: 'Prova clínica',
+                dataEntrada: new Date(),
+                dataSaida: new Date(),
+                prazoDias: 7,
+                dataComprometida,
+                status: 'em_prova',
+                registradoPor: 'recuperacao-automatica-kanban',
+              },
+            })
+          }
+
+          return tx.ordem.update({
+            where: { id },
+            data: {
+              etapaAtual: novaEtapa,
+              status: novoStatus,
+              dataFinalizacao: null,
+            },
+            select: { servicoId: true },
+          })
+        })
+      : await prisma.ordem.update({
+          where: { id },
+          data: {
+            etapaAtual: novaEtapa,
+            status: novoStatus,
+            dataFinalizacao: novaEtapa === 'pronto' ? new Date() : null,
+          },
+          select: { servicoId: true },
+        })
 
     // Se finalizou, abate estoque e gera cobrança automaticamente
     if (novaEtapa === 'pronto' && ordem.servicoId) {
