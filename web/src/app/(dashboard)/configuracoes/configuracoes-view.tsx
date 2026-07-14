@@ -54,16 +54,6 @@ interface ConfiguracoesViewProps {
   usuarios: Usuario[]
 }
 
-// Mock para etapas (implementaremos na próxima fase se desejar)
-const etapasProducao = [
-  { id: 1, nome: 'Recebimento', cor: '#6366f1', ordem: 1 },
-  { id: 2, nome: 'Planejamento/CAD', cor: '#8b5cf6', ordem: 2 },
-  { id: 3, nome: 'Impressão/Fresagem', cor: '#a855f7', ordem: 3 },
-  { id: 4, nome: 'Acabamento', cor: '#d946ef', ordem: 4 },
-  { id: 5, nome: 'Conferência', cor: '#ec4899', ordem: 5 },
-  { id: 6, nome: 'Pronto para Entrega', cor: '#22c55e', ordem: 6 },
-]
-
 export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesViewProps) {
   const [activeSection, setActiveSection] = useState('laboratorio')
   const [saving, setSaving] = useState(false)

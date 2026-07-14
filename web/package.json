@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@labgest/shared": "*",
     "@google/generative-ai": "^0.24.1",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.2.2",

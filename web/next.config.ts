@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
-  eslint: { ignoreDuringBuilds: true },
+  transpilePackages: ['@labgest/shared'],
   typescript: { ignoreBuildErrors: true },
   async redirects() {
     return [

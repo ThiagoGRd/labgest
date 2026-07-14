@@ -40,6 +40,7 @@ interface Pedido {
   dataEntrega: string
   valor: number
   etapa: string
+  etapaId?: string
   corDentes?: string
   elementos?: string
   observacoes?: string
@@ -96,18 +97,18 @@ function formatCurrency(value: number) {
 export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPedidoModalProps) {
   const [loading, setLoading] = useState(false)
   const [checklist, setChecklist] = useState<Partial<ChecklistEstetico>>({})
+  const [fotosAdicionadas, setFotosAdicionadas] = useState<Record<number, string[]>>({})
   
   if (!pedido) return null
 
-  // Imagens locais do caso
-  const [fotosCaso, setFotosCaso] = useState<string[]>(pedido.fotosCaso || [])
+  const fotosCaso = [...(pedido.fotosCaso || []), ...(fotosAdicionadas[pedido.id] || [])]
 
   // Histórico reverso (mais recente primeiro)
   const historico = [...(pedido.historicoEtapas || [])].reverse()
 
   // Detectar se é etapa de prova
   const tipoWorkflow = getWorkflowForServico(pedido.servico)
-  const isProva = isEtapaProva(tipoWorkflow, pedido.etapa)
+  const isProva = isEtapaProva(tipoWorkflow, pedido.etapaId || pedido.etapa)
   
   // Checklist combinado (existente + novo)
   const mergedChecklist = { ...(pedido.checklistEstetico || {}), ...checklist }
@@ -340,7 +341,10 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
                   if (!path) return;
                   const res = await adicionarFotoCaso(pedido.id, path)
                   if (res.success) {
-                    setFotosCaso(prev => [...prev, path])
+                    setFotosAdicionadas(prev => ({
+                      ...prev,
+                      [pedido.id]: [...(prev[pedido.id] || []), path],
+                    }))
                     toast.success("Foto enviada com sucesso!")
                   } else {
                     toast.error("Falha ao salvar a foto na Ordem.")

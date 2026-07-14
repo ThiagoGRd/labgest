@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
-import { ETAPA_IDS, ETAPA_LABELS, etapaLabel } from '@/lib/workflow-config'
+import { ETAPA_IDS, etapaLabel } from '@/lib/workflow-config'
 import type { TipoWorkflow, EtapaId } from '@/lib/workflow-config'
 import { formatarCpf } from '@/lib/cpf'
 
@@ -40,7 +40,11 @@ interface EditarOrdemModalProps {
 }
 
 const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4']
-const statusOptions = ['Aguardando', 'Em Produção', 'Finalizado', 'Pausado', 'Cancelado']
+const statusOptions = [
+  { value: 'Ativo', label: 'Ativo (definido pela etapa)' },
+  { value: 'Pausado', label: 'Pausado' },
+  { value: 'Cancelado', label: 'Cancelado' },
+]
 
 export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, servicos }: EditarOrdemModalProps) {
   const [loading, setLoading] = useState(false)
@@ -50,7 +54,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     cpfPaciente: '',
     dataEntrega: '',
     prioridade: 'Normal',
-    status: 'Aguardando',
+    status: 'Ativo',
     etapaAtual: 'Recebimento',
     corDentes: '',
     material: '',
@@ -67,7 +71,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
         cpfPaciente: formatarCpf(ordem.cpfPaciente || ''),
         dataEntrega: ordem.dataEntrega ? ordem.dataEntrega.split('T')[0] : '',
         prioridade: ordem.prioridade || 'Normal',
-        status: ordem.status || 'Aguardando',
+        status: ['Pausado', 'Cancelado'].includes(ordem.status) ? ordem.status : 'Ativo',
         etapaAtual: ordem.etapaAtual || 'Recebimento',
         corDentes: ordem.corDentes || '',
         material: ordem.material || '',
@@ -185,7 +189,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
             <Select name="status" value={formData.status} onValueChange={(val) => setFormData(p => ({ ...p, status: val }))}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {statusOptions.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

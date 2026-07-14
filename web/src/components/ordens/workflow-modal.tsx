@@ -31,7 +31,6 @@ import {
   CHECKLIST_VAZIO,
   type TipoWorkflow,
   type ChecklistEstetico,
-  type EtapaConfig,
 } from '@/lib/workflow-config'
 
 interface Ordem {
@@ -193,7 +192,6 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
             const isCompleted = idx < currentIdx
             const isCurrent = idx === currentIdx
             const isFuture = idx > currentIdx
-            const etapaConfig = typeof etapa !== 'string' ? etapa as EtapaConfig : null
             const devolvida = devolucoesPorEtapa[nome]
 
             return (
@@ -238,7 +236,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
                     >
                       {nome}
                     </span>
-                    {etapaConfig?.isProva && (
+                    {isEtapaProva(ordem.tipoWorkflow, etapa) && (
                       <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full">
                         Prova
                       </span>

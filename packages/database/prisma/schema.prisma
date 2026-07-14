@@ -72,6 +72,7 @@ model Ordem {
   marcaDentes                                            String?         @map("marca_dentes") @db.VarChar(100)
   prioridade                                             String?         @default("Normal") @db.VarChar(20)
   etapaAtual                                             String?         @default("Recebimento do arquivo STL") @map("etapa_atual") @db.VarChar(255)
+  subetapaAtual                                          String?         @map("subetapa_atual") @db.VarChar(255)
   etapasCompletas                                        String[]        @default([]) @map("etapas_completas")
   progresso                                              Int?            @default(0)
   arquivoStl                                             Json?           @map("arquivo_stl")

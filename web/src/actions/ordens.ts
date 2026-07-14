@@ -10,12 +10,11 @@ import {
   getWorkflowForServico,
   getNextEtapa,
   getRetornoEtapa,
-  getEtapas,
-  getEtapaNome,
   getProgresso,
   isEtapaProva,
   canAdvance,
   normalizarEtapa,
+  statusParaEtapa,
   ETAPA_FINAL,
   type ChecklistEstetico,
   type TipoWorkflow,
@@ -150,7 +149,9 @@ export async function updateOrdem(id: number, data: {
 
     // Normaliza etapaAtual para ID canônico antes de salvar
     const etapaCanonica = normalizarEtapa(data.etapaAtual)
-    const novoStatus = etapaCanonica === ETAPA_FINAL ? 'Finalizado' : data.status
+    const novoStatus = ['Pausado', 'Cancelado'].includes(data.status)
+      ? data.status
+      : statusParaEtapa(etapaCanonica)
 
     await prisma.ordem.update({
       where: { id },
@@ -164,6 +165,7 @@ export async function updateOrdem(id: number, data: {
         corDentes: data.corDentes,
         material: data.material,
         observacoes: data.observacoes,
+        dataFinalizacao: novoStatus === 'Finalizado' ? new Date() : null,
       }
     })
 
@@ -174,6 +176,7 @@ export async function updateOrdem(id: number, data: {
 
     revalidatePath('/ordens')
     revalidatePath('/producao')
+    revalidatePath('/prioridades')
     return { success: true }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -213,7 +216,8 @@ export async function getOrdemPublic(id: number) {
       prioridade: ordem.prioridade || 'Normal',
       dataEntrada: ordem.dataPedido ? ordem.dataPedido.toISOString() : new Date().toISOString(),
       dataEntrega: ordem.dataEntrega?.toISOString() || new Date().toISOString(),
-      etapaAtual: ordem.etapaAtual || 'Recebimento',
+      etapaAtual: normalizarEtapa(ordem.etapaAtual || 'recebimento'),
+      subetapaAtual: ordem.subetapaAtual || '',
       valor: Number(ordem.valorFinal || ordem.valor),
       corDentes: ordem.corDentes || '',
       material: ordem.material || '',
@@ -302,7 +306,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
     })
 
     // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
-    const novoStatus = proxima === ETAPA_FINAL ? 'Finalizado' : 'Em Produção'
+    const novoStatus = statusParaEtapa(proxima)
     const progresso = getProgresso(tipoWorkflow, proxima)
 
     await prisma.ordem.update({
@@ -313,6 +317,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
         status: novoStatus,
         progresso: progresso,
         checklistEstetico: {},
+        dataFinalizacao: proxima === ETAPA_FINAL ? new Date() : null,
       }
     })
 
@@ -323,6 +328,8 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
 
     console.log('[avancarEtapa] Sucesso!')
     revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/prioridades')
     return { success: true, novaEtapa: proxima }
   } catch (error) {
     console.error('[avancarEtapa] Erro detalhado:', error)
@@ -349,6 +356,7 @@ export async function marcarEntregue(ordemId: number) {
       where: { id: ordemId },
       data: {
         etapaAtual: 'entregue',
+        status: 'Entregue',
         historicoEtapas: historico,
         progresso: 100,
         dataFinalizacao: new Date(),
@@ -356,6 +364,8 @@ export async function marcarEntregue(ordemId: number) {
     })
 
     revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/prioridades')
     return { success: true }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -400,13 +410,15 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
         etapaAtual: retorno,
         tentativaAtual: novaTentativa,
         historicoEtapas: historico,
-        status: 'Em Produção',
+        status: statusParaEtapa(retorno),
         progresso: progresso,
         checklistEstetico: {},
       }
     })
 
     revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/prioridades')
     return { success: true, novaEtapa: retorno, tentativa: novaTentativa }
   } catch (error) {
     console.error('Erro ao retornar etapa:', error)

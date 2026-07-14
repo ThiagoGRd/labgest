@@ -26,7 +26,7 @@ import {
   MapPin,
   Camera
 } from 'lucide-react'
-import { getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
+import { etapaLabel, getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
 import { ChatOrdem } from '@/components/ordens/chat-ordem'
 
 interface Ordem {
@@ -154,7 +154,7 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                 </div>
                 <div className="bg-indigo-50 dark:bg-indigo-500/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
                   <p className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400 mb-1">Status Atual</p>
-                  <p className="font-bold text-slate-900 dark:text-white leading-tight">{ordem.etapaAtual}</p>
+                  <p className="font-bold text-slate-900 dark:text-white leading-tight">{etapaLabel(ordem.etapaAtual)}</p>
                   <p className="text-xs text-slate-500 mt-1">{ordem.status}</p>
                 </div>
               </div>

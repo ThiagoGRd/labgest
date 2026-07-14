@@ -3,10 +3,15 @@
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
+import { normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
 
 // Abre um novo ciclo quando o trabalho entra no lab
 export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: string) {
   await requireUser()
+
+  if (!Number.isInteger(prazoDias) || prazoDias <= 0) {
+    return { success: false, error: 'Informe um prazo válido' }
+  }
 
   // Conta quantos ciclos já existem para numerar o novo
   const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId } })
@@ -15,26 +20,29 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
   const dataComprometida = new Date()
   dataComprometida.setDate(dataComprometida.getDate() + prazoDias)
 
-  const ciclo = await prisma.cicloProducao.create({
-    data: {
-      ordemId,
-      numeroCiclo: totalCiclos + 1,
-      etapa: etapa || 'Produção',
-      dataEntrada,
-      prazoDias,
-      dataComprometida,
-      status: 'no_lab',
-    }
-  })
-
-  // Atualiza status da ordem para Em Produção se estava Aguardando
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      status: 'Em Produção',
-      tipoWorkflow: 'ciclico',
-    }
-  })
+  const subetapa = etapa?.trim() || 'Produção'
+  const macroetapa = normalizarEtapa(subetapa)
+  const [ciclo] = await prisma.$transaction([
+    prisma.cicloProducao.create({
+      data: {
+        ordemId,
+        numeroCiclo: totalCiclos + 1,
+        etapa: subetapa,
+        dataEntrada,
+        prazoDias,
+        dataComprometida,
+        status: 'no_lab',
+      }
+    }),
+    prisma.ordem.update({
+      where: { id: ordemId },
+      data: {
+        etapaAtual: macroetapa,
+        subetapaAtual: subetapa,
+        status: statusParaEtapa(macroetapa),
+      }
+    }),
+  ])
 
   revalidatePath('/producao')
   revalidatePath('/ordens')
@@ -59,7 +67,8 @@ export async function enviarParaProva(cicloId: number) {
     where: { id: ciclo.ordemId },
     data: {
       status: 'Em Prova',
-      etapaAtual: 'EmProva',
+      etapaAtual: 'em_prova',
+      subetapaAtual: ciclo.etapa,
     }
   })
 
@@ -91,20 +100,21 @@ export async function salvarFeedbackProva(
     include: { ordem: true }
   })
 
-  // Se aprovado, muda status da ordem para sinalizar ao lab
+  // A etapa permanece em prova até o laboratório confirmar o retorno físico.
   if (decisao === 'aprovado') {
     await prisma.ordem.update({
       where: { id: ciclo.ordemId },
       data: {
-        status: 'Retornou - Aprovado',
-        etapaAtual: 'Finalização',
+        status: 'Em Prova',
+        etapaAtual: 'em_prova',
       }
     })
   } else {
     await prisma.ordem.update({
       where: { id: ciclo.ordemId },
       data: {
-        status: 'Retornou - Ajustes',
+        status: 'Em Prova',
+        etapaAtual: 'em_prova',
       }
     })
   }
@@ -146,7 +156,8 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
       where: { id: cicloClosed.ordemId },
       data: {
         status: 'Em Produção',
-        etapaAtual: 'Acabamento',
+        etapaAtual: 'acabamento',
+        subetapaAtual: 'Acabamento e polimento',
       }
     })
     revalidatePath('/producao')
@@ -154,10 +165,21 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
   }
 
   // Caso contrário, abre novo ciclo (ajustes)
-  const resultado = await abrirCiclo(cicloClosed.ordemId, novoPrazoDias, novaEtapa)
+  const resultado = await abrirCiclo(cicloClosed.ordemId, novoPrazoDias, novaEtapa || 'Ajustes solicitados pelo dentista')
+  if (!resultado.success) return resultado
+
+  await prisma.ordem.update({
+    where: { id: cicloClosed.ordemId },
+    data: {
+      etapaAtual: 'ajuste',
+      subetapaAtual: novaEtapa?.trim() || 'Ajustes solicitados pelo dentista',
+      status: 'Em Produção',
+    }
+  })
 
   revalidatePath('/producao')
   revalidatePath('/ordens')
+  revalidatePath('/prioridades')
   return { success: true, novoCiclo: resultado.ciclo }
 }
 

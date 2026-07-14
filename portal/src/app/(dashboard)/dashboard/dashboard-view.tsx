@@ -14,19 +14,7 @@ import {
   Package,
 } from 'lucide-react'
 import Link from 'next/link'
-
-// Mock data para quando não houver dados reais
-const mockPedidos = [
-  {
-    id: 1,
-    paciente: 'Exemplo: Maria Silva',
-    servico: 'Prótese Total',
-    status: 'Em Produção',
-    etapa: 'Acabamento',
-    dataEntrega: new Date().toISOString(),
-    progresso: 75,
-  },
-]
+import { getProgresso } from '@/lib/workflow-config'
 
 interface DashboardViewProps {
   user: any
@@ -65,24 +53,10 @@ function getDaysRemaining(dateStr: string) {
   return `${diff} dias`
 }
 
-// Mapeamento real das etapas de produção para % de progresso
-const etapaProgresso: Record<string, number> = {
-  'Aguardando': 5,
-  'Recebimento': 15,
-  'Planejamento': 28,
-  'Impressão': 45,
-  'EmProva': 60,
-  'Acabamento': 75,
-  'Conferência': 88,
-  'Finalizado': 100,
-  'Entregue': 100,
-  'Cancelado': 0,
-}
-
-function getProgress(status: string, etapa?: string): number {
+function getProgress(status: string, etapaId?: string): number {
   if (status === 'Finalizado' || status === 'Entregue') return 100
   if (status === 'Cancelado') return 0
-  if (etapa && etapaProgresso[etapa] !== undefined) return etapaProgresso[etapa]
+  if (etapaId) return getProgresso(null, etapaId)
   if (status === 'Em Produção') return 45
   return 5
 }
@@ -211,10 +185,10 @@ export function DashboardView({ user, stats, pedidosRecentes }: DashboardViewPro
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-700"
-                        style={{ width: `${getProgress(pedido.status, pedido.etapa)}%` }}
+                        style={{ width: `${getProgress(pedido.status, pedido.etapaId)}%` }}
                       />
                     </div>
-                    <span className="text-[10px] font-bold text-zinc-500 mt-1">{getProgress(pedido.status, pedido.etapa)}%</span>
+                    <span className="text-[10px] font-bold text-zinc-500 mt-1">{getProgress(pedido.status, pedido.etapaId)}%</span>
                   </div>
                 </div>
               ))

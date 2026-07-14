@@ -52,7 +52,8 @@ export async function salvarFeedbackProva(
     await prisma.ordem.update({
       where: { id: ciclo.ordemId },
       data: {
-        status: decisao === 'aprovado' ? 'Retornou - Aprovado' : 'Retornou - Ajustes',
+        status: 'Em Prova',
+        etapaAtual: 'em_prova',
       }
     })
 

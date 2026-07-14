@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle2, Clock, Package, User, Calendar, Activity } from 'lucide-react'
 import Link from 'next/link'
+import { KANBAN_ETAPAS, normalizarEtapa } from '@/lib/workflow-config'
 
 function getStatusVariant(status: string) {
   const map: Record<string, any> = {
@@ -59,16 +60,8 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const etapas = [
-    'Recebimento',
-    'Modelagem',
-    'Impressão',
-    'Acabamento',
-    'Conferência',
-    'Pronto para Entrega'
-  ]
-
-  const etapaIndex = etapas.indexOf(ordem.etapaAtual || 'Recebimento')
+  const etapas = KANBAN_ETAPAS
+  const etapaIndex = etapas.findIndex(etapa => etapa.id === normalizarEtapa(ordem.etapaAtual || 'recebimento'))
 
   return (
     <div className="min-h-screen mesh-bg p-6 lg:p-12">
@@ -121,7 +114,7 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
                   const isCurrent = idx === etapaIndex
 
                   return (
-                    <div key={etapa} className="flex items-center gap-4 relative">
+                    <div key={etapa.id} className="flex items-center gap-4 relative">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white' :
                         isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 animate-pulse' :
                           'bg-slate-100 text-slate-400'
@@ -136,7 +129,7 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
 
                       <div className="flex-1">
                         <p className={`text-sm font-bold ${isCurrent ? 'text-indigo-600' : isCompleted ? 'text-slate-900' : 'text-slate-400'}`}>
-                          {etapa}
+                          {etapa.nome}
                         </p>
                         {isCurrent && <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-tight">Em andamento</p>}
                       </div>

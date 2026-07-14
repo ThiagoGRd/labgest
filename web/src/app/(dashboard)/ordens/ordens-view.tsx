@@ -14,6 +14,7 @@ import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
+import { etapaLabel } from '@/lib/workflow-config'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
@@ -443,7 +444,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                       <td className="px-6 py-4">
                          <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">{ordem.etapaAtual}</span>
+                           <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">{etapaLabel(ordem.etapaAtual)}</span>
                            {ordem.tentativaAtual != null && ordem.tentativaAtual > 0 && (
                              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full">
                                <RotateCcw className="h-2.5 w-2.5" />

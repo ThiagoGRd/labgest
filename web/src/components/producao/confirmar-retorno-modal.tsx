@@ -39,7 +39,7 @@ export function ConfirmarRetornoModal({
     try {
       const result = await confirmarRetorno(cicloId, novoPrazo)
       if (!result.success) {
-        setError('error' in result ? result.error : 'Não foi possível confirmar o retorno')
+        setError(('error' in result && result.error) || 'Não foi possível confirmar o retorno')
         return
       }
       onClose()

@@ -15,7 +15,7 @@ const ordens = [
     dataEntrega: '2026-02-07',
     valor: 850.00,
     valorFinal: 850.00,
-    etapaAtual: 'Acabamento',
+    etapaAtual: 'acabamento',
     progresso: 75,
   },
   // ... mais ordens
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       status: 'Aguardando',
       prioridade: body.prioridade || 'Normal',
       dataPedido: new Date().toISOString().split('T')[0],
-      etapaAtual: 'Recebimento do arquivo STL',
+      etapaAtual: 'recebimento',
       progresso: 0,
       createdAt: new Date().toISOString(),
     }

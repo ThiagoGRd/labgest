@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { enviarParaProva } from '@/actions/ciclos'
 import { getOrdemById } from '@/actions/ordens'
-import { normalizarEtapa } from '@/lib/workflow-config'
+import { KANBAN_ETAPAS, etapaLabel, normalizarEtapa } from '@/lib/workflow-config'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
@@ -27,17 +27,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 
-// Etapas de produção — IDs canônicos (mesmos gravados no banco)
-const etapas = [
-  { id: 'recebimento', nome: 'Recebimento',           cor: '#6366f1' },
-  { id: 'modelagem',   nome: 'Modelagem/Planejamento', cor: '#8b5cf6' },
-  { id: 'confeccao',   nome: 'Confecção/Impressão',    cor: '#a855f7' },
-  { id: 'em_prova',    nome: 'Em Prova (Clínica)',      cor: '#f59e0b' },
-  { id: 'ajuste',      nome: 'Ajustes',                 cor: '#f97316' },
-  { id: 'acabamento',  nome: 'Acabamento/Polimento',    cor: '#d946ef' },
-  { id: 'conferencia', nome: 'Conferência Final',       cor: '#ec4899' },
-  { id: 'pronto',      nome: 'Pronto p/ Entrega',       cor: '#22c55e' },
-]
+const etapas = KANBAN_ETAPAS
 
 
 interface Ordem {
@@ -46,6 +36,7 @@ interface Ordem {
   dentista: string
   servico: string
   etapa: string
+  subetapa?: string | null
   prioridade: string
   entrega: string
   cor?: string | null
@@ -100,7 +91,7 @@ function KanbanCard({
   onEnviarProva: () => void
   onConfirmarRetorno: () => void
 }) {
-  const isEmProva = ordem.cicloStatus === 'em_prova' || etapaId === 'EmProva'
+  const isEmProva = ordem.cicloStatus === 'em_prova' || etapaId === 'em_prova'
   const hasRetorno = ordem.cicloDentistaDeci !== null && ordem.cicloStatus === 'em_prova'
   const daysLeft = getDaysRemaining(
     ordem.cicloComprometido || ordem.entrega,
@@ -136,10 +127,13 @@ function KanbanCard({
         <span className="text-xs font-medium text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
           {ordem.servico}
         </span>
+        {ordem.subetapa && (
+          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-zinc-500">{ordem.subetapa}</p>
+        )}
       </div>
 
       {/* Badge de ciclo — se for cíclico */}
-      {ordem.tipoWorkflow === 'ciclico' && ordem.cicloNumero && (
+      {ordem.cicloNumero && (
         <div className="px-4 pb-2 flex items-center gap-1.5">
           <RotateCcw className="h-3 w-3 text-indigo-400" />
           <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
@@ -308,14 +302,23 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
       return newOrdens
     })
     const result = await moverOrdem(ordem.id, toEtapa)
-    if (!result.success) alert('Erro ao mover ordem.')
+    if (!result.success) {
+      setOrdensPorEtapa(prev => {
+        const newOrdens = { ...prev }
+        newOrdens[toEtapa] = newOrdens[toEtapa].filter(o => o.id !== ordem.id)
+        newOrdens[fromEtapa] = [...(newOrdens[fromEtapa] || []), ordem]
+        return newOrdens
+      })
+      alert(result.error || 'Erro ao mover ordem.')
+    }
     setChecklistOpen(false)
     setPendingMove(null)
   }
 
   const handleEnviarProva = async (ordem: Ordem) => {
     if (!ordem.cicloAtivoId) return
-    await enviarParaProva(ordem.cicloAtivoId)
+    const result = await enviarParaProva(ordem.cicloAtivoId)
+    if (!result.success) return
     // Move visualmente para em_prova
     setOrdensPorEtapa(prev => {
       const newOrdens = { ...prev }
@@ -345,7 +348,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           isOpen={checklistOpen}
           onClose={() => { setChecklistOpen(false); setPendingMove(null) }}
           onConfirm={confirmMove}
-          etapaDestino={pendingMove.toEtapa}
+          etapaDestino={etapaLabel(pendingMove.toEtapa)}
         />
       )}
 
@@ -356,6 +359,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           onClose={() => setAbrirCicloOrdem(null)}
           ordemId={abrirCicloOrdem.id}
           paciente={abrirCicloOrdem.paciente}
+          servico={abrirCicloOrdem.servico}
           numeroCicloAtual={(abrirCicloOrdem.cicloNumero || 0) + 1}
         />
       )}

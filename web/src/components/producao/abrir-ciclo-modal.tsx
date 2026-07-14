@@ -6,16 +6,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { abrirCiclo } from '@/actions/ciclos'
 import { SendHorizontal, Clock, Tag } from 'lucide-react'
+import { SUBETAPAS_POR_WORKFLOW, getWorkflowForServico } from '@/lib/workflow-config'
 
 interface AbrirCicloModalProps {
   isOpen: boolean
   onClose: () => void
   ordemId: number
   paciente: string
+  servico: string
   numeroCicloAtual: number
 }
 
-const etapasOpcoes = [
+const etapasPadrao = [
   'Montagem de Dentes',
   'Prova de Dentes',
   'Acabamento e Polimento',
@@ -24,9 +26,13 @@ const etapasOpcoes = [
   'Outro',
 ]
 
-export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, numeroCicloAtual }: AbrirCicloModalProps) {
+export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, numeroCicloAtual }: AbrirCicloModalProps) {
+  const tipoWorkflow = getWorkflowForServico(servico)
+  const etapasOpcoes = tipoWorkflow
+    ? [...SUBETAPAS_POR_WORKFLOW[tipoWorkflow].map(subetapa => subetapa.nome), 'Outro']
+    : etapasPadrao
   const [prazoDias, setPrazoDias] = useState(7)
-  const [etapa, setEtapa] = useState(etapasOpcoes[0])
+  const [etapa, setEtapa] = useState(() => etapasOpcoes[0])
   const [loading, setLoading] = useState(false)
 
   const handleConfirmar = async () => {

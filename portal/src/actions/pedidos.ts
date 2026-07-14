@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
+import { etapaLabel, getWorkflowForServico, normalizarEtapa } from '@/lib/workflow-config'
 
 const prisma = new PrismaClient()
 
@@ -11,38 +12,6 @@ const prisma = new PrismaClient()
 function parseDateLocal(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number)
   return new Date(year, month - 1, day, 12, 0, 0)
-}
-
-// Mapeamento de IDs canônicos para labels amigáveis no portal
-const ETAPA_LABELS_PORTAL: Record<string, string> = {
-  recebimento:  'Recebido pelo laboratório',
-  modelagem:    'Em Planejamento',
-  confeccao:    'Em Produção',
-  em_prova:     'Aguardando sua avaliação 🧪',
-  ajuste:       'Em Ajuste',
-  acabamento:   'Finalizando',
-  conferencia:  'Controle de Qualidade',
-  pronto:       'Pronto! Aguardando retirada ✅',
-  entregue:     'Entregue ✓',
-}
-
-function etapaLabel(id: string): string {
-  return ETAPA_LABELS_PORTAL[id] || id
-}
-
-// Normaliza valor legado do banco para ID canônico
-function normalizarEtapa(valor: string): string {
-  const v = valor.toLowerCase().trim()
-  if (v.startsWith('recebimento')) return 'recebimento'
-  if (v.includes('planejamento') || v === 'modelagem' || v.includes('delineamento')) return 'modelagem'
-  if (v === 'impressão' || v === 'impressao' || v.includes('confecção') || v.includes('confeccao') || v.includes('fresagem') || v.includes('acriliza') || v.includes('rodete')) return 'confeccao'
-  if (v.includes('prova')) return 'em_prova'
-  if (v.includes('ajuste') || v.includes('remontagem')) return 'ajuste'
-  if (v.includes('acabamento') || v.includes('polimento') || v.includes('montagem')) return 'acabamento'
-  if (v.includes('conferência') || v.includes('conferencia')) return 'conferencia'
-  if (v.includes('pronto') || v === 'finalizado') return 'pronto'
-  if (v === 'entregue') return 'entregue'
-  return v
 }
 
 // Utilitário para pegar o cliente logado
@@ -93,11 +62,7 @@ export async function criarPedidoBatch(data: {
       if (!servico) throw new Error(`Serviço ID ${item.servicoId} inválido`)
 
       // Detectar workflow
-      let tipoWorkflow = null
-      const nomeLower = servico.nome.toLowerCase()
-      if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
-      else if (nomeLower.includes('total') && nomeLower.includes('prótese')) tipoWorkflow = 'protese_total'
-      else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
+      const tipoWorkflow = getWorkflowForServico(servico.nome)
 
       // SEMPRE inicia em 'recebimento' (ID canônico)
       const primeiraEtapa = 'recebimento'
@@ -170,11 +135,7 @@ export async function criarPedido(data: {
     if (!servico) return { success: false, error: 'Serviço inválido' }
 
     // Detectar workflow
-    let tipoWorkflow = null
-    const nomeLower = servico.nome.toLowerCase()
-    if (nomeLower.includes('protocolo')) tipoWorkflow = 'protocolo'
-    else if (nomeLower.includes('total') && nomeLower.includes('prótese')) tipoWorkflow = 'protese_total'
-    else if (nomeLower.includes('parcial') || nomeLower.includes('ppr')) tipoWorkflow = 'parcial_removivel'
+    const tipoWorkflow = getWorkflowForServico(servico.nome)
 
     // SEMPRE inicia em 'recebimento' (ID canônico)
     const primeiraEtapa = 'recebimento'
@@ -230,6 +191,8 @@ export async function aprovarProva(pedidoId: number, checklist: any) {
         // Ao aprovar prova, o dentista está "devolvendo" para o laboratório continuar
         // O status ideal seria "Retorno de Prova" ou "Em Produção" novamente
         status: 'Em Produção',
+        etapaAtual: 'acabamento',
+        subetapaAtual: 'Prova aprovada pelo dentista',
         historicoEtapas: [
           ...(pedido.historicoEtapas as any[] || []),
           {
@@ -297,7 +260,7 @@ export async function getPedidoById(id: number) {
       valor: Number(pedido.valorFinal),
       // Normaliza legado e exibe label amigável
       etapaId: normalizarEtapa(pedido.etapaAtual || 'recebimento'),
-      etapa: etapaLabel(normalizarEtapa(pedido.etapaAtual || 'recebimento')),
+      etapa: etapaLabel(normalizarEtapa(pedido.etapaAtual || 'recebimento'), 'portal'),
       corDentes: pedido.corDentes || '',
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
@@ -333,7 +296,8 @@ export async function getMeusPedidos() {
       dataEntrega: p.dataEntrega.toISOString(),
       valor: Number(p.valorFinal),
       etapaId: normalizarEtapa(p.etapaAtual || 'recebimento'),
-      etapa: etapaLabel(normalizarEtapa(p.etapaAtual || 'recebimento')),
+      etapa: etapaLabel(normalizarEtapa(p.etapaAtual || 'recebimento'), 'portal'),
+      progresso: p.progresso ?? undefined,
     }))
   } catch (error) {
     console.error('Erro ao buscar pedidos:', error)
