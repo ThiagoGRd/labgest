@@ -1,14 +1,17 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
+import { toast } from 'sonner'
+import { getOrdemById } from '@/actions/ordens'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RelatorioPrioridades, type OrdemPrioridade } from '@/components/prioridades/relatorio-prioridades'
-import { AlertTriangle, Clock, Calendar, CheckCircle2, User, AlertCircle, FileText } from 'lucide-react'
+import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
+import { AlertTriangle, Clock, Calendar, CheckCircle2, User, AlertCircle, FileText, Loader2 } from 'lucide-react'
 import { etapaLabel } from '@/lib/workflow-config'
 
 interface PrioridadesViewProps {
@@ -18,7 +21,19 @@ interface PrioridadesViewProps {
   proximos: OrdemPrioridade[]
 }
 
-function OrdemCard({ ordem, type }: { ordem: OrdemPrioridade; type: 'atrasado' | 'hoje' | 'urgente' | 'proximo' }) {
+type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
+
+function OrdemCard({
+  ordem,
+  type,
+  onOpen,
+  opening,
+}: {
+  ordem: OrdemPrioridade
+  type: 'atrasado' | 'hoje' | 'urgente' | 'proximo'
+  onOpen: (id: number) => void
+  opening: boolean
+}) {
   const colors = {
     atrasado: 'border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-500/10',
     hoje: 'border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-500/10',
@@ -39,7 +54,16 @@ function OrdemCard({ ordem, type }: { ordem: OrdemPrioridade; type: 'atrasado' |
         <div className="flex gap-3">
           <div className="mt-1">{icons[type]}</div>
           <div>
-            <h4 className="font-bold text-slate-900 dark:text-white">{ordem.nomePaciente}</h4>
+            <button
+              type="button"
+              onClick={() => onOpen(ordem.id)}
+              disabled={opening}
+              className="group flex items-center gap-2 text-left font-bold text-slate-900 underline-offset-4 transition-colors hover:text-indigo-600 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-white dark:hover:text-indigo-400"
+              aria-label={`Abrir detalhes da ordem de ${ordem.nomePaciente}`}
+            >
+              {ordem.nomePaciente}
+              {opening && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+            </button>
             <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{ordem.servicoNome}</p>
             <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <User className="h-3 w-3" />
@@ -62,14 +86,43 @@ function OrdemCard({ ordem, type }: { ordem: OrdemPrioridade; type: 'atrasado' |
 
 export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: PrioridadesViewProps) {
   const relatorioRef = useRef<HTMLDivElement>(null)
+  const [selectedOrdem, setSelectedOrdem] = useState<OrdemDetalhada | null>(null)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [openingOrdemId, setOpeningOrdemId] = useState<number | null>(null)
   const totalPrioridades = new Set([...atrasados, ...hoje, ...urgentes].map((ordem) => ordem.id)).size
   const gerarRelatorio = useReactToPrint({
     contentRef: relatorioRef,
     documentTitle: `relatorio-prioridades-${new Date().toISOString().slice(0, 10)}`,
   })
 
+  const handleOpenOrdem = async (id: number) => {
+    setOpeningOrdemId(id)
+    try {
+      const ordem = await getOrdemById(id)
+      if (!ordem) {
+        toast.error('Ordem de serviço não encontrada.')
+        return
+      }
+      setSelectedOrdem(ordem)
+      setViewModalOpen(true)
+    } catch {
+      toast.error('Não foi possível abrir os detalhes da ordem.')
+    } finally {
+      setOpeningOrdemId(null)
+    }
+  }
+
   return (
     <DashboardLayout>
+      <VisualizarOrdemModal
+        isOpen={viewModalOpen}
+        onClose={() => {
+          setViewModalOpen(false)
+          setSelectedOrdem(null)
+        }}
+        ordem={selectedOrdem}
+      />
+
       <div className="hidden">
         <RelatorioPrioridades
           ref={relatorioRef}
@@ -107,7 +160,7 @@ export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: Priorid
               {atrasados.length === 0 ? (
                 <p className="text-sm text-slate-500 italic">Nenhum pedido atrasado. Ótimo trabalho! 👏</p>
               ) : (
-                atrasados.map(o => <OrdemCard key={o.id} ordem={o} type="atrasado" />)
+                atrasados.map(o => <OrdemCard key={o.id} ordem={o} type="atrasado" onOpen={handleOpenOrdem} opening={openingOrdemId === o.id} />)
               )}
             </CardContent>
           </Card>
@@ -123,7 +176,7 @@ export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: Priorid
               {urgentes.length === 0 ? (
                 <p className="text-sm text-slate-500 italic">Sem pedidos marcados como urgentes.</p>
               ) : (
-                urgentes.map(o => <OrdemCard key={o.id} ordem={o} type="urgente" />)
+                urgentes.map(o => <OrdemCard key={o.id} ordem={o} type="urgente" onOpen={handleOpenOrdem} opening={openingOrdemId === o.id} />)
               )}
             </CardContent>
           </Card>
@@ -146,7 +199,7 @@ export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: Priorid
                   <p className="text-sm text-slate-500">Nenhuma entrega agendada para hoje.</p>
                 </div>
               ) : (
-                hoje.map(o => <OrdemCard key={o.id} ordem={o} type="hoje" />)
+                hoje.map(o => <OrdemCard key={o.id} ordem={o} type="hoje" onOpen={handleOpenOrdem} opening={openingOrdemId === o.id} />)
               )}
             </CardContent>
           </Card>
@@ -165,7 +218,7 @@ export function PrioridadesView({ atrasados, hoje, urgentes, proximos }: Priorid
               {proximos.length === 0 ? (
                 <p className="text-sm text-slate-500 italic">Nada agendado para amanhã por enquanto.</p>
               ) : (
-                proximos.map(o => <OrdemCard key={o.id} ordem={o} type="proximo" />)
+                proximos.map(o => <OrdemCard key={o.id} ordem={o} type="proximo" onOpen={handleOpenOrdem} opening={openingOrdemId === o.id} />)
               )}
             </CardContent>
           </Card>
