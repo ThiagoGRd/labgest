@@ -32,11 +32,16 @@ export async function salvarFeedbackProva(
   decisao: 'ajustes' | 'aprovado',
   fotos: string[] = []
 ) {
+  const observacoesNormalizadas = observacoes.trim()
+  if (decisao === 'ajustes' && !observacoesNormalizadas) {
+    return { success: false, error: 'Descreva quais ajustes precisam ser realizados' }
+  }
+
   try {
     const ciclo = await prisma.cicloProducao.update({
       where: { id: cicloId },
       data: {
-        observacoesDentista: observacoes,
+        observacoesDentista: observacoesNormalizadas,
         decisao,
         fotosProva: fotos,
       },
@@ -54,7 +59,7 @@ export async function salvarFeedbackProva(
     revalidatePath('/pedidos')
     revalidatePath('/historico')
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Erro ao salvar o resultado da prova' }
   }
 }

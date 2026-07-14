@@ -10,7 +10,6 @@ import {
   Send,
   Loader2,
   X,
-  Image as ImageIcon,
 } from 'lucide-react'
 
 interface FeedbackProvaProps {
@@ -26,7 +25,10 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
+  const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const observacaoObrigatoria = decisao === 'ajustes'
+  const observacaoAusente = observacaoObrigatoria && !observacoes.trim()
 
   const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -51,13 +53,22 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
 
   const handleEnviar = async () => {
     if (!decisao) return
+    if (observacaoAusente) {
+      setError('Descreva o que precisa ser ajustado antes de enviar.')
+      return
+    }
     setLoading(true)
+    setError('')
     try {
-      await salvarFeedbackProva(cicloId, observacoes, decisao, fotos)
+      const result = await salvarFeedbackProva(cicloId, observacoes, decisao, fotos)
+      if (!result.success) {
+        setError(result.error || 'Não foi possível enviar o resultado da prova.')
+        return
+      }
       setEnviado(true)
       onSubmit?.()
-    } catch (e) {
-      console.error(e)
+    } catch {
+      setError('Não foi possível enviar o resultado da prova.')
     } finally {
       setLoading(false)
     }
@@ -120,14 +131,34 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
 
       {/* Observações */}
       <div>
-        <label className="block text-xs font-bold uppercase text-zinc-400 mb-2">📝 Observações para o Lab</label>
+        <label htmlFor={`observacoes-prova-${cicloId}`} className="block text-xs font-bold uppercase text-zinc-400 mb-2">
+          📝 Observações para o Lab
+          {observacaoObrigatoria && <span className="ml-1 text-amber-400">* obrigatório para ajustes</span>}
+        </label>
         <textarea
+          id={`observacoes-prova-${cicloId}`}
           value={observacoes}
-          onChange={(e) => setObservacoes(e.target.value)}
+          onChange={(e) => {
+            setObservacoes(e.target.value)
+            if (error) setError('')
+          }}
           placeholder="Ex: Ajustar linha média para a direita, reduzir volume no canino superior..."
           rows={3}
-          className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+          required={observacaoObrigatoria}
+          aria-invalid={Boolean(error) && observacaoAusente}
+          aria-describedby={error ? `erro-observacoes-prova-${cicloId}` : undefined}
+          className={`w-full px-4 py-3 rounded-xl bg-zinc-800 border text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 resize-none ${
+            error && observacaoAusente
+              ? 'border-red-500 focus:ring-red-500'
+              : 'border-zinc-700 focus:ring-emerald-500'
+          }`}
         />
+        {observacaoObrigatoria && !error && (
+          <p className="mt-2 text-xs text-amber-300">Informe claramente o que o laboratório precisa corrigir.</p>
+        )}
+        {error && (
+          <p id={`erro-observacoes-prova-${cicloId}`} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>
+        )}
       </div>
 
       {/* Decisão */}
@@ -135,7 +166,10 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         <p className="text-xs font-bold uppercase text-zinc-400 mb-3">🎯 Decisão</p>
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setDecisao('ajustes')}
+            onClick={() => {
+              setDecisao('ajustes')
+              setError('')
+            }}
             className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
               decisao === 'ajustes'
                 ? 'border-amber-500 bg-amber-500/10 text-amber-300'
@@ -147,7 +181,10 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
             <span className="text-[10px] text-center opacity-70">Devolver ao laboratório</span>
           </button>
           <button
-            onClick={() => setDecisao('aprovado')}
+            onClick={() => {
+              setDecisao('aprovado')
+              setError('')
+            }}
             className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
               decisao === 'aprovado'
                 ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
@@ -163,7 +200,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
 
       <Button
         onClick={handleEnviar}
-        disabled={!decisao || loading}
+        disabled={!decisao || loading || observacaoAusente}
         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
       >
         {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}

@@ -75,11 +75,16 @@ export async function salvarFeedbackProva(
   decisao: 'ajustes' | 'aprovado',
   fotos: string[] = []
 ) {
+  const observacoesNormalizadas = observacoes.trim()
+  if (decisao === 'ajustes' && !observacoesNormalizadas) {
+    return { success: false, error: 'Descreva quais ajustes precisam ser realizados' }
+  }
+
   // Esta action pode ser chamada pelo portal (sem requireUser de lab)
   const ciclo = await prisma.cicloProducao.update({
     where: { id: cicloId },
     data: {
-      observacoesDentista: observacoes,
+      observacoesDentista: observacoesNormalizadas,
       decisao,
       fotosProva: fotos,
     },
@@ -111,6 +116,19 @@ export async function salvarFeedbackProva(
 // Auxiliar confirma recebimento físico e abre novo ciclo
 export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, novaEtapa?: string) {
   await requireUser()
+
+  const cicloAtual = await prisma.cicloProducao.findUnique({
+    where: { id: cicloId },
+    include: { ordem: true }
+  })
+
+  if (!cicloAtual) return { success: false, error: 'Ciclo de produção não encontrado' }
+  if (!cicloAtual.decisao) {
+    return { success: false, error: 'O dentista ainda não informou o resultado da prova' }
+  }
+  if (cicloAtual.decisao === 'ajustes' && !cicloAtual.observacoesDentista?.trim()) {
+    return { success: false, error: 'A observação do ajuste é obrigatória antes de confirmar o retorno' }
+  }
 
   // Fecha o ciclo atual
   const cicloClosed = await prisma.cicloProducao.update({

@@ -27,16 +27,24 @@ export function ConfirmarRetornoModal({
 }: ConfirmarRetornoModalProps) {
   const [novoPrazo, setNovoPrazo] = useState(7)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const isAprovado = decisaoDentista === 'aprovado'
+  const observacaoAjusteAusente = decisaoDentista === 'ajustes' && !observacoesDentista?.trim()
+  const retornoInvalido = !decisaoDentista || observacaoAjusteAusente
 
   const handleConfirmar = async () => {
     setLoading(true)
+    setError('')
     try {
-      await confirmarRetorno(cicloId, novoPrazo)
+      const result = await confirmarRetorno(cicloId, novoPrazo)
+      if (!result.success) {
+        setError('error' in result ? result.error : 'Não foi possível confirmar o retorno')
+        return
+      }
       onClose()
-    } catch (e) {
-      console.error(e)
+    } catch {
+      setError('Não foi possível confirmar o retorno')
     } finally {
       setLoading(false)
     }
@@ -72,7 +80,19 @@ export function ConfirmarRetornoModal({
               {observacoesDentista}
             </p>
           )}
+          {observacaoAjusteAusente && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
+              O retorno para ajustes exige uma observação descrevendo o que deve ser corrigido.
+            </p>
+          )}
+          {!decisaoDentista && (
+            <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-400">
+              Aguardando o dentista registrar o resultado da prova.
+            </p>
+          )}
         </div>
+
+        {error && <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>}
 
         {/* Fotos da prova */}
         {fotosProva.length > 0 && (
@@ -116,7 +136,7 @@ export function ConfirmarRetornoModal({
           <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
           <Button
             onClick={handleConfirmar}
-            disabled={loading}
+            disabled={loading || retornoInvalido}
             className={`flex-1 text-white ${isAprovado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           >
             <PackageCheck className="h-4 w-4 mr-2" />
