@@ -47,6 +47,7 @@ export async function getProducao() {
         cicloNumero: cicloAtivo?.numeroCiclo ?? null,
         cicloComprometido: cicloAtivo?.dataComprometida?.toISOString() ?? null,
         cicloDentistaDeci: cicloAtivo?.decisao ?? null,
+        cicloRespostaEm: cicloAtivo?.decisao ? cicloAtivo.updatedAt?.toISOString() ?? null : null,
         cicloObs: cicloAtivo?.observacoesDentista ?? null,
         cicloFotos: (cicloAtivo?.fotosProva as string[]) ?? [],
       }

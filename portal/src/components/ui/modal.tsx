@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ interface ModalProps {
   description?: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  mobileFullscreen?: boolean
 }
 
 const sizeClasses = {
@@ -22,26 +23,12 @@ const sizeClasses = {
   '2xl': 'max-w-6xl',
 }
 
-export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
-  const [mounted, setMounted] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
-  const overlayRef = useRef<HTMLDivElement>(null)
-
-  // Manage mounting cycle for animations
+export function Modal({ isOpen, onClose, title, description, children, size = 'md', mobileFullscreen = false }: ModalProps) {
   useEffect(() => {
-    if (isOpen) {
-      setMounted(true)
-      // Small timeout to ensure DOM is ready for transition
-      requestAnimationFrame(() => setIsVisible(true))
-      document.body.style.overflow = 'hidden'
-    } else {
-      setIsVisible(false)
-      const timeout = setTimeout(() => {
-        setMounted(false)
-        document.body.style.overflow = 'unset'
-      }, 300) // Match transition duration
-      return () => clearTimeout(timeout)
-    }
+    if (!isOpen) return
+    const overflowAnterior = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = overflowAnterior }
   }, [isOpen])
 
   useEffect(() => {
@@ -52,13 +39,14 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
     return () => document.removeEventListener('keydown', handleEscape)
   }, [isOpen, onClose])
 
-  if (!mounted) return null
+  if (!isOpen) return null
 
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 transition-all duration-300 ease-in-out",
-        isVisible ? "opacity-100" : "opacity-0"
+        "fixed inset-0 z-[9999] flex transition-all duration-300 ease-in-out",
+        mobileFullscreen ? "items-end justify-center p-0 sm:items-center sm:p-6" : "items-center justify-center p-4 sm:p-6",
+        "opacity-100"
       )}
     >
       {/* Backdrop */}
@@ -71,13 +59,16 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
       {/* Modal Content */}
       <div 
         className={cn(
-          "relative w-full rounded-3xl overflow-hidden glass-panel flex flex-col max-h-[90vh] shadow-2xl transition-all duration-300 ease-out transform",
-          isVisible ? "scale-100 translate-y-0" : "scale-95 translate-y-4",
+          "relative w-full overflow-hidden glass-panel flex flex-col shadow-2xl transition-all duration-300 ease-out transform",
+          mobileFullscreen
+            ? "h-[96dvh] max-h-[96dvh] rounded-t-3xl rounded-b-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl"
+            : "max-h-[90vh] rounded-3xl",
+          "scale-100 translate-y-0",
           sizeClasses[size]
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/50 dark:bg-black/20 backdrop-blur-md">
+        <div className="flex items-center justify-between px-4 py-4 sm:px-6 sm:py-5 border-b border-white/10 bg-white/50 dark:bg-black/20 backdrop-blur-md">
           <div className="space-y-1">
             <h2 className="text-xl font-bold tracking-tight text-foreground/90">{title}</h2>
             {description && (
@@ -94,7 +85,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
         </div>
 
         {/* Content */}
-        <div className="px-6 py-6 overflow-y-auto custom-scrollbar bg-white/40 dark:bg-black/20 flex-1">
+        <div className="px-4 py-4 sm:px-6 sm:py-6 overflow-y-auto custom-scrollbar bg-white/40 dark:bg-black/20 flex-1">
           {children}
         </div>
       </div>

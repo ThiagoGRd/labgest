@@ -84,8 +84,8 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
           <CheckCircle2 className="h-7 w-7 text-emerald-500" />
         </div>
         <div>
-          <p className="font-bold text-white">Feedback enviado!</p>
-          <p className="text-sm text-zinc-400">O laboratório já foi notificado.</p>
+          <p className="font-bold text-slate-900 dark:text-white">Feedback enviado!</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-400">O laboratório já foi notificado.</p>
         </div>
       </div>
     )
@@ -93,29 +93,76 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
 
   return (
     <div className="space-y-5">
-      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-sm text-amber-300 flex items-center gap-2">
+      <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-white/70 p-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
         <span className="text-lg">📬</span>
         Registre o resultado da prova <strong>#{numeroCiclo}</strong> para o laboratório.
       </div>
 
+      {/* Decisão */}
+      <div>
+        <p className="mb-3 text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">🎯 Qual foi o resultado?</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDecisao('ajustes')
+              setError('')
+            }}
+            className={`flex min-h-24 items-center gap-3 rounded-xl border-2 p-4 text-left transition-all sm:flex-col sm:text-center ${
+              decisao === 'ajustes'
+                ? 'border-amber-500 bg-amber-100 text-amber-900 dark:bg-amber-500/10 dark:text-amber-300'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-amber-400 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400'
+            }`}
+          >
+            <RotateCcw className="h-6 w-6 shrink-0" />
+            <span>
+              <span className="block text-sm font-bold">Precisa de ajustes</span>
+              <span className="block text-[11px] opacity-70">Descrever e devolver ao laboratório</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDecisao('aprovado')
+              setError('')
+            }}
+            className={`flex min-h-24 items-center gap-3 rounded-xl border-2 p-4 text-left transition-all sm:flex-col sm:text-center ${
+              decisao === 'aprovado'
+                ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-300'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-400 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400'
+            }`}
+          >
+            <CheckCircle2 className="h-6 w-6 shrink-0" />
+            <span>
+              <span className="block text-sm font-bold">Aprovado</span>
+              <span className="block text-[11px] opacity-70">O trabalho pode seguir para finalização</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* Fotos */}
       <div>
-        <p className="text-xs font-bold uppercase text-zinc-400 mb-2">📷 Fotos da Prova <span className="normal-case font-normal">(opcional)</span></p>
+        <p className="mb-2 text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">📷 Fotos da Prova <span className="normal-case font-normal">(opcional)</span></p>
         <div className="flex flex-wrap gap-2">
           {fotos.map((foto, i) => (
             <div key={i} className="relative group">
-              <img src={foto} alt={`Foto ${i+1}`} className="h-20 w-20 object-cover rounded-xl border border-zinc-700" />
+              <img src={foto} alt={`Foto ${i+1}`} className="h-20 w-20 rounded-xl border border-slate-200 object-cover dark:border-zinc-700" />
               <button
+                type="button"
+                aria-label={`Remover foto ${i + 1}`}
                 onClick={() => setFotos(f => f.filter((_, idx) => idx !== i))}
-                className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
               >
                 <X className="h-3 w-3 text-white" />
               </button>
             </div>
           ))}
           <button
+            type="button"
+            aria-label="Adicionar fotos da prova"
             onClick={() => fileRef.current?.click()}
-            className="h-20 w-20 border-2 border-dashed border-zinc-700 hover:border-zinc-500 rounded-xl flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-zinc-300 transition-all"
+            className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 transition-all hover:border-slate-500 hover:text-slate-700 dark:border-zinc-700 dark:text-zinc-500 dark:hover:border-zinc-500 dark:hover:text-zinc-300"
           >
             {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
             <span className="text-[10px]">Adicionar</span>
@@ -134,7 +181,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
 
       {/* Observações */}
       <div>
-        <label htmlFor={`observacoes-prova-${cicloId}`} className="block text-xs font-bold uppercase text-zinc-400 mb-2">
+        <label htmlFor={`observacoes-prova-${cicloId}`} className="mb-2 block text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">
           📝 Observações para o Lab
           {observacaoObrigatoria && <span className="ml-1 text-amber-400">* obrigatório para ajustes</span>}
         </label>
@@ -150,65 +197,30 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
           required={observacaoObrigatoria}
           aria-invalid={Boolean(error) && observacaoAusente}
           aria-describedby={error ? `erro-observacoes-prova-${cicloId}` : undefined}
-          className={`w-full px-4 py-3 rounded-xl bg-zinc-800 border text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 resize-none ${
+          className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500 ${
             error && observacaoAusente
               ? 'border-red-500 focus:ring-red-500'
-              : 'border-zinc-700 focus:ring-emerald-500'
+              : 'border-slate-300 focus:ring-emerald-500 dark:border-zinc-700'
           }`}
         />
         {observacaoObrigatoria && !error && (
-          <p className="mt-2 text-xs text-amber-300">Informe claramente o que o laboratório precisa corrigir.</p>
+          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Informe claramente o que o laboratório precisa corrigir.</p>
         )}
         {error && (
           <p id={`erro-observacoes-prova-${cicloId}`} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>
         )}
       </div>
 
-      {/* Decisão */}
-      <div>
-        <p className="text-xs font-bold uppercase text-zinc-400 mb-3">🎯 Decisão</p>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => {
-              setDecisao('ajustes')
-              setError('')
-            }}
-            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              decisao === 'ajustes'
-                ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-500'
-            }`}
-          >
-            <RotateCcw className="h-6 w-6" />
-            <span className="text-sm font-bold">Precisa de Ajustes</span>
-            <span className="text-[10px] text-center opacity-70">Devolver ao laboratório</span>
-          </button>
-          <button
-            onClick={() => {
-              setDecisao('aprovado')
-              setError('')
-            }}
-            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              decisao === 'aprovado'
-                ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-500'
-            }`}
-          >
-            <CheckCircle2 className="h-6 w-6" />
-            <span className="text-sm font-bold">Aprovado</span>
-            <span className="text-[10px] text-center opacity-70">Seguir para finalização</span>
-          </button>
-        </div>
+      <div className="sticky bottom-0 z-10 -mx-4 bg-gradient-to-t from-amber-50 via-amber-50 px-4 pb-1 pt-3 dark:from-zinc-950 dark:via-zinc-950 sm:static sm:mx-0 sm:bg-none sm:p-0">
+        <Button
+          onClick={handleEnviar}
+          disabled={!decisao || loading || observacaoAusente}
+          className="h-12 w-full bg-emerald-600 text-white hover:bg-emerald-500"
+        >
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+          {decisao === 'aprovado' ? 'Aprovar e enviar ao laboratório' : decisao === 'ajustes' ? 'Solicitar ajustes' : 'Enviar decisão ao laboratório'}
+        </Button>
       </div>
-
-      <Button
-        onClick={handleEnviar}
-        disabled={!decisao || loading || observacaoAusente}
-        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
-      >
-        {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-        {decisao === 'aprovado' ? 'Aprovar e enviar ao laboratório' : decisao === 'ajustes' ? 'Solicitar ajustes' : 'Enviar decisão ao laboratório'}
-      </Button>
     </div>
   )
 }

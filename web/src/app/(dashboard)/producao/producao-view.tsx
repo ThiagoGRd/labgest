@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -14,6 +14,7 @@ import { KANBAN_ETAPAS, etapaLabel, normalizarEtapa } from '@/lib/workflow-confi
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
+import { RetornosClinica } from '@/components/producao/retornos-clinica'
 import {
   Calendar,
   GripVertical,
@@ -48,6 +49,7 @@ interface Ordem {
   cicloNumero?: number | null
   cicloComprometido?: string | null
   cicloDentistaDeci?: string | null
+  cicloRespostaEm?: string | null
   cicloObs?: string | null
   cicloFotos?: string[]
 }
@@ -73,6 +75,24 @@ function getDaysRemaining(dateStr: string, isEmProva: boolean) {
   const entrega = new Date(dateStr)
   entrega.setHours(0, 0, 0, 0)
   return Math.ceil((entrega.getTime() - hoje.getTime()) / 86400000)
+}
+
+function ehRetornoPendente(ordem: Ordem) {
+  return Boolean(ordem.cicloDentistaDeci) && ordem.cicloStatus === 'em_prova'
+}
+
+function agruparOrdens(ordens: Ordem[]) {
+  const agrupado: Record<string, Ordem[]> = {}
+  etapas.forEach((etapa) => { agrupado[etapa.id] = [] })
+
+  ordens.forEach((ordem) => {
+    let etapaKey = normalizarEtapa(ordem.etapa || 'recebimento')
+    if (ordem.cicloStatus === 'em_prova') etapaKey = 'em_prova'
+    if (!agrupado[etapaKey]) agrupado.recebimento.push(ordem)
+    else agrupado[etapaKey].push(ordem)
+  })
+
+  return agrupado
 }
 
 // Card do Kanban com controles de ciclo
@@ -271,7 +291,7 @@ function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino }: ChecklistM
 
 export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const router = useRouter()
-  const [ordensPorEtapa, setOrdensPorEtapa] = useState<Record<string, Ordem[]>>({})
+  const [ordensPorEtapa, setOrdensPorEtapa] = useState<Record<string, Ordem[]>>(() => agruparOrdens(initialOrdens))
   const [draggedItem, setDraggedItem] = useState<{ ordem: Ordem; fromEtapa: string } | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
@@ -283,28 +303,6 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   // Modais de ciclo
   const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<Ordem | null>(null)
   const [confirmarRetornoOrdem, setConfirmarRetornoOrdem] = useState<Ordem | null>(null)
-
-  useEffect(() => {
-    const agrupado: Record<string, Ordem[]> = {}
-    etapas.forEach(e => agrupado[e.id] = [])
-
-    const ordensFiltradas = initialOrdens.filter(o => {
-      const matchSearch = String(o.paciente).toLowerCase().includes(searchTerm.toLowerCase()) || String(o.id).includes(searchTerm)
-      const matchPriority = priorityFilter === 'todas' || o.prioridade === priorityFilter
-      return matchSearch && matchPriority
-    })
-
-    ordensFiltradas.forEach(o => {
-      // Usa normalizarEtapa para converter dados legados para o ID canônico
-      let etapaKey = normalizarEtapa(o.etapa || 'recebimento')
-      // Ordens com ciclo em_prova sempre vão para coluna em_prova
-      if (o.cicloStatus === 'em_prova') etapaKey = 'em_prova'
-      if (!agrupado[etapaKey]) agrupado['recebimento'].push(o) // fallback para recebimento
-      else agrupado[etapaKey].push(o)
-    })
-
-    setOrdensPorEtapa(agrupado)
-  }, [initialOrdens, searchTerm, priorityFilter])
 
   const handleDragStart = (e: React.DragEvent, ordem: Ordem, etapaId: string) => {
     setDraggedItem({ ordem, fromEtapa: etapaId })
@@ -380,7 +378,30 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     router.refresh()
   }
 
-  const totalOrdens = Object.values(ordensPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
+  const termoNormalizado = searchTerm.trim().toLowerCase()
+  const ordensFiltradasPorEtapa = Object.fromEntries(
+    Object.entries(ordensPorEtapa).map(([etapaId, ordens]) => [
+      etapaId,
+      ordens.filter((ordem) => {
+        const correspondeBusca = !termoNormalizado
+          || String(ordem.paciente).toLowerCase().includes(termoNormalizado)
+          || String(ordem.id).includes(termoNormalizado)
+        const correspondePrioridade = priorityFilter === 'todas' || ordem.prioridade === priorityFilter
+        return correspondeBusca && correspondePrioridade
+      }),
+    ])
+  ) as Record<string, Ordem[]>
+
+  const totalOrdens = Object.values(ordensFiltradasPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
+  // Pendências operacionais nunca obedecem aos filtros do Kanban: precisam permanecer visíveis.
+  const retornosPendentes = Object.values(ordensPorEtapa)
+    .flat()
+    .filter(ehRetornoPendente)
+    .sort((a, b) => {
+      const dataA = a.cicloRespostaEm ? new Date(a.cicloRespostaEm).getTime() : 0
+      const dataB = b.cicloRespostaEm ? new Date(b.cicloRespostaEm).getTime() : 0
+      return dataA - dataB
+    })
 
   const handlePatientClick = async (id: number) => {
     const fullOrdem = await getOrdemById(id)
@@ -428,7 +449,10 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
         />
       )}
 
-      <Header title="Produção" subtitle={`${totalOrdens} ordens em andamento`} />
+      <Header
+        title="Produção"
+        subtitle={`${totalOrdens} ordens em andamento${retornosPendentes.length > 0 ? ` · ${retornosPendentes.length} retorno${retornosPendentes.length > 1 ? 's' : ''} aguardando ação` : ''}`}
+      />
 
       <div className="p-6">
         {/* Toolbar */}
@@ -459,6 +483,15 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           </div>
         </div>
 
+        <RetornosClinica
+          retornos={retornosPendentes}
+          onAbrirOrdem={handlePatientClick}
+          onConfirmarRecebimento={(id) => {
+            const ordem = retornosPendentes.find((item) => item.id === id)
+            if (ordem) setConfirmarRetornoOrdem(ordem)
+          }}
+        />
+
         {/* KanBan Board */}
         <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory min-h-[calc(100vh-250px)]">
           {etapas.map((etapa) => (
@@ -478,13 +511,15 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                   <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">{etapa.nome}</h3>
                 </div>
                 <Badge variant="secondary" className="bg-white/50 dark:bg-black/20 border-none font-bold">
-                  {ordensPorEtapa[etapa.id]?.length || 0}
+                  {ordensFiltradasPorEtapa[etapa.id]?.filter((ordem) => !ehRetornoPendente(ordem)).length || 0}
                 </Badge>
               </div>
 
               {/* Cards */}
               <div className="bg-slate-50/50 dark:bg-slate-900/20 rounded-b-2xl p-3 min-h-[600px] space-y-3 border-x border-b border-slate-200 dark:border-white/5">
-                {ordensPorEtapa[etapa.id]?.map((ordem) => (
+                {ordensFiltradasPorEtapa[etapa.id]
+                  ?.filter((ordem) => !ehRetornoPendente(ordem))
+                  .map((ordem) => (
                   <KanbanCard
                     key={ordem.id}
                     ordem={ordem}
@@ -498,7 +533,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                   />
                 ))}
 
-                {(!ordensPorEtapa[etapa.id] || ordensPorEtapa[etapa.id].length === 0) && (
+                {(!ordensFiltradasPorEtapa[etapa.id] || ordensFiltradasPorEtapa[etapa.id].filter((ordem) => !ehRetornoPendente(ordem)).length === 0) && (
                   <EmptyState
                     icon={FileText}
                     title="Sem ordens"

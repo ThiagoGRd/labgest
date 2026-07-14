@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Clock, RotateCcw, FlaskConical, Image as ImageIcon } from 'lucide-react'
 
-interface Ciclo {
+export interface Ciclo {
   id: number
   numeroCiclo: number
   etapa?: string | null

@@ -14,13 +14,46 @@ import {
   CheckCircle2,
   Camera
 } from 'lucide-react'
-import type { ChecklistEstetico } from '@/lib/workflow-config'
 import { FeedbackProva } from '@/components/pedidos/feedback-prova'
 import { TimelineCiclos } from '@/components/pedidos/timeline-ciclos'
+import type { Ciclo } from '@/components/pedidos/timeline-ciclos'
 import { ChatPedido } from '@/components/pedidos/chat-pedido'
+import type { BadgeProps } from '@/components/ui/badge'
 import { CameraUpload } from '@/components/ui/camera-upload'
 import { adicionarFotoCaso } from '@/actions/pedidos'
 import { toast } from 'sonner'
+
+interface HistoricoEtapa {
+  data: string
+  acao: 'avancou' | 'devolveu' | 'aprovou_prova' | 'criou' | string
+  para?: string
+  motivo?: string
+}
+
+interface MensagemPedido {
+  id: string
+  role: string
+  nome: string
+  texto: string
+  fotoUrl?: string
+  createdAt: string
+}
+
+interface FichaClinicaPortal {
+  [campo: string]: boolean | string | undefined
+  dvo?: boolean
+  registroMordida?: boolean
+  linhaMedia?: boolean
+  oclusao?: boolean
+  corredorBucal?: boolean
+  moldeiraIndividual?: boolean
+  planoCera?: boolean
+  montagemDente?: boolean
+  barraProtocolo?: boolean
+  acrilizacao?: boolean
+  conserto?: boolean
+  corGengiva?: string
+}
 
 interface Pedido {
   id: number
@@ -34,12 +67,12 @@ interface Pedido {
   corDentes?: string
   elementos?: string
   observacoes?: string
-  historicoEtapas?: any[]
+  historicoEtapas?: HistoricoEtapa[]
   arquivos?: string[]
-  checklistEstetico?: Partial<ChecklistEstetico>
-  ciclos?: any[]
+  checklistEstetico?: FichaClinicaPortal
+  ciclos?: Ciclo[]
   cicloAtivoId?: number | null
-  mensagens?: any[]
+  mensagens?: MensagemPedido[]
   fotosCaso?: string[]
 }
 
@@ -49,8 +82,8 @@ interface VisualizarPedidoModalProps {
   pedido: Pedido | null
 }
 
-function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
+function getStatusVariant(status: string): BadgeProps['variant'] {
+  const map: Record<string, BadgeProps['variant']> = {
     'Aguardando': 'aguardando',
     'Em Produção': 'emProducao',
     'Finalizado': 'finalizado',
@@ -97,7 +130,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
   const decisaoRegistrada = cicloEmProva?.decisao as 'ajustes' | 'aprovado' | null | undefined
 
   // Extrair Ficha Clínica
-  const chk: any = pedido.checklistEstetico || {}
+  const chk = pedido.checklistEstetico || {}
   const hasFichaClinica = Object.values(chk).some(val => val === true || (typeof val === 'string' && val.trim() !== ''))
 
   return (
@@ -106,12 +139,13 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
       onClose={onClose}
       title={`Rastreamento #${pedido.id}`}
       description={pedido.servico}
-      size="lg"
+      size="xl"
+      mobileFullscreen
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:gap-8">
         
         {/* Linha do Tempo + Ciclos */}
-        <div className="lg:col-span-1 border-r border-slate-100 dark:border-zinc-800 pr-0 lg:pr-8">
+        <div className="order-2 border-t border-slate-100 pt-6 dark:border-zinc-800 xl:order-1 xl:col-span-1 xl:border-r xl:border-t-0 xl:pr-8 xl:pt-0">
           <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
             <MapPin className="h-3 w-3" />
             Histórico do Caso
@@ -151,11 +185,11 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
         </div>{/* fim col-span-1 */}
 
         {/* Detalhes (Direita) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="order-1 space-y-6 xl:order-2 xl:col-span-2">
           
           {/* Feedback de Prova (ciclo ativo em prova) */}
           {pedido.status === 'Em Prova' && pedido.cicloAtivoId && !decisaoRegistrada && (
-            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-5">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 dark:border-amber-900/30 dark:bg-amber-900/10">
               <div className="flex items-center gap-2 mb-4">
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
                 <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">Registre o Resultado da Prova</h3>
