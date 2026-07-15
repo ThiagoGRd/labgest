@@ -1,12 +1,11 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@labgest/database'
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
-import { etapaLabel, getWorkflowForServico, normalizarEtapa } from '@/lib/workflow-config'
-
-const prisma = new PrismaClient()
+import { calcularPrazoPasso, etapaLabel, getFluxoProtese, getWorkflowForServico, inferirTipoProtese, isTipoProtese, normalizarEtapa } from '@/lib/workflow-config'
 
 // Importa parseDateLocal para evitar bug de fuso horário
 function parseDateLocal(dateStr: string): Date {
@@ -35,11 +34,13 @@ export async function criarPedidoBatch(data: {
   dataEntrega: string
   observacoes: string
   arquivos: string[]
-  dadosClinicos?: any
+  dadosClinicos?: Prisma.InputJsonObject
   itens: Array<{
     servicoId: number
     elementos: string
     corDentes: string
+    arcadas?: number
+    tipoProtese?: string
   }>
 }) {
   const logado = await getClienteLogado()
@@ -62,10 +63,11 @@ export async function criarPedidoBatch(data: {
       if (!servico) throw new Error(`Serviço ID ${item.servicoId} inválido`)
 
       // Detectar workflow
-      const tipoWorkflow = getWorkflowForServico(servico.nome)
-
-      // SEMPRE inicia em 'recebimento' (ID canônico)
-      const primeiraEtapa = 'recebimento'
+      const tipoProtese = isTipoProtese(item.tipoProtese) ? item.tipoProtese : inferirTipoProtese(servico.nome)
+      const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
+      const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
+      const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
+      const arcadas = item.arcadas === 2 ? 2 : 1
 
       return prisma.ordem.create({
         data: {
@@ -84,7 +86,11 @@ export async function criarPedidoBatch(data: {
           observacoes: data.observacoes,
           status: 'Aguardando',
           etapaAtual: primeiraEtapa,
+          subetapaAtual: primeiroPasso?.nome,
           tipoWorkflow: tipoWorkflow,
+          passoFluxoAtual: primeiroPasso?.id,
+          arcadas,
+          prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, arcadas) : null,
           tentativaAtual: 0,
           historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
           checklistEstetico: data.dadosClinicos || {},
@@ -135,10 +141,10 @@ export async function criarPedido(data: {
     if (!servico) return { success: false, error: 'Serviço inválido' }
 
     // Detectar workflow
-    const tipoWorkflow = getWorkflowForServico(servico.nome)
-
-    // SEMPRE inicia em 'recebimento' (ID canônico)
-    const primeiraEtapa = 'recebimento'
+    const tipoProtese = inferirTipoProtese(servico.nome)
+    const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
+    const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
+    const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
 
     await prisma.ordem.create({
       data: {
@@ -156,7 +162,10 @@ export async function criarPedido(data: {
         observacoes: data.observacoes,
         status: 'Aguardando',
         etapaAtual: primeiraEtapa,
+        subetapaAtual: primeiroPasso?.nome,
         tipoWorkflow: tipoWorkflow,
+        passoFluxoAtual: primeiroPasso?.id,
+        prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, 1) : null,
         tentativaAtual: 0,
         historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
         checklistEstetico: {},
@@ -174,7 +183,7 @@ export async function criarPedido(data: {
   }
 }
 
-export async function aprovarProva(pedidoId: number, checklist: any) {
+export async function aprovarProva(pedidoId: number, checklist: Prisma.InputJsonObject) {
   const logado = await getClienteLogado()
   
   if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
@@ -194,7 +203,7 @@ export async function aprovarProva(pedidoId: number, checklist: any) {
         etapaAtual: 'acabamento',
         subetapaAtual: 'Prova aprovada pelo dentista',
         historicoEtapas: [
-          ...(pedido.historicoEtapas as any[] || []),
+          ...(pedido.historicoEtapas as Prisma.InputJsonObject[] || []),
           {
             etapa: pedido.etapaAtual,
             acao: 'aprovou_prova',
@@ -219,7 +228,7 @@ export async function getPedidoById(id: number) {
   if (!logado?.cliente) return null
 
   try {
-    const pedido = await (prisma as any).ordem.findFirst({
+    const pedido = await prisma.ordem.findFirst({
       where: { 
         id,
         clienteId: logado.cliente.id 
@@ -234,7 +243,7 @@ export async function getPedidoById(id: number) {
 
     if (!pedido) return null
 
-    const ciclos = (pedido.ciclos || []).map((c: any) => ({
+    const ciclos = pedido.ciclos.map((c) => ({
       id: c.id,
       numeroCiclo: c.numeroCiclo,
       etapa: c.etapa,
@@ -249,7 +258,7 @@ export async function getPedidoById(id: number) {
       status: c.status,
     }))
 
-    const cicloAtivo = ciclos.find((c: any) => c.status === 'em_prova') || null
+    const cicloAtivo = ciclos.find((c) => c.status === 'em_prova') || null
 
     return {
       id: pedido.id,
@@ -264,12 +273,17 @@ export async function getPedidoById(id: number) {
       corDentes: pedido.corDentes || '',
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
-      historicoEtapas: (pedido.historicoEtapas as any[]) || [],
-      mensagens: Array.isArray((pedido as any).mensagens) ? (pedido as any).mensagens : [],
+      historicoEtapas: (pedido.historicoEtapas as unknown[]) || [],
+      mensagens: Array.isArray(pedido.mensagens) ? pedido.mensagens : [],
       arquivos: (pedido.arquivoStl as string[]) || [],
-      fotosCaso: Array.isArray((pedido as any).fotosCaso) ? (pedido as any).fotosCaso : [],
+      fotosCaso: Array.isArray(pedido.fotosCaso) ? pedido.fotosCaso : [],
       ciclos,
       cicloAtivoId: cicloAtivo?.id ?? null,
+      tipoWorkflow: pedido.tipoWorkflow,
+      passoFluxoAtual: pedido.passoFluxoAtual,
+      subetapaAtual: pedido.subetapaAtual,
+      arcadas: pedido.arcadas,
+      prazoEtapaAtual: pedido.prazoEtapaAtual?.toISOString() ?? null,
     }
   } catch (error) {
     console.error('Erro ao buscar pedido:', error)
@@ -357,7 +371,7 @@ export async function getDashboardStats() {
     ])
 
     return { total, emAndamento, finalizados }
-  } catch (error) {
+  } catch {
     return { total: 0, emAndamento: 0, finalizados: 0 }
   }
 }
@@ -376,7 +390,7 @@ export async function getServicosDisponiveis() {
       preco: Number(s.preco),
       tempoProducao: s.tempoProducao ?? 0
     }))
-  } catch (error) {
+  } catch {
     return []
   }
 }
@@ -389,17 +403,17 @@ export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
     
     if (!ordem) throw new Error('Ordem não encontrada')
     
-    const fotosAntigas = Array.isArray((ordem as any).fotosCaso) ? (ordem as any).fotosCaso : []
+    const fotosAntigas = Array.isArray(ordem.fotosCaso) ? ordem.fotosCaso : []
     const novasFotos = [...fotosAntigas, fotoUrl]
 
-    await (prisma.ordem as any).update({
+    await prisma.ordem.update({
       where: { id: ordemId },
       data: { fotosCaso: novasFotos }
     })
     
     revalidatePath('/')
     return { success: true }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao salvar foto:', error)
     return { success: false, error: 'Erro ao salvar a foto do caso' }
   }

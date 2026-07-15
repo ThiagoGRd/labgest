@@ -10,11 +10,12 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { concluirAjusteSemNovaProva, enviarParaProva } from '@/actions/ciclos'
 import { getOrdemById } from '@/actions/ordens'
-import { KANBAN_ETAPAS, etapaLabel, normalizarEtapa } from '@/lib/workflow-config'
+import { FLUXOS_PROTESE, KANBAN_ETAPAS, TIPOS_PROTESE, etapaLabel, normalizarEtapa, type TipoProteseId } from '@/lib/workflow-config'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
 import { RetornosClinica } from '@/components/producao/retornos-clinica'
+import { FluxoProteseBoard } from '@/components/producao/fluxo-protese-board'
 import {
   Calendar,
   GripVertical,
@@ -43,7 +44,15 @@ interface Ordem {
   cor?: string | null
   elementos?: string | null
   foto?: string | null
-  tipoWorkflow?: string
+  tipoWorkflow?: string | null
+  passoFluxoAtual?: string | null
+  arcadas?: number
+  prazoEtapaAtual?: string | null
+  fornecedorEstrutura?: string | null
+  dataEnvioFornecedor?: string | null
+  prazoFornecedor?: string | null
+  dataRecebimentoFornecedor?: string | null
+  justificativaAtrasoFornecedor?: string | null
   cicloAtivoId?: number | null
   cicloStatus?: string | null
   cicloNumero?: number | null
@@ -299,6 +308,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const [selectedFullOrdem, setSelectedFullOrdem] = useState<Awaited<ReturnType<typeof getOrdemById>>>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('todas')
+  const [tipoSelecionado, setTipoSelecionado] = useState<'todos' | TipoProteseId>('todos')
 
   // Modais de ciclo
   const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<Ordem | null>(null)
@@ -458,6 +468,17 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
         {/* Toolbar */}
         <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={tipoSelecionado}
+              onChange={(event) => setTipoSelecionado(event.target.value as 'todos' | TipoProteseId)}
+              aria-label="Selecionar tipo de prótese"
+              className="max-w-full rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200"
+            >
+              <option value="todos">Visão geral — todas as próteses</option>
+              {TIPOS_PROTESE.map((tipo) => (
+                <option key={tipo} value={tipo}>{FLUXOS_PROTESE[tipo].nome}</option>
+              ))}
+            </select>
             <input
               type="text"
               placeholder="Buscar paciente ou #ID..."
@@ -492,7 +513,14 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           }}
         />
 
-        {/* KanBan Board */}
+        {tipoSelecionado !== 'todos' ? (
+          <FluxoProteseBoard
+            tipo={tipoSelecionado}
+            ordens={Object.values(ordensFiltradasPorEtapa).flat().filter((ordem) => ordem.tipoWorkflow === tipoSelecionado)}
+            onAbrirOrdem={handlePatientClick}
+          />
+        ) : (
+        /* KanBan Board */
         <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory min-h-[calc(100vh-250px)]">
           {etapas.map((etapa) => (
             <div
@@ -545,6 +573,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             </div>
           ))}
         </div>
+        )}
 
         {/* Legenda */}
         <div className="mt-6 flex flex-wrap items-center gap-6 text-sm text-slate-500">

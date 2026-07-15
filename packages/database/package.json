@@ -12,7 +12,8 @@
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "audit:workflow": "tsx prisma/audit-workflow.ts",
-    "backfill:proof-cycles": "tsx prisma/backfill-proof-cycles.ts"
+    "backfill:proof-cycles": "tsx prisma/backfill-proof-cycles.ts",
+    "backfill:prosthesis-workflows": "tsx prisma/backfill-prosthesis-workflows.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1"

@@ -3,7 +3,16 @@
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
-import { normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
+import {
+  calcularPrazoPasso,
+  getPassoLaboratorialAnterior,
+  getPassoProtese,
+  getProximoPassoProtese,
+  isTipoProtese,
+  normalizarEtapa,
+  statusParaEtapa,
+  statusParaPassoProtese,
+} from '@/lib/workflow-config'
 
 // Abre um novo ciclo quando o trabalho entra no lab
 export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: string) {
@@ -99,6 +108,59 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
   }
   if (cicloAtual.decisao === 'ajustes' && (!Number.isInteger(novoPrazoDias) || novoPrazoDias <= 0)) {
     return { success: false, error: 'Informe um prazo válido para o ajuste' }
+  }
+
+  if (isTipoProtese(cicloAtual.ordem.tipoWorkflow)) {
+    const tipo = cicloAtual.ordem.tipoWorkflow
+    const passoAtual = getPassoProtese(tipo, cicloAtual.ordem.passoFluxoAtual)
+    if (passoAtual.prova) {
+      const destino = cicloAtual.decisao === 'aprovado'
+        ? getProximoPassoProtese(tipo, passoAtual.id)
+        : getPassoLaboratorialAnterior(tipo, passoAtual.id)
+      if (!destino) return { success: false, error: 'Não foi possível determinar a próxima etapa do fluxo' }
+
+      const operacoes = [
+        prisma.cicloProducao.update({
+          where: { id: cicloId },
+          data: { dataRetorno: new Date(), status: 'concluido' },
+        }),
+      ]
+
+      if (cicloAtual.decisao === 'ajustes') {
+        const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId: cicloAtual.ordemId } })
+        const dataComprometida = calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas) || new Date()
+        operacoes.push(prisma.cicloProducao.create({
+          data: {
+            ordemId: cicloAtual.ordemId,
+            numeroCiclo: totalCiclos + 1,
+            etapa: `Ajuste: ${destino.nome}`,
+            dataEntrada: new Date(),
+            prazoDias: novoPrazoDias,
+            dataComprometida,
+            status: 'no_lab',
+          },
+        }))
+      }
+
+      await prisma.$transaction([
+        ...operacoes,
+        prisma.ordem.update({
+          where: { id: cicloAtual.ordemId },
+          data: {
+            passoFluxoAtual: destino.id,
+            etapaAtual: cicloAtual.decisao === 'ajustes' ? 'ajuste' : destino.macroetapa,
+            subetapaAtual: cicloAtual.decisao === 'ajustes' ? `Ajuste: ${destino.nome}` : destino.nome,
+            status: statusParaPassoProtese(destino),
+            prazoEtapaAtual: calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas),
+          },
+        }),
+      ])
+
+      revalidatePath('/producao')
+      revalidatePath('/ordens')
+      revalidatePath('/prioridades')
+      return { success: true, finalizar: cicloAtual.decisao === 'aprovado', fluxoEspecifico: true }
+    }
   }
 
   // Se decisão foi 'aprovado', vai para finalização sem abrir novo ciclo

@@ -26,6 +26,7 @@ import {
 import { VoiceInput } from '@/components/ui/voice-input'
 import { addDaysSkippingSundays, toDateInputValue } from '@/lib/utils'
 import { formatarCpf, isCpfValido } from '@/lib/cpf'
+import { FLUXOS_PROTESE, TIPOS_PROTESE, inferirTipoProtese } from '@/lib/workflow-config'
 
 interface Servico {
   id: number
@@ -50,6 +51,8 @@ interface ItemPedido {
   servicoNome: string
   elementos: string
   corDentes: string
+  arcadas: number
+  tipoProtese: string
   preco: number
 }
 
@@ -89,7 +92,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   const [globalData, setGlobalData] = useState(initialGlobalData)
   const [dadosClinicos, setDadosClinicos] = useState(initialDadosClinicos)
   const [itens, setItens] = useState<ItemPedido[]>([])
-  const [currentItem, setCurrentItem] = useState({ servicoId: '', elementos: '', corDentes: '' })
+  const [currentItem, setCurrentItem] = useState({ servicoId: '', elementos: '', corDentes: '', arcadas: 1, tipoProtese: 'geral' })
 
   useEffect(() => {
     try {
@@ -99,7 +102,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
         if (draft.globalData) setGlobalData({ ...initialGlobalData, ...draft.globalData })
         if (draft.dadosClinicos) setDadosClinicos({ ...initialDadosClinicos, ...draft.dadosClinicos })
         if (Array.isArray(draft.itens)) setItens(draft.itens)
-        if (draft.currentItem) setCurrentItem(draft.currentItem)
+        if (draft.currentItem) setCurrentItem({ servicoId: '', elementos: '', corDentes: '', arcadas: 1, tipoProtese: 'geral', ...draft.currentItem })
         setDraftRestored(true)
       }
     } catch {
@@ -149,6 +152,8 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
       servicoNome: servico.nome,
       elementos: currentItem.elementos,
       corDentes: currentItem.corDentes,
+      arcadas: currentItem.arcadas,
+      tipoProtese: currentItem.tipoProtese,
       preco: servico.preco,
     }])
 
@@ -162,7 +167,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
       }))
     }
 
-    setCurrentItem({ servicoId: '', elementos: '', corDentes: '' })
+    setCurrentItem({ servicoId: '', elementos: '', corDentes: '', arcadas: 1, tipoProtese: 'geral' })
   }
 
   const handleFileUpload = (path: string) => {
@@ -185,7 +190,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     setGlobalData(initialGlobalData)
     setDadosClinicos(initialDadosClinicos)
     setItens([])
-    setCurrentItem({ servicoId: '', elementos: '', corDentes: '' })
+    setCurrentItem({ servicoId: '', elementos: '', corDentes: '', arcadas: 1, tipoProtese: 'geral' })
     setCameraPath('')
     setDraftRestored(false)
     setError('')
@@ -211,6 +216,8 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
           servicoId: item.servicoId,
           elementos: item.elementos,
           corDentes: item.corDentes,
+          arcadas: item.arcadas,
+          tipoProtese: item.tipoProtese,
         })),
       })
 
@@ -326,12 +333,26 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo de serviço *</label>
-                <Select value={currentItem.servicoId} onValueChange={(value) => setCurrentItem((prev) => ({ ...prev, servicoId: value }))}>
+                <Select value={currentItem.servicoId} onValueChange={(value) => {
+                  const servico = servicos.find((item) => item.id.toString() === value)
+                  setCurrentItem((prev) => ({ ...prev, servicoId: value, tipoProtese: (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
+                }}>
                   <SelectTrigger className="h-12"><SelectValue placeholder="Selecione o serviço" /></SelectTrigger>
                   <SelectContent>
                     {servicos.map((servico) => (
                       <SelectItem key={servico.id} value={servico.id.toString()}>{servico.nome} — {formatCurrency(servico.preco)}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Fluxo da prótese</label>
+                <Select value={currentItem.tipoProtese} onValueChange={(value) => setCurrentItem((prev) => ({ ...prev, tipoProtese: value }))}>
+                  <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="geral">Fluxo geral</SelectItem>
+                    {TIPOS_PROTESE.map((tipo) => <SelectItem key={tipo} value={tipo}>{FLUXOS_PROTESE[tipo].nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -356,6 +377,23 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 </div>
               </div>
 
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Arcadas</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[1, 2].map((quantidade) => (
+                    <Button
+                      key={quantidade}
+                      type="button"
+                      variant={currentItem.arcadas === quantidade ? 'default' : 'outline'}
+                      onClick={() => setCurrentItem((prev) => ({ ...prev, arcadas: quantidade }))}
+                    >
+                      {quantidade === 1 ? 'Uma arcada' : 'Duas arcadas'}
+                    </Button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Etapas “por arcada” terão o prazo multiplicado automaticamente.</p>
+              </div>
+
               <Button type="button" onClick={handleAddItem} disabled={!currentItem.servicoId} className="h-12 w-full bg-indigo-600 text-white hover:bg-indigo-700">
                 <Plus className="mr-2 h-5 w-5" /> Adicionar serviço
               </Button>
@@ -367,7 +405,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{item.servicoNome}</p>
                         <p className="text-xs text-slate-500">
-                          {[item.elementos && `Dentes ${item.elementos}`, item.corDentes && `Cor ${item.corDentes}`, formatCurrency(item.preco)].filter(Boolean).join(' • ')}
+                          {[item.elementos && `Dentes ${item.elementos}`, item.corDentes && `Cor ${item.corDentes}`, item.tipoProtese !== 'geral' && FLUXOS_PROTESE[item.tipoProtese as keyof typeof FLUXOS_PROTESE]?.nomeCurto, `${item.arcadas} arcada${item.arcadas > 1 ? 's' : ''}`, formatCurrency(item.preco)].filter(Boolean).join(' • ')}
                         </p>
                       </div>
                       <Button variant="ghost" size="sm" aria-label={`Remover ${item.servicoNome}`} onClick={() => setItens((prev) => prev.filter((current) => current.id !== item.id))} className="shrink-0 text-red-500">

@@ -83,6 +83,14 @@ model Ordem {
   historicoEtapas                                        Json?           @default("[]") @map("historico_etapas")
   tentativaAtual                                         Int?            @default(0) @map("tentativa_atual")
   tipoWorkflow                                           String?         @map("tipo_workflow") @db.VarChar(50)
+  passoFluxoAtual                                        String?         @map("passo_fluxo_atual") @db.VarChar(80)
+  arcadas                                                 Int             @default(1) @db.SmallInt
+  prazoEtapaAtual                                        DateTime?       @map("prazo_etapa_atual") @db.Timestamptz(6)
+  fornecedorEstrutura                                    String?         @map("fornecedor_estrutura") @db.VarChar(255)
+  dataEnvioFornecedor                                    DateTime?       @map("data_envio_fornecedor") @db.Timestamptz(6)
+  prazoFornecedor                                        DateTime?       @map("prazo_fornecedor") @db.Timestamptz(6)
+  dataRecebimentoFornecedor                              DateTime?       @map("data_recebimento_fornecedor") @db.Timestamptz(6)
+  justificativaAtrasoFornecedor                          String?         @map("justificativa_atraso_fornecedor")
   fotosProva                                             Json?           @default("[]") @map("fotos_prova")
   fotosCaso                                              Json?           @default("[]") @map("fotos_caso")
   elementos                                              String?         @db.VarChar(100)
@@ -99,6 +107,8 @@ model Ordem {
   @@index([dataEntrega], map: "idx_ordens_data_entrega")
   @@index([prioridade], map: "idx_ordens_prioridade")
   @@index([status], map: "idx_ordens_status")
+  @@index([tipoWorkflow], map: "idx_ordens_tipo_workflow")
+  @@index([passoFluxoAtual], map: "idx_ordens_passo_fluxo_atual")
   @@map("ordens")
 }
 

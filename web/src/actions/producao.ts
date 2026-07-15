@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { abaterEstoquePorServico } from './estoque'
 import { gerarCobrancaAutomatica } from './financeiro'
-import { isEtapaId, normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
+import { inferirTipoProtese, isEtapaId, isTipoProtese, normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
 
 export async function getProducao() {
   await requireUser()
@@ -24,10 +24,10 @@ export async function getProducao() {
           orderBy: { numeroCiclo: 'desc' },
           take: 1
         }
-      } as any
+      }
     })
 
-    return ordens.map((o: any) => {
+    return ordens.map((o) => {
       const cicloAtivo = o.ciclos?.[0] ?? null
       return {
         id: o.id,
@@ -41,7 +41,15 @@ export async function getProducao() {
         cor: o.corDentes,
         elementos: o.elementos,
         foto: null,
-        tipoWorkflow: (o as any).tipoWorkflow || 'simples',
+        tipoWorkflow: isTipoProtese(o.tipoWorkflow) ? o.tipoWorkflow : inferirTipoProtese(o.servicoNome || o.servico?.nome || '', o.tipoWorkflow),
+        passoFluxoAtual: o.passoFluxoAtual,
+        arcadas: o.arcadas || 1,
+        prazoEtapaAtual: o.prazoEtapaAtual?.toISOString() ?? null,
+        fornecedorEstrutura: o.fornecedorEstrutura,
+        dataEnvioFornecedor: o.dataEnvioFornecedor?.toISOString() ?? null,
+        prazoFornecedor: o.prazoFornecedor?.toISOString() ?? null,
+        dataRecebimentoFornecedor: o.dataRecebimentoFornecedor?.toISOString() ?? null,
+        justificativaAtrasoFornecedor: o.justificativaAtrasoFornecedor,
         cicloAtivoId: cicloAtivo?.id ?? null,
         cicloStatus: cicloAtivo?.status ?? null,
         cicloNumero: cicloAtivo?.numeroCiclo ?? null,

@@ -9,6 +9,7 @@ import { Loader2, Plus, Trash2, Package } from 'lucide-react'
 import { createBatchOrdens } from '@/actions/ordens'
 import { addDaysSkippingSundays, toDateInputValue } from '@/lib/date-utils'
 import { formatarCpf } from '@/lib/cpf'
+import { FLUXOS_PROTESE, TIPOS_PROTESE, inferirTipoProtese } from '@/lib/workflow-config'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
@@ -27,6 +28,8 @@ interface ItemPedido {
   elementos: string
   corDentes: string
   material: string
+  arcadas: number
+  tipoProtese: string
   preco: number
 }
 
@@ -53,6 +56,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
     elementos: '',
     corDentes: '',
     material: '',
+    arcadas: 1,
+    tipoProtese: 'geral',
   })
 
   const handleAddItem = () => {
@@ -68,6 +73,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
         elementos: currentItem.elementos,
         corDentes: currentItem.corDentes,
         material: currentItem.material,
+        arcadas: currentItem.arcadas,
+        tipoProtese: currentItem.tipoProtese,
         preco: servico?.preco || 0
       }
     ])
@@ -113,20 +120,22 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
           servicoId: i.servicoId,
           elementos: i.elementos,
           corDentes: i.corDentes,
-          material: i.material
+          material: i.material,
+          arcadas: i.arcadas,
+          tipoProtese: i.tipoProtese,
         }))
       })
 
       if (result.success) {
         setGlobalData({ clienteId: '', paciente: '', cpfPaciente: '', dataEntrega: '', prioridade: 'Normal', observacoes: '' })
         setItens([])
-        setCurrentItem({ servicoId: '', elementos: '', corDentes: '', material: '' })
+        setCurrentItem({ servicoId: '', elementos: '', corDentes: '', material: '', arcadas: 1, tipoProtese: 'geral' })
         onSuccess?.()
         onClose()
       } else {
         setError(result.error || 'Erro ao criar ordens')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -220,7 +229,10 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Serviço</label>
                 <Select 
                   value={currentItem.servicoId} 
-                  onValueChange={(val) => setCurrentItem(p => ({ ...p, servicoId: val }))}
+                  onValueChange={(val) => {
+                    const servico = servicos.find((item) => item.id.toString() === val)
+                    setCurrentItem((anterior) => ({ ...anterior, servicoId: val, tipoProtese: (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
+                  }}
                 >
                   <SelectTrigger className="h-9 bg-white dark:bg-zinc-900 border-slate-200">
                     <SelectValue placeholder="Selecione o serviço..." />
@@ -268,6 +280,27 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
                 </Button>
               </div>
             </div>
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Fluxo da prótese</p>
+              <Select value={currentItem.tipoProtese} onValueChange={(valor) => setCurrentItem((anterior) => ({ ...anterior, tipoProtese: valor }))}>
+                <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="geral">Fluxo geral</SelectItem>
+                  {TIPOS_PROTESE.map((tipo) => <SelectItem key={tipo} value={tipo}>{FLUXOS_PROTESE[tipo].nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Arcadas</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[1, 2].map((quantidade) => (
+                  <Button key={quantidade} type="button" variant={currentItem.arcadas === quantidade ? 'default' : 'outline'} onClick={() => setCurrentItem((anterior) => ({ ...anterior, arcadas: quantidade }))}>
+                    {quantidade === 1 ? 'Uma arcada' : 'Duas arcadas'}
+                  </Button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Os prazos por arcada são multiplicados automaticamente.</p>
+            </div>
           </div>
 
           {/* Lista de Itens Adicionados */}
@@ -284,6 +317,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
                       <div className="flex gap-2 text-xs text-slate-500">
                         {item.elementos && <span className="bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400">Elem: {item.elementos}</span>}
                         {item.corDentes && <span>Cor: {item.corDentes}</span>}
+                        <span>{item.arcadas} arcada{item.arcadas > 1 ? 's' : ''}</span>
+                        {item.tipoProtese !== 'geral' && <span>{FLUXOS_PROTESE[item.tipoProtese as keyof typeof FLUXOS_PROTESE]?.nomeCurto}</span>}
                       </div>
                     </div>
                   </div>
@@ -302,7 +337,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
           ) : (
             <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
               <p className="text-sm text-slate-500">Nenhum serviço adicionado ainda.</p>
-              <p className="text-xs text-slate-400">Preencha acima e clique em "Add"</p>
+              <p className="text-xs text-slate-400">Preencha acima e clique em &quot;Add&quot;</p>
             </div>
           )}
         </div>

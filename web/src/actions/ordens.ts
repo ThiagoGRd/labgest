@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@labgest/database'
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { gerarCobrancaAutomatica } from './financeiro'
@@ -18,6 +19,10 @@ import {
   ETAPA_FINAL,
   type ChecklistEstetico,
   type TipoWorkflow,
+  calcularPrazoPasso,
+  getFluxoProtese,
+  inferirTipoProtese,
+  isTipoProtese,
 } from '@/lib/workflow-config'
 
 export async function getOrdens() {
@@ -51,11 +56,11 @@ export async function getOrdens() {
       // Workflow fields
       tipoWorkflow: (o.tipoWorkflow as TipoWorkflow) || null,
       tentativaAtual: o.tentativaAtual || 0,
-      historicoEtapas: (o.historicoEtapas as any[]) || [],
+      historicoEtapas: (o.historicoEtapas as unknown[]) || [],
       checklistEstetico: (o.checklistEstetico as Partial<ChecklistEstetico>) || {},
-      fotosProva: (o.fotosProva as any[]) || [],
-      fotosCaso: Array.isArray((o as any).fotosCaso) ? (o as any).fotosCaso : [],
-      mensagens: Array.isArray((o as any).mensagens) ? (o as any).mensagens : [],
+      fotosProva: (o.fotosProva as unknown[]) || [],
+      fotosCaso: Array.isArray(o.fotosCaso) ? o.fotosCaso : [],
+      mensagens: Array.isArray(o.mensagens) ? o.mensagens : [],
     }))
   } catch (error) {
     console.error('Erro ao buscar ordens:', error)
@@ -76,6 +81,8 @@ export async function createBatchOrdens(data: {
     elementos: string
     corDentes: string
     material: string
+    arcadas?: number
+    tipoProtese?: string
   }>
 }) {
   try {
@@ -91,8 +98,11 @@ export async function createBatchOrdens(data: {
       if (!servico) throw new Error(`Serviço ID ${item.servicoId} não encontrado`)
 
       const valor = Number(servico.preco)
-      const tipoWorkflow = getWorkflowForServico(servico.nome)
-      const primeiraEtapa = 'recebimento'
+      const tipoProtese = isTipoProtese(item.tipoProtese) ? item.tipoProtese : inferirTipoProtese(servico.nome)
+      const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
+      const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
+      const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
+      const arcadas = item.arcadas === 2 ? 2 : 1
 
       return prisma.ordem.create({
         data: {
@@ -112,7 +122,11 @@ export async function createBatchOrdens(data: {
           observacoes: data.observacoes,
           status: 'Aguardando',
           etapaAtual: primeiraEtapa,
+          subetapaAtual: primeiroPasso?.nome,
           tipoWorkflow: tipoWorkflow,
+          passoFluxoAtual: primeiroPasso?.id,
+          arcadas,
+          prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, arcadas) : null,
           tentativaAtual: 0,
           historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
           checklistEstetico: {},
@@ -226,9 +240,9 @@ export async function getOrdemPublic(id: number) {
       // Workflow fields
       tipoWorkflow: (ordem.tipoWorkflow as TipoWorkflow) || null,
       tentativaAtual: ordem.tentativaAtual || 0,
-      historicoEtapas: (ordem.historicoEtapas as any[]) || [],
+      historicoEtapas: (ordem.historicoEtapas as unknown[]) || [],
       checklistEstetico: (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {},
-      fotosProva: (ordem.fotosProva as any[]) || [],
+      fotosProva: (ordem.fotosProva as unknown[]) || [],
     }
   } catch (error) {
     console.error('[getOrdemPublic] Erro ao buscar ordem:', error)
@@ -296,7 +310,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
       }
     }
 
-    const historico = (ordem.historicoEtapas as any[]) || []
+    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
     historico.push({
       etapa: etapaAtualCanonica,
       acao: 'avancou',
@@ -344,7 +358,7 @@ export async function marcarEntregue(ordemId: number) {
     const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
-    const historico = (ordem.historicoEtapas as any[]) || []
+    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
     historico.push({
       etapa: ordem.etapaAtual || 'pronto',
       acao: 'avancou',
@@ -390,7 +404,7 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
 
     if (!retorno) return { success: false, error: 'Não é possível retornar desta etapa' }
 
-    const historico = (ordem.historicoEtapas as any[]) || []
+    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
     const novaTentativa = (ordem.tentativaAtual || 0) + 1
 
     historico.push({
@@ -447,7 +461,7 @@ export async function uploadFotoProva(ordemId: number, fotoUrl: string, numeroPr
     const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
-    const fotos = (ordem.fotosProva as any[]) || []
+    const fotos = (ordem.fotosProva as Prisma.InputJsonObject[]) || []
     fotos.push({
       url: fotoUrl,
       numeroProva,
@@ -476,7 +490,7 @@ export async function getFotosProva(ordemId: number) {
       where: { id: ordemId },
       select: { fotosProva: true }
     })
-    return (ordem?.fotosProva as any[]) || []
+    return (ordem?.fotosProva as unknown[]) || []
   } catch (error) {
     console.error('Erro ao buscar fotos:', error)
     return []

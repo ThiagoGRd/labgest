@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Modal } from '@/components/ui/modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,6 +24,8 @@ import type { BadgeProps } from '@/components/ui/badge'
 import { CameraUpload } from '@/components/ui/camera-upload'
 import { adicionarFotoCaso } from '@/actions/pedidos'
 import { toast } from 'sonner'
+import { concluirEtapaClinica } from '@/actions/workflow-protese'
+import { getPassoProtese, isTipoProtese } from '@/lib/workflow-config'
 
 interface HistoricoEtapa {
   data: string
@@ -72,6 +76,11 @@ interface Pedido {
   checklistEstetico?: FichaClinicaPortal
   ciclos?: Ciclo[]
   cicloAtivoId?: number | null
+  tipoWorkflow?: string | null
+  passoFluxoAtual?: string | null
+  subetapaAtual?: string | null
+  arcadas?: number
+  prazoEtapaAtual?: string | null
   mensagens?: MensagemPedido[]
   fotosCaso?: string[]
 }
@@ -118,7 +127,9 @@ function formatCurrency(value: number) {
 }
 
 export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPedidoModalProps) {
+  const router = useRouter()
   const [fotosAdicionadas, setFotosAdicionadas] = useState<Record<number, string[]>>({})
+  const [concluindoEtapa, setConcluindoEtapa] = useState(false)
   
   if (!pedido) return null
 
@@ -128,6 +139,22 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
   const historico = [...(pedido.historicoEtapas || [])].reverse()
   const cicloEmProva = [...(pedido.ciclos || [])].reverse().find(ciclo => ciclo.status === 'em_prova')
   const decisaoRegistrada = cicloEmProva?.decisao as 'ajustes' | 'aprovado' | null | undefined
+  const passoAtual = isTipoProtese(pedido.tipoWorkflow)
+    ? getPassoProtese(pedido.tipoWorkflow, pedido.passoFluxoAtual)
+    : null
+
+  const handleConcluirEtapaClinica = async () => {
+    setConcluindoEtapa(true)
+    const resultado = await concluirEtapaClinica(pedido.id)
+    setConcluindoEtapa(false)
+    if (!resultado.success) {
+      toast.error(resultado.error || 'Não foi possível concluir a etapa')
+      return
+    }
+    toast.success('Etapa clínica concluída')
+    router.refresh()
+    onClose()
+  }
 
   // Extrair Ficha Clínica
   const chk = pedido.checklistEstetico || {}
@@ -186,6 +213,27 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
 
         {/* Detalhes (Direita) */}
         <div className="order-1 space-y-6 xl:order-2 xl:col-span-2">
+
+          {passoAtual?.responsavel === 'clinica' && !passoAtual.prova && (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 sm:p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
+              <p className="text-xs font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">Ação da clínica</p>
+              <h3 className="mt-1 font-bold text-slate-900 dark:text-white">{passoAtual.nome}</h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                {passoAtual.entregaFinal
+                  ? 'Confirme quando o trabalho tiver sido entregue ao paciente.'
+                  : 'Confirme quando esta etapa clínica estiver concluída para liberar a próxima etapa.'}
+              </p>
+              <Button
+                type="button"
+                onClick={handleConcluirEtapaClinica}
+                disabled={concluindoEtapa}
+                className="mt-4 h-12 w-full bg-sky-600 text-white hover:bg-sky-700 sm:w-auto"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {concluindoEtapa ? 'Atualizando...' : passoAtual.entregaFinal ? 'Confirmar entrega ao paciente' : 'Etapa concluída'}
+              </Button>
+            </div>
+          )}
           
           {/* Feedback de Prova (ciclo ativo em prova) */}
           {pedido.status === 'Em Prova' && pedido.cicloAtivoId && !decisaoRegistrada && (
@@ -346,18 +394,20 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
             <div className="bg-slate-50/50 dark:bg-zinc-800/30 border border-slate-200 dark:border-zinc-700 rounded-xl p-4 space-y-4">
               {fotosCaso.length > 0 && (
                 <div className="flex flex-wrap gap-3 mb-4">
-                  {fotosCaso.map((url: string, idx: number) => (
+                  {fotosCaso.map((url: string) => (
                     <a 
-                      key={idx} 
+                      key={url}
                       href={url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`} 
                       target="_blank" 
                       rel="noreferrer"
                       className="relative h-20 w-20 rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden group"
                     >
-                      <img 
+                      <Image
+                        fill
+                        unoptimized
                         src={url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`} 
                         alt="Foto do Caso" 
-                        className="object-cover h-full w-full group-hover:scale-110 transition-transform"
+                        className="object-cover group-hover:scale-110 transition-transform"
                       />
                     </a>
                   ))}
