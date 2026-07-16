@@ -55,6 +55,7 @@ export async function createCliente(data: {
   endereco?: string
   observacoes?: string
 }) {
+  await requireUser()
   try {
     await prisma.cliente.create({
       data: {
@@ -70,6 +71,7 @@ export async function createCliente(data: {
 }
 
 export async function toggleClienteStatus(id: string, ativo: boolean) {
+  await requireUser()
   try {
     await prisma.cliente.update({
       where: { id: Number(id) },

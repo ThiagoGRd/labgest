@@ -85,6 +85,7 @@ export async function createBatchOrdens(data: {
     tipoProtese?: string
   }>
 }) {
+  await requireUser()
   try {
     const cpfPaciente = normalizarCpf(data.cpfPaciente)
     if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
@@ -263,6 +264,7 @@ export async function deleteOrdem(id: number) {
 }
 
 export async function getDadosNovaOrdem() {
+  await requireUser()
   try {
     const [clientes, servicosRaw] = await Promise.all([
       prisma.cliente.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),

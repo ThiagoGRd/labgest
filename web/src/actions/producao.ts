@@ -34,6 +34,8 @@ export async function getProducao() {
         paciente: o.nomePaciente,
         dentista: o.clienteNome || o.cliente?.nome || 'Desconhecido',
         servico: o.servicoNome || o.servico?.nome || 'Serviço',
+        status: o.status || 'Aguardando',
+        updatedAt: o.updatedAt?.toISOString() ?? [o.passoFluxoAtual, o.status, cicloAtivo?.status, cicloAtivo?.decisao].join(':'),
         etapa: normalizarEtapa(o.etapaAtual || 'recebimento'),
         subetapa: o.subetapaAtual,
         prioridade: o.prioridade || 'Normal',

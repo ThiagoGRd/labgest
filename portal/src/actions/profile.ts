@@ -1,10 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
-
-const prisma = new PrismaClient()
 
 async function getClienteLogado() {
   const supabase = await createClient()
@@ -13,7 +11,7 @@ async function getClienteLogado() {
   if (!user || !user.email) return null
 
   const cliente = await prisma.cliente.findFirst({
-    where: { email: user.email }
+    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
   })
 
   return { user, cliente }

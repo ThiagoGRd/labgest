@@ -3,10 +3,12 @@
 import { Prisma, prisma } from '@labgest/database'
 import {
   calcularPrazoPasso,
+  getFluxoProtese,
   getPassoProtese,
   getProximoPassoProtese,
   isTipoProtese,
   statusParaPassoProtese,
+  type TipoProteseId,
 } from '@/lib/workflow-config'
 import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
@@ -19,6 +21,94 @@ function revalidarFluxo() {
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
+}
+
+export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string) {
+  const usuario = await requireUser()
+  if (!isTipoProtese(tipo)) return { success: false, error: 'Selecione um tipo de prótese válido' }
+
+  const fluxo = getFluxoProtese(tipo)
+  const passo = fluxo.passos.find((item) => item.id === passoId)
+  if (!passo) return { success: false, error: 'Selecione uma etapa válida para este tipo de prótese' }
+
+  const resultado = await prisma.$transaction(async (tx) => {
+    const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
+      return { success: false, error: 'Esta ordem já está encerrada e não pode ser reposicionada pela Produção' }
+    }
+
+    const agora = new Date()
+    const cicloAtivo = await tx.cicloProducao.findFirst({
+      where: { ordemId, status: { in: ['no_lab', 'em_prova'] } },
+      orderBy: { numeroCiclo: 'desc' },
+    })
+
+    if (passo.prova) {
+      if (cicloAtivo?.status === 'em_prova' && cicloAtivo.etapa === passo.nome) {
+        await tx.cicloProducao.update({
+          where: { id: cicloAtivo.id },
+          data: { dataSaida: cicloAtivo.dataSaida ?? agora },
+        })
+      } else {
+        if (cicloAtivo) {
+          await tx.cicloProducao.update({
+            where: { id: cicloAtivo.id },
+            data: { status: 'concluido', dataSaida: cicloAtivo.dataSaida ?? agora, dataRetorno: agora },
+          })
+        }
+        const totalCiclos = await tx.cicloProducao.count({ where: { ordemId } })
+        await tx.cicloProducao.create({
+          data: {
+            ordemId,
+            numeroCiclo: totalCiclos + 1,
+            etapa: passo.nome,
+            dataEntrada: agora,
+            dataSaida: agora,
+            prazoDias: 7,
+            dataComprometida: ordem.dataEntrega,
+            status: 'em_prova',
+            registradoPor: usuario.email || 'laboratorio',
+          },
+        })
+      }
+    } else if (cicloAtivo) {
+      await tx.cicloProducao.update({
+        where: { id: cicloAtivo.id },
+        data: { status: 'concluido', dataSaida: cicloAtivo.dataSaida ?? agora, dataRetorno: cicloAtivo.status === 'em_prova' ? agora : cicloAtivo.dataRetorno },
+      })
+    }
+
+    const progresso = Math.round((fluxo.passos.indexOf(passo) / Math.max(1, fluxo.passos.length - 1)) * 100)
+    const statusCalculado = statusParaPassoProtese(passo)
+    const status = ordem.status === 'Pausado' ? 'Pausado' : statusCalculado
+
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        tipoWorkflow: tipo as TipoProteseId,
+        passoFluxoAtual: passo.id,
+        etapaAtual: passo.macroetapa,
+        subetapaAtual: passo.nome,
+        status,
+        progresso,
+        prazoEtapaAtual: calcularPrazoPasso(agora, passo, ordem.arcadas),
+        dataFinalizacao: statusCalculado === 'Finalizado' && status !== 'Pausado' ? agora : null,
+        historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
+          acao: 'definiu_fluxo_manualmente',
+          tipo: fluxo.nome,
+          etapa: passo.nome,
+          data: agora.toISOString(),
+          por: usuario.email || 'laboratorio',
+        }),
+      },
+    })
+
+    return { success: true, tipo: fluxo.nome, etapa: passo.nome }
+  })
+
+  if (resultado.success) revalidarFluxo()
+  return resultado
 }
 
 export async function concluirEtapaLaboratorial(ordemId: number) {

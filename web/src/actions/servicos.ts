@@ -67,6 +67,7 @@ export async function createServico(data: {
   custoMateriais: number
   descricao: string
 }) {
+  await requireUser()
   try {
     await prisma.servico.create({
       data: {

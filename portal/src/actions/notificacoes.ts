@@ -1,15 +1,28 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@labgest/database'
 
-const prisma = new PrismaClient()
+interface NotificacaoPortal {
+  id: string
+  titulo: string
+  mensagem: string
+  tipo: 'info' | 'warning' | 'destructive'
+  lida: boolean
+  data: string
+  link: string
+  count?: number
+}
+
+function isRegistro(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+}
 
 async function getClienteLogado() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !user.email) return null
-  const cliente = await prisma.cliente.findFirst({ where: { email: user.email } })
+  const cliente = await prisma.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true } })
   return { user, cliente }
 }
 
@@ -17,19 +30,19 @@ export async function getNotificacoesPortal() {
   const logado = await getClienteLogado()
   if (!logado?.cliente) return []
 
-  const notificacoes: any[] = []
+  const notificacoes: NotificacaoPortal[] = []
 
   // 1. Mensagens não lidas do laboratório (role = 'lab')
-  const ordensComMensagens = await (prisma.ordem.findMany as any)({
+  const ordensComMensagens = await prisma.ordem.findMany({
     where: { clienteId: logado.cliente.id },
     select: { id: true, nomePaciente: true, mensagens: true }
-  }) as any[]
+  })
 
   let totalMsgNaoLidas = 0
   for (const o of ordensComMensagens) {
-    const msgs = Array.isArray(o.mensagens) ? o.mensagens as any[] : []
+    const msgs = Array.isArray(o.mensagens) ? o.mensagens : []
     const naoLidas = msgs.filter(
-      (m: any) => m.role === 'lab' && !m.lidoPeloDentista
+      (mensagem) => isRegistro(mensagem) && mensagem.role === 'lab' && !mensagem.lidoPeloDentista
     )
     totalMsgNaoLidas += naoLidas.length
   }

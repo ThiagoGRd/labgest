@@ -1,13 +1,11 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@labgest/database'
 import { redirect } from 'next/navigation'
 
-const prisma = new PrismaClient()
-
 export async function login(formData: FormData) {
-  const email = formData.get('email') as string
+  const email = String(formData.get('email') || '').trim().toLowerCase()
   const password = formData.get('password') as string
 
   if (!email || !password) {
@@ -15,14 +13,24 @@ export async function login(formData: FormData) {
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
 
   if (error) {
-    console.error('Login error:', error)
-    return { error: error.message } // Retornando erro real para facilitar debug
+    return { error: 'Email ou senha inválidos' }
+  }
+
+  const cliente = data.user.email
+    ? await prisma.cliente.findFirst({
+        where: { email: { equals: data.user.email, mode: 'insensitive' }, ativo: true },
+        select: { id: true },
+      })
+    : null
+  if (!cliente) {
+    await supabase.auth.signOut()
+    return { error: 'Seu cadastro não está ativo no portal' }
   }
 
   redirect('/dashboard')
@@ -30,7 +38,7 @@ export async function login(formData: FormData) {
 
 export async function cadastro(formData: FormData) {
   const nome = formData.get('nome') as string
-  const email = formData.get('email') as string
+  const email = String(formData.get('email') || '').trim().toLowerCase()
   const password = formData.get('password') as string
   const telefone = formData.get('telefone') as string
   const cro = formData.get('cro') as string
@@ -65,7 +73,7 @@ export async function cadastro(formData: FormData) {
   try {
     // Verifica se já existe cliente com esse email (pode ter sido cadastrado pelo lab antes)
     const existingCliente = await prisma.cliente.findFirst({
-      where: { email }
+      where: { email: { equals: email, mode: 'insensitive' } }
     })
 
     if (existingCliente) {
@@ -94,8 +102,8 @@ export async function cadastro(formData: FormData) {
     }
   } catch (dbError) {
     console.error('Erro ao criar cliente no banco:', dbError)
-    // Não vamos bloquear o cadastro se der erro aqui, mas o ideal seria transação.
-    // O usuário conseguirá logar, mas pode ter problemas ao pedir.
+    await supabase.auth.signOut()
+    return { error: 'A conta de acesso foi criada, mas o cadastro da clínica falhou. Entre em contato com o laboratório.' }
   }
 
   redirect('/dashboard')

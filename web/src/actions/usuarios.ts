@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/auth-utils'
 
 // Cria o cliente Admin apenas quando chamado em runtime (não no build)
 function getSupabaseAdmin() {
@@ -17,6 +18,7 @@ function getSupabaseAdmin() {
 }
 
 export async function getUsuarios() {
+  await requireAdmin()
   try {
     const usuarios = await prisma.usuario.findMany({
       orderBy: { nome: 'asc' }
@@ -33,6 +35,7 @@ export async function criarUsuario(data: {
   tipo: string
   senhaProvisoria: string
 }) {
+  await requireAdmin()
   try {
     const supabaseAdmin = getSupabaseAdmin()
 
@@ -71,6 +74,7 @@ export async function criarUsuario(data: {
 }
 
 export async function toggleStatusUsuario(id: number, statusAtual: boolean) {
+  await requireAdmin()
   try {
     await prisma.usuario.update({
       where: { id },
@@ -84,6 +88,7 @@ export async function toggleStatusUsuario(id: number, statusAtual: boolean) {
 }
 
 export async function excluirUsuario(id: number, email: string) {
+  await requireAdmin()
   try {
     const supabaseAdmin = getSupabaseAdmin()
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Building2, CheckCircle2, Clock3, Stethoscope } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, Clock3, PauseCircle, PencilLine, Stethoscope } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { confirmarRecebimentoFornecedor, concluirEtapaLaboratorial, registrarEnvioFornecedor } from '@/actions/workflow-protese'
@@ -12,6 +12,8 @@ export interface OrdemFluxoProtese {
   id: number
   paciente: string
   dentista: string
+  servico: string
+  status: string
   tipoWorkflow?: string | null
   passoFluxoAtual?: string | null
   arcadas?: number
@@ -27,6 +29,7 @@ interface FluxoProteseBoardProps {
   tipo: TipoProteseId
   ordens: OrdemFluxoProtese[]
   onAbrirOrdem: (id: number) => void
+  onDefinirEtapa: (ordemId: number) => void
 }
 
 function formatarPrazo(data?: string | null) {
@@ -34,23 +37,33 @@ function formatarPrazo(data?: string | null) {
   return new Date(data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem }: FluxoProteseBoardProps) {
+export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }: FluxoProteseBoardProps) {
   const router = useRouter()
   const fluxo = getFluxoProtese(tipo)
   const [fornecedores, setFornecedores] = useState<Record<number, string>>({})
   const [justificativas, setJustificativas] = useState<Record<number, string>>({})
   const [processando, setProcessando] = useState<number | null>(null)
   const [erros, setErros] = useState<Record<number, string>>({})
-  const [agora] = useState(() => Date.now())
+  const [agora, setAgora] = useState(() => Date.now())
   const ordensSemPasso = ordens.filter((ordem) => !ordem.passoFluxoAtual)
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setAgora(Date.now()), 60_000)
+    return () => window.clearInterval(intervalo)
+  }, [])
 
   const executar = async (ordemId: number, acao: () => Promise<{ success: boolean; error?: string }>) => {
     setProcessando(ordemId)
     setErros((anterior) => ({ ...anterior, [ordemId]: '' }))
-    const resultado = await acao()
-    if (resultado.success) router.refresh()
-    else setErros((anterior) => ({ ...anterior, [ordemId]: resultado.error || 'Não foi possível atualizar a ordem' }))
-    setProcessando(null)
+    try {
+      const resultado = await acao()
+      if (resultado.success) router.refresh()
+      else setErros((anterior) => ({ ...anterior, [ordemId]: resultado.error || 'Não foi possível atualizar a ordem' }))
+    } catch {
+      setErros((anterior) => ({ ...anterior, [ordemId]: 'A atualização falhou. Tente novamente.' }))
+    } finally {
+      setProcessando(null)
+    }
   }
 
   return (
@@ -75,6 +88,10 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem }: FluxoProteseBo
                   <span className="shrink-0 font-mono text-[10px] text-slate-400">#{ordem.id}</span>
                 </div>
                 <p className="mt-1 truncate text-xs text-slate-500">{ordem.dentista}</p>
+                <p className="mt-1 truncate text-xs text-slate-500">{ordem.servico}</p>
+                <Button type="button" size="sm" onClick={() => onDefinirEtapa(ordem.id)} className="mt-3 w-full bg-amber-600 text-white hover:bg-amber-700">
+                  <PencilLine className="h-3.5 w-3.5" /> Definir tipo e etapa
+                </Button>
               </article>
             ))}
           </div>
@@ -99,6 +116,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem }: FluxoProteseBo
               {ordensDoPasso.map((ordem) => {
                 const prazo = passo.responsavel === 'fornecedor' ? ordem.prazoFornecedor : ordem.prazoEtapaAtual
                 const atrasado = Boolean(prazo && agora > new Date(prazo).getTime())
+                const pausada = ordem.status === 'Pausado'
                 return (
                   <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                     <div className="flex items-start justify-between gap-2">
@@ -106,28 +124,29 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem }: FluxoProteseBo
                       <span className="shrink-0 font-mono text-[10px] text-slate-400">#{ordem.id}</span>
                     </div>
                     <p className="mt-1 truncate text-xs text-slate-500">{ordem.dentista}</p>
+                    {pausada && <p className="mt-2 flex items-center gap-1 text-xs font-bold text-amber-600"><PauseCircle className="h-3.5 w-3.5" /> Ordem pausada</p>}
                     <div className={`mt-3 flex items-center gap-1.5 text-xs font-semibold ${atrasado ? 'text-red-600' : 'text-slate-500'}`}>
                       {atrasado ? <AlertTriangle className="h-3.5 w-3.5" /> : <Icone className="h-3.5 w-3.5" />}
                       {atrasado ? `Atrasado desde ${formatarPrazo(prazo)}` : formatarPrazo(prazo)}
                     </div>
                     {ordem.arcadas === 2 && <p className="mt-1 text-[11px] font-medium text-indigo-600">Duas arcadas</p>}
 
-                    {passo.responsavel === 'clinica' && <p className="mt-4 rounded-lg bg-sky-50 p-2 text-center text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p>}
+                    {!pausada && passo.responsavel === 'clinica' && <p className="mt-4 rounded-lg bg-sky-50 p-2 text-center text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p>}
 
-                    {passo.responsavel === 'laboratorio' && (
+                    {!pausada && passo.responsavel === 'laboratorio' && (
                       <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id))}>
                         <CheckCircle2 className="h-4 w-4" /> {processando === ordem.id ? 'Atualizando...' : 'Concluir etapa'}
                       </Button>
                     )}
 
-                    {passo.responsavel === 'fornecedor' && !ordem.dataEnvioFornecedor && (
+                    {!pausada && passo.responsavel === 'fornecedor' && !ordem.dataEnvioFornecedor && (
                       <div className="mt-4 space-y-2">
                         <input value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Nome do fornecedor" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
                         <Button type="button" className="w-full bg-orange-600 text-white hover:bg-orange-700" disabled={processando === ordem.id || !fornecedores[ordem.id]?.trim()} onClick={() => executar(ordem.id, () => registrarEnvioFornecedor(ordem.id, fornecedores[ordem.id] || ''))}>Registrar envio — 15 dias</Button>
                       </div>
                     )}
 
-                    {passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && (
+                    {!pausada && passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && (
                       <div className="mt-4 space-y-2">
                         <p className="text-xs text-slate-600 dark:text-slate-300">Fornecedor: <strong>{ordem.fornecedorEstrutura}</strong></p>
                         {atrasado && <textarea value={justificativas[ordem.id] || ''} onChange={(event) => setJustificativas((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Justificativa informada pelo fornecedor" rows={2} className="w-full resize-none rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/20" />}

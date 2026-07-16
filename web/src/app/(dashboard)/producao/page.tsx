@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export default async function ProducaoPage() {
   const ordens = await getProducao()
   const versaoOrdens = ordens
-    .map((ordem) => `${ordem.id}:${ordem.etapa}:${ordem.cicloStatus}:${ordem.cicloDentistaDeci}`)
+    .map((ordem) => `${ordem.id}:${ordem.updatedAt}`)
     .join('|')
 
   return <ProducaoView key={versaoOrdens} initialOrdens={ordens} />

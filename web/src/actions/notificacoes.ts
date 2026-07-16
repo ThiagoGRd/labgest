@@ -2,8 +2,10 @@
 
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
+import { requireUser } from '@/lib/auth-utils'
 
 export async function getNotificacoesConfig() {
+  await requireUser()
   return {
     novaOrdem: true,
     atrasos: true,
@@ -14,12 +16,14 @@ export async function getNotificacoesConfig() {
 }
 
 export async function saveNotificacoesConfig(config: any) {
+  await requireUser()
   console.log('Salvando preferências:', config)
   revalidatePath('/configuracoes')
   return { success: true }
 }
 
 export async function notificarMudancaStatus(ordemId: number, novoStatus: string) {
+  await requireUser()
   try {
     const ordem = await prisma.ordem.findUnique({
       where: { id: ordemId },

@@ -21,7 +21,7 @@ export async function concluirEtapaClinica(ordemId: number) {
   if (!user?.email) return { success: false, error: 'Não autorizado' }
 
   const resultado = await prisma.$transaction(async (tx) => {
-    const cliente = await tx.cliente.findFirst({ where: { email: user.email }, select: { id: true } })
+    const cliente = await tx.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }, select: { id: true } })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
     const ordem = await tx.ordem.findFirst({ where: { id: ordemId, clienteId: cliente.id } })

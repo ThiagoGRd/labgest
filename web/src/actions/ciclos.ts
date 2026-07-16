@@ -263,6 +263,7 @@ export async function concluirAjusteSemNovaProva(cicloId: number) {
 
 // Busca ciclos de uma ordem (para exibir no portal e no lab)
 export async function getCiclosByOrdem(ordemId: number) {
+  await requireUser()
   const ciclos = await prisma.cicloProducao.findMany({
     where: { ordemId },
     orderBy: { numeroCiclo: 'asc' }
@@ -272,6 +273,7 @@ export async function getCiclosByOrdem(ordemId: number) {
 
 // Busca o ciclo ativo atual de uma ordem
 export async function getCicloAtivo(ordemId: number) {
+  await requireUser()
   return await prisma.cicloProducao.findFirst({
     where: {
       ordemId,

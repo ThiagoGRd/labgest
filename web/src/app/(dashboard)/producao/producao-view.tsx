@@ -16,6 +16,7 @@ import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
 import { RetornosClinica } from '@/components/producao/retornos-clinica'
 import { FluxoProteseBoard } from '@/components/producao/fluxo-protese-board'
+import { DefinirEtapaFluxoModal } from '@/components/producao/definir-etapa-fluxo-modal'
 import {
   Calendar,
   GripVertical,
@@ -27,6 +28,8 @@ import {
   RotateCcw,
   AlertTriangle,
   CheckCircle2,
+  PauseCircle,
+  PencilLine,
 } from 'lucide-react'
 
 const etapas = KANBAN_ETAPAS
@@ -37,6 +40,8 @@ interface Ordem {
   paciente: string
   dentista: string
   servico: string
+  status: string
+  updatedAt: string
   etapa: string
   subetapa?: string | null
   prioridade: string
@@ -114,6 +119,7 @@ function KanbanCard({
   onConfirmarRetorno,
   onAbrirCiclo,
   onConcluirAjuste,
+  onDefinirEtapa,
 }: {
   ordem: Ordem
   etapaId: string
@@ -123,6 +129,7 @@ function KanbanCard({
   onConfirmarRetorno: () => void
   onAbrirCiclo: () => void
   onConcluirAjuste: () => void
+  onDefinirEtapa: () => void
 }) {
   const isEmProva = ordem.cicloStatus === 'em_prova' || etapaId === 'em_prova'
   const hasRetorno = Boolean(ordem.cicloDentistaDeci) && ordem.cicloStatus === 'em_prova'
@@ -132,12 +139,13 @@ function KanbanCard({
     isEmProva
   )
   const isAtrasado = daysLeft !== null && daysLeft < 0
+  const isPausada = ordem.status === 'Pausado'
 
   return (
     <div
-      draggable
+      draggable={!isPausada}
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-l-4 ${getPriorityColor(ordem.prioridade)} cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-200 group`}
+      className={`bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-l-4 ${getPriorityColor(ordem.prioridade)} ${isPausada ? 'cursor-default opacity-80' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md transition-all duration-200 group`}
     >
       {/* Header */}
       <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
@@ -164,6 +172,7 @@ function KanbanCard({
         {ordem.subetapa && (
           <p className="mt-1.5 text-[11px] text-slate-500 dark:text-zinc-500">{ordem.subetapa}</p>
         )}
+        {isPausada && <p className="mt-2 flex items-center gap-1 text-[11px] font-bold text-amber-600"><PauseCircle className="h-3.5 w-3.5" /> Ordem pausada</p>}
       </div>
 
       {/* Badge de ciclo — se for cíclico */}
@@ -221,7 +230,18 @@ function KanbanCard({
 
       {/* Ações de Ciclo */}
       <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex gap-2">
-        {!ordem.cicloAtivoId && (etapaId === 'confeccao' || etapaId === 'ajuste') && (
+        {!ordem.passoFluxoAtual && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDefinirEtapa() }}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-all"
+          >
+            <PencilLine className="h-3.5 w-3.5" />
+            Definir tipo e etapa
+          </button>
+        )}
+
+        {!isPausada && !ordem.cicloAtivoId && (etapaId === 'confeccao' || etapaId === 'ajuste') && (
           <button
             onClick={(e) => { e.stopPropagation(); onAbrirCiclo() }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
@@ -232,7 +252,7 @@ function KanbanCard({
         )}
 
         {/* Se está no lab → botão Enviar p/ Prova */}
-        {ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
+        {!isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
           <>
             <button
               onClick={(e) => { e.stopPropagation(); onEnviarProva() }}
@@ -253,14 +273,14 @@ function KanbanCard({
           </>
         )}
 
-        {ordem.cicloAtivoId && ordem.cicloStatus === 'em_prova' && !hasRetorno && (
+        {!isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'em_prova' && !hasRetorno && (
           <span className="flex-1 py-1.5 text-center text-[11px] font-bold text-amber-600 dark:text-amber-400">
             Aguardando decisão do dentista
           </span>
         )}
 
         {/* Se está em prova e dentista enviou feedback → confirmar retorno */}
-        {ordem.cicloAtivoId && hasRetorno && (
+        {!isPausada && ordem.cicloAtivoId && hasRetorno && (
           <button
             onClick={(e) => { e.stopPropagation(); onConfirmarRetorno() }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
@@ -309,6 +329,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('todas')
   const [tipoSelecionado, setTipoSelecionado] = useState<'todos' | TipoProteseId>('todos')
+  const [ordemParaDefinirEtapa, setOrdemParaDefinirEtapa] = useState<Ordem | null>(null)
 
   // Modais de ciclo
   const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<Ordem | null>(null)
@@ -425,6 +446,17 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
         onClose={() => { setViewModalOpen(false); setSelectedFullOrdem(null) }}
         ordem={selectedFullOrdem}
       />
+      {ordemParaDefinirEtapa && (
+        <DefinirEtapaFluxoModal
+          key={ordemParaDefinirEtapa.id}
+          ordem={ordemParaDefinirEtapa}
+          onClose={() => setOrdemParaDefinirEtapa(null)}
+          onSuccess={() => {
+            setOrdemParaDefinirEtapa(null)
+            router.refresh()
+          }}
+        />
+      )}
       {pendingMove && (
         <ChecklistModal
           isOpen={checklistOpen}
@@ -518,6 +550,10 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             tipo={tipoSelecionado}
             ordens={Object.values(ordensFiltradasPorEtapa).flat().filter((ordem) => ordem.tipoWorkflow === tipoSelecionado)}
             onAbrirOrdem={handlePatientClick}
+            onDefinirEtapa={(ordemId) => {
+              const ordem = Object.values(ordensPorEtapa).flat().find((item) => item.id === ordemId)
+              if (ordem) setOrdemParaDefinirEtapa(ordem)
+            }}
           />
         ) : (
         /* KanBan Board */
@@ -558,6 +594,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                     onConfirmarRetorno={() => setConfirmarRetornoOrdem(ordem)}
                     onAbrirCiclo={() => setAbrirCicloOrdem(ordem)}
                     onConcluirAjuste={() => handleConcluirAjuste(ordem)}
+                    onDefinirEtapa={() => setOrdemParaDefinirEtapa(ordem)}
                   />
                 ))}
 

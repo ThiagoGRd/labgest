@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { prisma } from '@labgest/database'
 import { redirect } from 'next/navigation'
 
 export async function login(formData: FormData) {
@@ -12,7 +13,7 @@ export async function login(formData: FormData) {
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
@@ -21,6 +22,20 @@ export async function login(formData: FormData) {
     console.error('Login error:', error)
     return { error: 'Email ou senha inválidos' }
   }
+
+  const usuario = data.user.email
+    ? await prisma.usuario.findFirst({
+        where: { email: { equals: data.user.email, mode: 'insensitive' }, ativo: true },
+        select: { id: true },
+      })
+    : null
+
+  if (!usuario) {
+    await supabase.auth.signOut()
+    return { error: 'Seu usuário não tem acesso ao LabGest Web' }
+  }
+
+  await prisma.usuario.update({ where: { id: usuario.id }, data: { ultimoAcesso: new Date() } })
 
   redirect('/dashboard')
 }

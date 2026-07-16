@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
@@ -111,11 +110,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-8 text-center">
-            <p className="text-sm text-slate-500">
-              Credenciais de teste: <span className="font-medium text-slate-700">admin@labgest.com / 123456</span>
-            </p>
-          </div>
         </div>
       </div>
 

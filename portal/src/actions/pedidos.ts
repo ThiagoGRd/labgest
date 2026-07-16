@@ -22,7 +22,7 @@ async function getClienteLogado() {
 
   // Buscar cliente pelo email do Auth
   const cliente = await prisma.cliente.findFirst({
-    where: { email: user.email }
+    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
   })
 
   return { user, cliente }
@@ -189,7 +189,7 @@ export async function aprovarProva(pedidoId: number, checklist: Prisma.InputJson
   if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
 
   try {
-    const pedido = await prisma.ordem.findUnique({ where: { id: pedidoId } })
+    const pedido = await prisma.ordem.findFirst({ where: { id: pedidoId, clienteId: logado.cliente.id } })
     if (!pedido) return { success: false, error: 'Pedido não encontrado' }
 
     // Atualizar checklist e mudar status
@@ -397,9 +397,10 @@ export async function getServicosDisponiveis() {
 
 export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
   try {
-    const ordem = await prisma.ordem.findUnique({
-      where: { id: ordemId }
-    })
+    const logado = await getClienteLogado()
+    if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
+
+    const ordem = await prisma.ordem.findFirst({ where: { id: ordemId, clienteId: logado.cliente.id } })
     
     if (!ordem) throw new Error('Ordem não encontrada')
     

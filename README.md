@@ -82,13 +82,6 @@ npm run dev:all
 - **Portal Dentista**: http://localhost:3001
 - **Prisma Studio**: `npm run db:studio`
 
-### Credenciais de Teste
-
-```
-Email: admin@labgest.com
-Senha: 123456
-```
-
 ## 📊 Comandos Úteis
 
 ```bash

@@ -2,8 +2,10 @@
 
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
+import { requireUser } from '@/lib/auth-utils'
 
 export async function getLabConfig() {
+  await requireUser()
   try {
     const config = await prisma.configuracao.findFirst()
     return config
@@ -20,6 +22,7 @@ export async function updateLabConfig(data: {
   email?: string
   endereco?: string
 }) {
+  await requireUser()
   try {
     const config = await prisma.configuracao.findFirst()
 

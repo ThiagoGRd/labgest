@@ -1,9 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@labgest/database'
 
 async function getClienteLogado() {
   const supabase = await createClient()
@@ -12,7 +10,7 @@ async function getClienteLogado() {
   if (!user || !user.email) return null
 
   const cliente = await prisma.cliente.findFirst({
-    where: { email: user.email }
+    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
   })
 
   return { user, cliente }
@@ -33,7 +31,7 @@ export async function getContasCliente() {
     }
   })
 
-  const formatConta = (c: any) => ({
+  const formatConta = (c: (typeof contas)[number]) => ({
     id: c.id,
     descricao: c.descricao,
     ordemId: c.ordemId,
@@ -42,7 +40,7 @@ export async function getContasCliente() {
     valor: Number(c.valor),
     vencimento: c.dataVencimento.toISOString(),
     recebimento: c.dataRecebimento ? c.dataRecebimento.toISOString() : null,
-    status: c.status === 'Recebido' ? 'Pago' : c.status
+    status: c.status === 'Recebido' ? 'Pago' : (c.status || 'Pendente')
   })
 
   const pendentes = contas

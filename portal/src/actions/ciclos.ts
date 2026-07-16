@@ -1,22 +1,20 @@
 'use server'
 
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
-let prismaInstance: PrismaClient | null = null
-
-function getPrisma() {
-  if (!prismaInstance) prismaInstance = new PrismaClient()
-  return prismaInstance
-}
-
 // Busca ciclos de um pedido — usado pelo Portal do Dentista
 export async function getCiclosByPedido(ordemId: number) {
-  const prisma = getPrisma()
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) return []
+    const cliente = await prisma.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }, select: { id: true } })
+    if (!cliente) return []
+
     const ciclos = await prisma.cicloProducao.findMany({
-      where: { ordemId },
+      where: { ordemId, ordem: { clienteId: cliente.id } },
       orderBy: { numeroCiclo: 'asc' }
     })
     return ciclos.map(c => ({
@@ -39,7 +37,6 @@ export async function salvarFeedbackProva(
   decisao: 'ajustes' | 'aprovado',
   fotos: string[] = []
 ) {
-  const prisma = getPrisma()
   const observacoesNormalizadas = observacoes.trim()
   if (decisao === 'ajustes' && !observacoesNormalizadas) {
     return { success: false, error: 'Descreva quais ajustes precisam ser realizados' }
@@ -51,7 +48,7 @@ export async function salvarFeedbackProva(
     if (!user?.email) return { success: false, error: 'Não autorizado' }
 
     const cliente = await prisma.cliente.findFirst({
-      where: { email: user.email },
+      where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true },
       select: { id: true },
     })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }

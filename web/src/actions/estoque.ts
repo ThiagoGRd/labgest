@@ -42,6 +42,7 @@ export async function createItemEstoque(data: {
   dataValidade?: string
   codigoBarras?: string
 }) {
+  await requireUser()
   try {
     await prisma.estoque.create({
       data: {
@@ -67,6 +68,7 @@ export async function createItemEstoque(data: {
 
 // Função para abater estoque automaticamente
 export async function abaterEstoquePorServico(servicoId: number) {
+  await requireUser()
   try {
     const servico = await prisma.servico.findUnique({
       where: { id: servicoId },

@@ -64,6 +64,7 @@ export async function sincronizarFinanceiroRetroativo() {
 
 
 export async function gerarCobrancaAutomatica(ordemId: number) {
+  await requireUser()
   try {
     const ordem = await prisma.ordem.findUnique({
       where: { id: ordemId },
@@ -215,6 +216,7 @@ export async function createConta(data: {
   categoria?: string
   observacoes?: string
 }) {
+  await requireUser()
   try {
     // Usa parseDateLocal para evitar bug de fuso horário (UTC vs BRT)
     const dataVencimento = parseDateLocal(data.vencimento)
@@ -316,6 +318,7 @@ export async function excluirConta(id: number, tipo: 'receber' | 'pagar') {
 }
 
 export async function baixarConta(id: number, tipo: 'receber' | 'pagar') {
+  await requireUser()
   try {
     if (tipo === 'receber') {
       await prisma.contaReceber.update({
