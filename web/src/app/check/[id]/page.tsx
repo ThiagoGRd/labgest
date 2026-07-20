@@ -1,49 +1,16 @@
 import { getOrdemPublic } from '@/actions/ordens'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle2, Clock, Package, User, Calendar, Activity } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { CheckCircle2, Package, Calendar, Activity } from 'lucide-react'
 import Link from 'next/link'
-import { KANBAN_ETAPAS, normalizarEtapa } from '@/lib/workflow-config'
+import { getFluxoProtese, isTipoProtese, KANBAN_ETAPAS, normalizarEtapa } from '@/lib/workflow-config'
 
-function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
-    'Aguardando': 'aguardando',
-    'Em Produção': 'emProducao',
-    'Finalizado': 'finalizado',
-    'Cancelado': 'destructive',
-    'Pausado': 'pausado',
-  }
-  return map[status] || 'default'
-}
+export const dynamic = 'force-dynamic'
+export const metadata = { robots: { index: false, follow: false } }
 
 export default async function CheckOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params
-  console.log('[CheckOrderPage] Params received:', resolvedParams)
-
-  // Tentar limpar o ID (remover qualquer coisa que não seja número)
-  const cleanIdProp = resolvedParams.id ? resolvedParams.id.replace(/\D/g, '') : ''
-  const id = parseInt(cleanIdProp)
-
-  if (isNaN(id) || !cleanIdProp) {
-    console.error('[CheckOrderPage] Invalid ID:', resolvedParams.id)
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
-        <Card className="max-w-md w-full text-center p-12">
-          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Package className="h-10 w-10 text-amber-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Código Inválido</h1>
-          <p className="text-slate-500 mb-4">O código da ordem não parece ser válido.</p>
-          <div className="bg-slate-100 p-2 rounded mb-6 text-xs font-mono text-slate-600 break-all">
-            Recebido: {JSON.stringify(resolvedParams)}
-          </div>
-          <Link href="/" className="text-indigo-600 font-bold hover:underline">Voltar para o site</Link>
-        </Card>
-      </div>
-    )
-  }
-
-  const ordem = await getOrdemPublic(id)
+  const ordem = await getOrdemPublic(resolvedParams.id)
 
   if (!ordem) {
     return (
@@ -60,8 +27,12 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const etapas = KANBAN_ETAPAS
-  const etapaIndex = etapas.findIndex(etapa => etapa.id === normalizarEtapa(ordem.etapaAtual || 'recebimento'))
+  const fluxoEspecifico = isTipoProtese(ordem.tipoWorkflow) ? getFluxoProtese(ordem.tipoWorkflow) : null
+  const etapas = fluxoEspecifico
+    ? fluxoEspecifico.passos.map((passo) => ({ id: passo.id, nome: passo.nome }))
+    : KANBAN_ETAPAS
+  const etapaAtual = fluxoEspecifico ? ordem.passoFluxoAtual : normalizarEtapa(ordem.etapaAtual || 'recebimento')
+  const etapaIndex = etapas.findIndex(etapa => etapa.id === etapaAtual)
 
   return (
     <div className="min-h-screen mesh-bg p-6 lg:p-12">

@@ -205,6 +205,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
               value={globalData.dataEntrega}
               onChange={e => setGlobalData(p => ({ ...p, dataEntrega: e.target.value }))}
               className="h-10 rounded-lg bg-slate-50 dark:bg-zinc-800/50"
+              min={toDateInputValue(new Date())}
+              max={`${new Date().getFullYear() + 2}-12-31`}
               required
             />
           </div>

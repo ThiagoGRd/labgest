@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
 import { ETAPA_IDS, etapaLabel } from '@/lib/workflow-config'
-import type { TipoWorkflow, EtapaId } from '@/lib/workflow-config'
 import { formatarCpf } from '@/lib/cpf'
 
 interface Ordem {
@@ -28,6 +27,7 @@ interface Ordem {
   material?: string
   observacoes?: string
   tipoWorkflow?: string | null
+  motivoPausa?: string | null
 }
 
 interface EditarOrdemModalProps {
@@ -35,18 +35,15 @@ interface EditarOrdemModalProps {
   onClose: () => void
   onSuccess?: () => void
   ordem: Ordem | null
-  clientes: { id: number; nome: string }[]
-  servicos: { id: number; nome: string; preco: any }[]
 }
 
 const cores = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4']
 const statusOptions = [
   { value: 'Ativo', label: 'Ativo (definido pela etapa)' },
   { value: 'Pausado', label: 'Pausado' },
-  { value: 'Cancelado', label: 'Cancelado' },
 ]
 
-export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, servicos }: EditarOrdemModalProps) {
+export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOrdemModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -59,6 +56,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
     corDentes: '',
     material: '',
     observacoes: '',
+    motivoStatus: '',
   })
 
   // Etapas canônicas disponíveis para seleção
@@ -71,11 +69,12 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
         cpfPaciente: formatarCpf(ordem.cpfPaciente || ''),
         dataEntrega: ordem.dataEntrega ? ordem.dataEntrega.split('T')[0] : '',
         prioridade: ordem.prioridade || 'Normal',
-        status: ['Pausado', 'Cancelado'].includes(ordem.status) ? ordem.status : 'Ativo',
+        status: ordem.status === 'Pausado' ? 'Pausado' : 'Ativo',
         etapaAtual: ordem.etapaAtual || 'Recebimento',
         corDentes: ordem.corDentes || '',
         material: ordem.material || '',
         observacoes: ordem.observacoes || '',
+        motivoStatus: ordem.motivoPausa || '',
       })
     }
   }, [ordem])
@@ -103,6 +102,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
         corDentes: formData.corDentes,
         material: formData.material,
         observacoes: formData.observacoes,
+        motivoStatus: formData.motivoStatus,
       })
 
       if (result.success) {
@@ -111,7 +111,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
       } else {
         setError(result.error || 'Erro ao atualizar ordem')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -158,6 +158,20 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
             />
           </div>
 
+          {formData.status === 'Pausado' && (
+            <div className="md:col-span-2">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Motivo da pausa</label>
+              <textarea
+                name="motivoStatus"
+                value={formData.motivoStatus}
+                onChange={handleChange}
+                className="min-h-20 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                placeholder="Ex.: aguardando nova moldagem da clínica"
+                required
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">CPF do Paciente</label>
             <Input
@@ -180,6 +194,8 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem, clientes, 
               value={formData.dataEntrega}
               onChange={handleChange}
               className="h-11 rounded-xl"
+              min="2020-01-01"
+              max={`${new Date().getFullYear() + 2}-12-31`}
               required
             />
           </div>

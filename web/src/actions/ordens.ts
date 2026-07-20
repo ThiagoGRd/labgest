@@ -3,7 +3,7 @@
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import { requireUser } from '@/lib/auth-utils'
+import { requireAdmin, requireUser } from '@/lib/auth-utils'
 import { gerarCobrancaAutomatica } from './financeiro'
 import { parseDateLocal } from '@/lib/date-utils'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
@@ -25,18 +25,112 @@ import {
   isTipoProtese,
 } from '@/lib/workflow-config'
 
-export async function getOrdens() {
+export interface FiltrosOrdens {
+  busca?: string
+  status?: string
+  clienteId?: number
+  tipoWorkflow?: string
+  ordenar?: 'prazo' | 'recentes' | 'atualizadas' | 'paciente'
+  pagina?: number
+  porPagina?: number
+}
+
+const STATUS_ENCERRADOS = ['Finalizado', 'Entregue', 'Cancelado']
+
+function validarDataEntrega(valor: string, permitirPassado = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null
+  const [ano, mes, dia] = valor.split('-').map(Number)
+  if (ano < 2020 || ano > new Date().getFullYear() + 2) return null
+  const data = parseDateLocal(valor)
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) return null
+  if (!permitirPassado) {
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    if (data < hoje) return null
+  }
+  return data
+}
+
+export async function getOrdens(filtros: FiltrosOrdens = {}) {
   await requireUser()
-  try {
-    const ordens = await prisma.ordem.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
+
+  const pagina = Math.max(1, filtros.pagina || 1)
+  const porPagina = Math.min(50, Math.max(10, filtros.porPagina || 20))
+  const busca = filtros.busca?.trim() || ''
+  const cpfBusca = busca.replace(/\D/g, '')
+  const status = filtros.status || 'ativas'
+  const condicoesBusca: Prisma.OrdemWhereInput[] = busca ? [
+    { nomePaciente: { contains: busca, mode: 'insensitive' } },
+    { clienteNome: { contains: busca, mode: 'insensitive' } },
+    { servicoNome: { contains: busca, mode: 'insensitive' } },
+    ...(cpfBusca ? [{ cpfPaciente: { contains: cpfBusca } } satisfies Prisma.OrdemWhereInput] : []),
+    ...(/^\d+$/.test(busca) ? [{ id: Number(busca) }] : []),
+  ] : []
+
+  const where: Prisma.OrdemWhereInput = {
+    ...(status === 'ativas'
+      ? { status: { notIn: STATUS_ENCERRADOS } }
+      : status === 'encerradas'
+        ? { status: { in: STATUS_ENCERRADOS } }
+        : status !== 'todos'
+          ? { status }
+          : {}),
+    ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
+    ...(filtros.tipoWorkflow ? { tipoWorkflow: filtros.tipoWorkflow } : {}),
+    ...(busca ? { OR: condicoesBusca } : {}),
+  }
+
+  const orderBy: Prisma.OrdemOrderByWithRelationInput[] = filtros.ordenar === 'recentes'
+    ? [{ createdAt: 'desc' }]
+    : filtros.ordenar === 'atualizadas'
+      ? [{ updatedAt: 'desc' }]
+      : filtros.ordenar === 'paciente'
+        ? [{ nomePaciente: 'asc' }]
+        : [{ dataEntrega: 'asc' }, { prioridade: 'desc' }]
+
+  const [ordens, total, totalGeral, ativas, emProva, finalizadas, pausadas, encerradas] = await Promise.all([
+    prisma.ordem.findMany({
+      where,
+      orderBy,
+      skip: (pagina - 1) * porPagina,
+      take: porPagina,
+      select: {
+        id: true,
+        nomePaciente: true,
+        cpfPaciente: true,
+        clienteNome: true,
+        servicoNome: true,
+        status: true,
+        prioridade: true,
+        dataPedido: true,
+        dataEntrega: true,
+        dataEntregaReal: true,
+        etapaAtual: true,
+        subetapaAtual: true,
+        valor: true,
+        valorFinal: true,
+        arquivoStl: true,
+        tipoWorkflow: true,
+        tentativaAtual: true,
+        tokenRastreamento: true,
+        motivoPausa: true,
+        pausadoEm: true,
+        updatedAt: true,
         cliente: { select: { nome: true } },
         servico: { select: { nome: true } },
-      }
-    })
+      },
+    }),
+    prisma.ordem.count({ where }),
+    prisma.ordem.count(),
+    prisma.ordem.count({ where: { status: { notIn: STATUS_ENCERRADOS } } }),
+    prisma.ordem.count({ where: { status: 'Em Prova' } }),
+    prisma.ordem.count({ where: { status: 'Finalizado' } }),
+    prisma.ordem.count({ where: { status: 'Pausado' } }),
+    prisma.ordem.count({ where: { status: { in: STATUS_ENCERRADOS } } }),
+  ])
 
-    return ordens.map(o => ({
+  return {
+    ordens: ordens.map(o => ({
       id: o.id,
       paciente: o.nomePaciente,
       cpfPaciente: o.cpfPaciente || '',
@@ -46,25 +140,24 @@ export async function getOrdens() {
       prioridade: o.prioridade || 'Normal',
       dataEntrada: o.dataPedido ? o.dataPedido.toISOString() : new Date().toISOString(),
       dataEntrega: o.dataEntrega && !isNaN(o.dataEntrega.getTime()) ? o.dataEntrega.toISOString() : new Date().toISOString(),
+      dataEntregaReal: o.dataEntregaReal?.toISOString() || null,
       etapaAtual: normalizarEtapa(o.etapaAtual || 'recebimento'),
+      subetapaAtual: o.subetapaAtual || '',
       valor: Number(o.valorFinal || o.valor),
-      corDentes: o.corDentes || '',
-      material: o.material || '',
-      observacoes: o.observacoes || '',
-      foto: null,
       arquivos: (o.arquivoStl as string[]) || [],
-      // Workflow fields
       tipoWorkflow: (o.tipoWorkflow as TipoWorkflow) || null,
       tentativaAtual: o.tentativaAtual || 0,
-      historicoEtapas: (o.historicoEtapas as unknown[]) || [],
-      checklistEstetico: (o.checklistEstetico as Partial<ChecklistEstetico>) || {},
-      fotosProva: (o.fotosProva as unknown[]) || [],
-      fotosCaso: Array.isArray(o.fotosCaso) ? o.fotosCaso : [],
-      mensagens: Array.isArray(o.mensagens) ? o.mensagens : [],
-    }))
-  } catch (error) {
-    console.error('Erro ao buscar ordens:', error)
-    return []
+      tokenRastreamento: o.tokenRastreamento,
+      motivoPausa: o.motivoPausa,
+      pausadoEm: o.pausadoEm?.toISOString() || null,
+      updatedAt: o.updatedAt?.toISOString() || null,
+    })),
+    total,
+    totalGeral,
+    pagina,
+    porPagina,
+    totalPaginas: Math.max(1, Math.ceil(total / porPagina)),
+    contadores: { ativas, emProva, finalizadas, pausadas, encerradas },
   }
 }
 
@@ -85,19 +178,24 @@ export async function createBatchOrdens(data: {
     tipoProtese?: string
   }>
 }) {
-  await requireUser()
+  const usuario = await requireUser()
   try {
     const cpfPaciente = normalizarCpf(data.cpfPaciente)
     if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+    const dataEntrega = validarDataEntrega(data.dataEntrega)
+    if (!dataEntrega) return { success: false, error: 'Informe uma data de entrega válida, entre hoje e os próximos 2 anos' }
+    if (!data.itens.length) return { success: false, error: 'Adicione pelo menos um serviço ao pedido' }
 
     const cliente = await prisma.cliente.findUnique({ where: { id: Number(data.clienteId) } })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
-    // Processar cada item como uma ordem separada
-    const promises = data.itens.map(async (item) => {
-      const servico = await prisma.servico.findUnique({ where: { id: Number(item.servicoId) } })
-      if (!servico) throw new Error(`Serviço ID ${item.servicoId} não encontrado`)
+    const idsServicos = [...new Set(data.itens.map((item) => Number(item.servicoId)))]
+    const servicos = await prisma.servico.findMany({ where: { id: { in: idsServicos }, ativo: true } })
+    if (servicos.length !== idsServicos.length) return { success: false, error: 'Um dos serviços não existe ou está inativo' }
+    const servicosPorId = new Map(servicos.map((servico) => [servico.id, servico]))
 
+    const operacoes = data.itens.map((item) => {
+      const servico = servicosPorId.get(Number(item.servicoId))!
       const valor = Number(servico.preco)
       const tipoProtese = isTipoProtese(item.tipoProtese) ? item.tipoProtese : inferirTipoProtese(servico.nome)
       const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
@@ -113,7 +211,7 @@ export async function createBatchOrdens(data: {
           servicoNome: servico.nome,
           nomePaciente: data.paciente,
           cpfPaciente,
-          dataEntrega: parseDateLocal(data.dataEntrega),
+          dataEntrega,
           valor: valor,
           valorFinal: valor,
           prioridade: data.prioridade,
@@ -129,14 +227,14 @@ export async function createBatchOrdens(data: {
           arcadas,
           prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, arcadas) : null,
           tentativaAtual: 0,
-          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString() }],
+          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString(), por: usuario.email }],
           checklistEstetico: {},
           arquivoStl: data.arquivos || [],
         }
       })
     })
 
-    await Promise.all(promises)
+    await prisma.$transaction(operacoes)
     revalidatePath('/ordens')
     revalidatePath('/producao')
     return { success: true }
@@ -156,24 +254,42 @@ export async function updateOrdem(id: number, data: {
   corDentes: string
   material: string
   observacoes: string
+  motivoStatus?: string
 }) {
-  await requireUser()
+  const usuario = await requireUser()
   try {
     const cpfPaciente = normalizarCpf(data.cpfPaciente)
     if (!isCpfValido(cpfPaciente)) return { success: false, error: 'Informe um CPF válido para o paciente' }
+    const dataEntrega = validarDataEntrega(data.dataEntrega, true)
+    if (!dataEntrega) return { success: false, error: 'Informe uma data de entrega válida entre 2020 e os próximos 2 anos' }
+    if (data.status === 'Pausado' && !data.motivoStatus?.trim()) {
+      return { success: false, error: 'Informe o motivo da pausa' }
+    }
 
     // Normaliza etapaAtual para ID canônico antes de salvar
     const etapaCanonica = normalizarEtapa(data.etapaAtual)
-    const novoStatus = ['Pausado', 'Cancelado'].includes(data.status)
+    const novoStatus = data.status === 'Pausado'
       ? data.status
       : statusParaEtapa(etapaCanonica)
+
+    const ordemAtual = await prisma.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true } })
+    if (!ordemAtual) return { success: false, error: 'Ordem não encontrada' }
+    if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
+      return { success: false, error: 'Ordens encerradas não podem ser alteradas' }
+    }
+    const historico = (ordemAtual.historicoEtapas as Prisma.InputJsonObject[]) || []
+    if (novoStatus === 'Pausado' && ordemAtual.status !== 'Pausado') {
+      historico.push({ etapa: ordemAtual.etapaAtual || etapaCanonica, acao: 'pausou', motivo: data.motivoStatus?.trim(), data: new Date().toISOString(), por: usuario.email })
+    } else if (ordemAtual.status === 'Pausado' && novoStatus !== 'Pausado') {
+      historico.push({ etapa: etapaCanonica, acao: 'retomou', data: new Date().toISOString(), por: usuario.email })
+    }
 
     await prisma.ordem.update({
       where: { id },
       data: {
         nomePaciente: data.paciente,
         cpfPaciente,
-        dataEntrega: parseDateLocal(data.dataEntrega),
+        dataEntrega,
         prioridade: data.prioridade,
         status: novoStatus,
         etapaAtual: etapaCanonica,
@@ -181,6 +297,10 @@ export async function updateOrdem(id: number, data: {
         material: data.material,
         observacoes: data.observacoes,
         dataFinalizacao: novoStatus === 'Finalizado' ? new Date() : null,
+        motivoPausa: novoStatus === 'Pausado' ? data.motivoStatus?.trim() : null,
+        pausadoEm: novoStatus === 'Pausado' ? new Date() : null,
+        pausadoPor: novoStatus === 'Pausado' ? usuario.email : null,
+        historicoEtapas: historico,
       }
     })
 
@@ -201,11 +321,6 @@ export async function updateOrdem(id: number, data: {
 
 export async function getOrdemById(id: number) {
   await requireUser()
-  return getOrdemPublic(id)
-}
-
-export async function getOrdemPublic(id: number) {
-  console.log('[getOrdemPublic] Buscando ordem ID:', id)
   try {
     const ordem = await prisma.ordem.findUnique({
       where: { id },
@@ -223,10 +338,11 @@ export async function getOrdemPublic(id: number) {
     return {
       id: ordem.id,
       paciente: ordem.nomePaciente,
+      cpfPaciente: ordem.cpfPaciente || '',
       cliente: { id: ordem.cliente?.id, nome: ordem.clienteNome || ordem.cliente?.nome || 'Cliente Desconhecido' },
-      clienteId: ordem.clienteId,
+      clienteId: ordem.clienteId ?? undefined,
       servico: ordem.servicoNome || ordem.servico?.nome || 'Serviço',
-      servicoId: ordem.servicoId,
+      servicoId: ordem.servicoId ?? undefined,
       status: ordem.status || 'Aguardando',
       prioridade: ordem.prioridade || 'Normal',
       dataEntrada: ordem.dataPedido ? ordem.dataPedido.toISOString() : new Date().toISOString(),
@@ -244,16 +360,65 @@ export async function getOrdemPublic(id: number) {
       historicoEtapas: (ordem.historicoEtapas as unknown[]) || [],
       checklistEstetico: (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {},
       fotosProva: (ordem.fotosProva as unknown[]) || [],
+      fotosCaso: Array.isArray(ordem.fotosCaso) ? ordem.fotosCaso.filter((foto): foto is string => typeof foto === 'string') : [],
+      mensagens: Array.isArray(ordem.mensagens) ? ordem.mensagens : [],
+      tokenRastreamento: ordem.tokenRastreamento,
+      motivoPausa: ordem.motivoPausa,
+      pausadoEm: ordem.pausadoEm?.toISOString() || null,
     }
   } catch (error) {
-    console.error('[getOrdemPublic] Erro ao buscar ordem:', error)
+    console.error('[getOrdemById] Erro ao buscar ordem:', error)
     return null
   }
 }
 
+export async function getOrdemPublic(token: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)) return null
+
+  const ordem = await prisma.ordem.findUnique({
+    where: { tokenRastreamento: token },
+    select: {
+      id: true,
+      nomePaciente: true,
+      clienteNome: true,
+      servicoNome: true,
+      status: true,
+      prioridade: true,
+      dataEntrega: true,
+      etapaAtual: true,
+      passoFluxoAtual: true,
+      tipoWorkflow: true,
+    },
+  })
+  if (!ordem) return null
+
+  const partesNome = ordem.nomePaciente.trim().split(/\s+/)
+  const pacienteMascarado = partesNome.length > 1
+    ? `${partesNome[0]} ${partesNome.at(-1)?.charAt(0) || ''}.`
+    : partesNome[0]
+
+  return {
+    id: ordem.id,
+    paciente: pacienteMascarado,
+    cliente: { nome: ordem.clienteNome },
+    servico: ordem.servicoNome,
+    status: ordem.status || 'Aguardando',
+    prioridade: ordem.prioridade || 'Normal',
+    dataEntrega: ordem.dataEntrega.toISOString(),
+    etapaAtual: normalizarEtapa(ordem.etapaAtual || 'recebimento'),
+    passoFluxoAtual: ordem.passoFluxoAtual,
+    tipoWorkflow: ordem.tipoWorkflow,
+  }
+}
+
 export async function deleteOrdem(id: number) {
-  await requireUser()
+  await requireAdmin()
   try {
+    const ordem = await prisma.ordem.findUnique({ where: { id }, select: { status: true, historicoEtapas: true } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if ((ordem.historicoEtapas as unknown[] | null)?.length || ordem.status !== 'Aguardando') {
+      return { success: false, error: 'Ordens que já entraram no fluxo devem ser canceladas, não excluídas' }
+    }
     await prisma.ordem.delete({ where: { id } })
     revalidatePath('/ordens')
     return { success: true }
@@ -263,17 +428,54 @@ export async function deleteOrdem(id: number) {
   }
 }
 
+export async function cancelarOrdem(id: number, motivo: string) {
+  const usuario = await requireUser()
+  if (!motivo.trim()) return { success: false, error: 'Informe o motivo do cancelamento' }
+
+  const ordem = await prisma.ordem.findUnique({ where: { id } })
+  if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+  if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
+    return { success: false, error: 'Esta ordem não pode mais ser cancelada' }
+  }
+
+  const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
+  historico.push({
+    etapa: ordem.etapaAtual || 'recebimento',
+    acao: 'cancelou',
+    motivo: motivo.trim(),
+    data: new Date().toISOString(),
+    por: usuario.email,
+  })
+
+  await prisma.ordem.update({
+    where: { id },
+    data: {
+      status: 'Cancelado',
+      motivoCancelamento: motivo.trim(),
+      canceladoEm: new Date(),
+      canceladoPor: usuario.email,
+      historicoEtapas: historico,
+    },
+  })
+
+  revalidatePath('/ordens')
+  revalidatePath('/producao')
+  revalidatePath('/prioridades')
+  return { success: true }
+}
+
 export async function getDadosNovaOrdem() {
   await requireUser()
   try {
     const [clientes, servicosRaw] = await Promise.all([
       prisma.cliente.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
-      prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, preco: true } })
+      prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, preco: true, tempoProducao: true } })
     ])
 
     const servicos = servicosRaw.map(s => ({
       ...s,
-      preco: Number(s.preco)
+      preco: Number(s.preco),
+      tempoProducao: s.tempoProducao || 0,
     }))
 
     return { clientes, servicos }
@@ -356,9 +558,12 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
 
 export async function marcarEntregue(ordemId: number) {
   try {
-    await requireUser()
+    const usuario = await requireUser()
     const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if (ordem.status !== 'Finalizado') {
+      return { success: false, error: 'Finalize o fluxo de produção antes de registrar a entrega' }
+    }
 
     const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
     historico.push({
@@ -366,6 +571,7 @@ export async function marcarEntregue(ordemId: number) {
       acao: 'avancou',
       para: 'entregue',
       data: new Date().toISOString(),
+      por: usuario.email,
     })
 
     await prisma.ordem.update({
@@ -375,7 +581,7 @@ export async function marcarEntregue(ordemId: number) {
         status: 'Entregue',
         historicoEtapas: historico,
         progresso: 100,
-        dataFinalizacao: new Date(),
+        dataEntregaReal: new Date(),
       }
     })
 

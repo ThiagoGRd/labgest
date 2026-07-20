@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { type ComponentProps, useEffect, useRef, useState, useTransition } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -14,20 +15,17 @@ import { NovaOrdemModal } from '@/components/ordens/nova-ordem-modal'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
-import { etapaLabel } from '@/lib/workflow-config'
+import { etapaLabel, FLUXOS_PROTESE, getWorkflowLabel, isTipoProtese } from '@/lib/workflow-config'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { NotaEntrega } from '@/components/ordens/nota-entrega'
-import { notificarMudancaStatus } from '@/actions/notificacoes'
-import { deleteOrdem, marcarEntregue } from '@/actions/ordens'
+import { gerarNotificacaoWhatsApp } from '@/actions/notificacoes'
+import { cancelarOrdem, getOrdemById, marcarEntregue, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
 import {
   Search,
-  Filter,
-  Download,
   Eye,
   Edit,
-  Trash2,
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -39,9 +37,10 @@ import {
   GitBranch,
   RotateCcw,
   MoreHorizontal,
+  Ban,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react'
-
-import { CheckCircle2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,40 +51,30 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 // Types
-interface Ordem {
-  id: number
-  paciente: string
-  cpfPaciente?: string
-  cliente: { nome: string }
-  servico: string
-  status: string
-  prioridade: string
-  dataEntrega: string
-  valor: number
-  etapaAtual: string
-  progresso?: number
-  arquivos?: string[]
-  dataEntrada?: string
-  corDentes?: string
-  observacoes?: string
-  // Workflow fields
-  tipoWorkflow?: string | null
-  tentativaAtual?: number
-  historicoEtapas?: any[]
-  checklistEstetico?: any
-}
+type ResultadoOrdens = Awaited<ReturnType<typeof getOrdens>>
+type Ordem = ResultadoOrdens['ordens'][number]
+type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
+type BadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
+type DadosFicha = ComponentProps<typeof FichaImpressao>['ordem']
+type DadosEtiqueta = ComponentProps<typeof EtiquetaImpressao>['ordem']
+type DadosNotaEntrega = ComponentProps<typeof NotaEntrega>['ordem']
+type DadosWorkflow = ComponentProps<typeof WorkflowModal>['ordem']
 
 interface OrdensViewProps {
-  initialData: Ordem[]
-  clientes: any[]
-  servicos: any[]
+  resultado: ResultadoOrdens
+  clientes: { id: number; nome: string }[]
+  servicos: { id: number; nome: string; preco: number; tempoProducao: number }[]
+  filtros: FiltrosOrdens
+  user: { nome: string; email: string; tipo: string }
 }
 
 function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
+  const map: Record<string, BadgeVariant> = {
     'Aguardando': 'aguardando',
     'Em Produção': 'emProducao',
+    'Em Prova': 'emProducao',
     'Finalizado': 'finalizado',
+    'Entregue': 'finalizado',
     'Cancelado': 'destructive',
     'Pausado': 'pausado',
   }
@@ -93,7 +82,7 @@ function getStatusVariant(status: string) {
 }
 
 function getPriorityVariant(priority: string) {
-  const map: Record<string, any> = {
+  const map: Record<string, BadgeVariant> = {
     'Baixa': 'baixa',
     'Normal': 'normal',
     'Alta': 'alta',
@@ -102,14 +91,27 @@ function getPriorityVariant(priority: string) {
   return map[priority] || 'normal'
 }
 
+function workflowLabel(tipo: string | null | undefined) {
+  if (!tipo) return null
+  if (isTipoProtese(tipo)) return FLUXOS_PROTESE[tipo].nomeCurto
+  return getWorkflowLabel(tipo as never)
+}
 
-function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
-  if (isFinished) return { text: 'Concluído', color: 'text-emerald-600' }
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const entrega = new Date(dateStr)
-  entrega.setHours(0, 0, 0, 0)
-  const diff = Math.ceil((entrega.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+function getDaysRemaining(dateStr: string, status: string, pausadoEm?: string | null, dataEntregaReal?: string | null) {
+  if (status === 'Finalizado') return { text: 'Pronto para entrega', color: 'text-emerald-600' }
+  if (status === 'Entregue') return { text: dataEntregaReal ? `Entregue ${formatDate(dataEntregaReal).slice(0, 5)}` : 'Entregue', color: 'text-emerald-600' }
+  if (status === 'Cancelado') return { text: 'Cancelado', color: 'text-slate-500' }
+  if (status === 'Pausado') {
+    const dias = pausadoEm ? Math.max(0, Math.floor((Date.now() - new Date(pausadoEm).getTime()) / 86_400_000)) : null
+    return { text: dias == null ? 'Pausado' : `Pausado há ${dias}d`, color: 'text-amber-600' }
+  }
+  const dataIso = dateStr.split('T')[0]
+  const [ano, mes, dia] = dataIso.split('-').map(Number)
+  if (!ano || ano < 2020 || ano > new Date().getFullYear() + 2) return { text: 'Data inválida', color: 'text-red-600' }
+  const hojePartes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date()).split('-').map(Number)
+  const diff = Math.round((Date.UTC(ano, mes - 1, dia) - Date.UTC(hojePartes[0], hojePartes[1] - 1, hojePartes[2])) / 86_400_000)
   
   if (diff < 0) return { text: `${Math.abs(diff)}d atrasado`, color: 'text-red-600' }
   if (diff === 0) return { text: 'Hoje', color: 'text-amber-600' }
@@ -117,27 +119,29 @@ function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
   return { text: `${diff} dias`, color: 'text-slate-600 dark:text-slate-400' }
 }
 
-export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps) {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('todos')
+export function OrdensView({ resultado, clientes, servicos, filtros, user }: OrdensViewProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
+  const [search, setSearch] = useState(filtros.busca || '')
   const [modalOpen, setModalOpen] = useState(false)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false)
-  const [selectedOrdem, setSelectedOrdem] = useState<Ordem | null>(null)
-  const [printOrdem, setPrintOrdem] = useState<any>(null)
-  const [printEtiqueta, setPrintEtiqueta] = useState<any>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const ITEMS_PER_PAGE = 20
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, statusFilter])
+  const [selectedOrdem, setSelectedOrdem] = useState<OrdemDetalhada | null>(null)
+  const [printOrdem, setPrintOrdem] = useState<DadosFicha | null>(null)
+  const [printEtiqueta, setPrintEtiqueta] = useState<DadosEtiqueta | null>(null)
+  const [openingOrdemId, setOpeningOrdemId] = useState<number | null>(null)
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
   const notaEntregaRef = useRef<HTMLDivElement>(null)
-  const [notaEntregaDados, setNotaEntregaDados] = useState<any>(null)
+  const [notaEntregaDados, setNotaEntregaDados] = useState<DadosNotaEntrega | null>(null)
+
+  useEffect(() => {
+    setSearch(filtros.busca || '')
+  }, [filtros.busca])
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
@@ -158,6 +162,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
       cliente: { nome: ordem.cliente.nome },
       servico: { nome: ordem.servico },
       dataEntrega: ordem.dataEntrega,
+      tokenRastreamento: ordem.tokenRastreamento,
     }
     setPrintEtiqueta(dadosEtiqueta)
     setTimeout(() => {
@@ -165,9 +170,9 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     }, 100)
   }
 
-  // Função intermediária para carregar dados e imprimir
-  const onPrintClick = (ordem: Ordem) => {
-    // Adaptar dados para o formato da ficha
+  const onPrintClick = async (ordem: Ordem) => {
+    const detalhes = await getOrdemById(ordem.id)
+    if (!detalhes) return
     const dadosImpressao = {
       id: ordem.id,
       paciente: ordem.paciente,
@@ -175,72 +180,57 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
       servico: { nome: ordem.servico },
       dataEntrada: ordem.dataEntrada || new Date().toISOString(), // Fallback se não vier
       dataEntrega: ordem.dataEntrega,
-      corDentes: ordem.corDentes,
-      observacoes: ordem.observacoes,
+      corDentes: detalhes.corDentes,
+      observacoes: detalhes.observacoes,
+      tokenRastreamento: ordem.tokenRastreamento,
     }
     setPrintOrdem(dadosImpressao)
-    // Pequeno delay para garantir que o state atualizou e o componente renderizou antes de imprimir
     setTimeout(() => {
       handlePrint()
     }, 100)
   }
 
-  const ordens = initialData || []
+  const ordens = resultado.ordens
 
-  const filteredOrdens = ordens.filter(ordem => {
-    const cpfSearch = search.replace(/\D/g, '')
-    const matchSearch = 
-      ordem.paciente.toLowerCase().includes(search.toLowerCase()) ||
-      (cpfSearch.length > 0 && (ordem.cpfPaciente || '').replace(/\D/g, '').includes(cpfSearch)) ||
-      ordem.cliente.nome.toLowerCase().includes(search.toLowerCase()) ||
-      ordem.servico.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'todos' || ordem.status === statusFilter
-    return matchSearch && matchStatus
-  })
-
-  const totalPages = Math.ceil(filteredOrdens.length / ITEMS_PER_PAGE)
-  const paginatedOrdens = filteredOrdens.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  )
-
-  // Reseta para página 1 ao mudar filtros
-  const handleSearchChange = (value: string) => { setSearch(value); setCurrentPage(1) }
-  const handleStatusChange = (value: string) => { setStatusFilter(value); setCurrentPage(1) }
-
-  const handleView = (ordem: Ordem) => {
-    setSelectedOrdem(ordem)
-    setViewModalOpen(true)
+  const atualizarFiltros = (mudancas: Record<string, string | number | undefined>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    Object.entries(mudancas).forEach(([chave, valor]) => {
+      if (valor == null || valor === '') params.delete(chave)
+      else params.set(chave, String(valor))
+    })
+    if (!('pagina' in mudancas)) params.delete('pagina')
+    startTransition(() => router.push(`${pathname}?${params.toString()}`))
   }
 
-  const handleEdit = (ordem: Ordem) => {
-    setSelectedOrdem(ordem)
-    setEditModalOpen(true)
-  }
-
-  const handleWorkflow = (ordem: Ordem) => {
-    setSelectedOrdem(ordem)
-    setWorkflowModalOpen(true)
+  const abrirOrdem = async (id: number, destino: 'ver' | 'editar' | 'fluxo') => {
+    setOpeningOrdemId(id)
+    try {
+      const ordem = await getOrdemById(id)
+      if (!ordem) return
+      setSelectedOrdem(ordem)
+      if (destino === 'ver') setViewModalOpen(true)
+      if (destino === 'editar') setEditModalOpen(true)
+      if (destino === 'fluxo') setWorkflowModalOpen(true)
+    } finally {
+      setOpeningOrdemId(null)
+    }
   }
 
   const handleNotify = async (id: number) => {
-    if (confirm('Finalizar ordem e notificar dentista via WhatsApp?')) {
-      const result = await notificarMudancaStatus(id, 'Finalizado')
-      if (result.success && result.whatsappLink) {
-        window.open(result.whatsappLink, '_blank')
-      } else {
-        alert('Erro ao enviar: ' + (result.error || 'Verifique o console'))
-      }
+    const result = await gerarNotificacaoWhatsApp(id)
+    if (result.success && result.whatsappLink) {
+      window.open(result.whatsappLink, '_blank', 'noopener,noreferrer')
+    } else {
+      alert('Erro ao gerar mensagem: ' + (result.error || 'Tente novamente'))
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Tem certeza que deseja excluir esta ordem? Esta ação não pode ser desfeita.')) {
-      const result = await deleteOrdem(id)
-      if (!result.success) {
-        alert('Erro ao excluir: ' + (result.error || 'Tente novamente'))
-      }
-    }
+  const handleCancelar = async (ordem: Ordem) => {
+    const motivo = window.prompt(`Informe o motivo do cancelamento da OS #${ordem.id}:`)
+    if (!motivo?.trim()) return
+    const result = await cancelarOrdem(ordem.id, motivo)
+    if (!result.success) alert(result.error || 'Não foi possível cancelar a ordem')
+    else router.refresh()
   }
 
   const handleMarcarEntregue = async (ordem: Ordem) => {
@@ -261,10 +251,11 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
     setTimeout(() => {
       handlePrintNotaEntrega()
     }, 100)
+    router.refresh()
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout user={user}>
       {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
@@ -279,6 +270,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         servicos={servicos}
         onSuccess={() => {
           setModalOpen(false)
+          router.refresh()
         }}
       />
 
@@ -292,70 +284,127 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         ordem={selectedOrdem}
-        clientes={clientes}
-        servicos={servicos}
         onSuccess={() => {
           setEditModalOpen(false)
+          router.refresh()
         }}
       />
 
       <WorkflowModal
         isOpen={workflowModalOpen}
         onClose={() => setWorkflowModalOpen(false)}
-        ordem={selectedOrdem as any}
+        ordem={selectedOrdem as DadosWorkflow}
         onSuccess={() => {
           setWorkflowModalOpen(false)
+          router.refresh()
         }}
       />
       
       <Header 
         title="Ordens de Serviço" 
-        subtitle={`${ordens.length} ordens no total`}
+        subtitle={`${resultado.contadores.ativas} ativas de ${resultado.totalGeral} ordens cadastradas`}
         action={{
           label: 'Nova Ordem',
           onClick: () => {
-            console.log('Botão Nova Ordem clicado')
             setModalOpen(true)
           },
         }}
       />
       
-      <div className="p-6 space-y-6">
-        {/* Filters */}
+      <div className="space-y-5 px-1 pt-5 sm:px-0">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {[
+            { label: 'Ordens ativas', value: resultado.contadores.ativas },
+            { label: 'Em prova', value: resultado.contadores.emProva },
+            { label: 'Prontas para entrega', value: resultado.contadores.finalizadas },
+            { label: 'Pausadas', value: resultado.contadores.pausadas },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
         <Card>
           <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="relative flex-1">
+            <form
+              className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_200px_200px_190px_auto]"
+              onSubmit={(event) => {
+                event.preventDefault()
+                atualizarFiltros({ busca: search })
+              }}
+            >
+              <div className="relative min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Buscar por paciente, dentista ou serviço..."
+                  placeholder="Paciente, CPF, dentista, serviço ou OS"
+                  aria-label="Buscar ordens"
                   value={search}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   className="pl-9"
                 />
               </div>
+              <select
+                aria-label="Filtrar por dentista"
+                value={filtros.clienteId || ''}
+                onChange={(event) => atualizarFiltros({ cliente: event.target.value })}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="">Todos os dentistas</option>
+                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+              </select>
+              <select
+                aria-label="Filtrar por tipo de prótese"
+                value={filtros.tipoWorkflow || ''}
+                onChange={(event) => atualizarFiltros({ tipo: event.target.value })}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="">Todos os tipos</option>
+                {Object.values(FLUXOS_PROTESE).map((fluxo) => <option key={fluxo.id} value={fluxo.id}>{fluxo.nomeCurto}</option>)}
+              </select>
+              <select
+                aria-label="Ordenar ordens"
+                value={filtros.ordenar || 'prazo'}
+                onChange={(event) => atualizarFiltros({ ordenar: event.target.value })}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="prazo">Prazo mais próximo</option>
+                <option value="atualizadas">Última movimentação</option>
+                <option value="recentes">Mais recentes</option>
+                <option value="paciente">Paciente A–Z</option>
+              </select>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Buscar
+              </Button>
+            </form>
 
-              {/* Status Filter */}
-              <div className="flex flex-wrap gap-2">
-                {['todos', 'Aguardando', 'Em Produção', 'Finalizado', 'Pausado'].map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => handleStatusChange(status)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      statusFilter === status
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {status === 'todos' ? 'Todos' : status}
-                  </button>
-                ))}
-              </div>
-
-              {/* Actions 
-               * (Filtro Genérico e Download ocultados por serem não-funcionais)
-               */}
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar ordens por status">
+              {[
+                ['ativas', 'Ativas'],
+                ['Aguardando', 'Aguardando'],
+                ['Em Produção', 'Em produção'],
+                ['Em Prova', 'Em prova'],
+                ['Finalizado', 'Prontas'],
+                ['Pausado', 'Pausadas'],
+                ['encerradas', 'Arquivo'],
+                ['todos', 'Todas'],
+              ].map(([valor, rotulo]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  aria-pressed={(filtros.status || 'ativas') === valor}
+                  onClick={() => atualizarFiltros({ status: valor })}
+                  className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    (filtros.status || 'ativas') === valor
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {rotulo}
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -390,18 +439,18 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5 dark:divide-white/5 relative">
-                {filteredOrdens.length === 0 ? (
+                {ordens.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-0">
                       <EmptyState 
                         title="Nenhuma ordem encontrada" 
-                        description={statusFilter !== 'todos' || search !== '' ? "Tente ajustar seus filtros de busca para encontrar o que precisa." : "Sua lista de ordens está vazia. Crie uma nova ordem para começar."}
+                        description="Tente ajustar a busca ou os filtros para encontrar o que precisa."
                       />
                     </td>
                   </tr>
                 ) : (
-                  paginatedOrdens.map((ordem) => {
-                    const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status === 'Finalizado' || ordem.status === 'Cancelado' || ordem.status === 'Entregue' || ordem.status === 'Pausado')
+                  ordens.map((ordem) => {
+                    const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status, ordem.pausadoEm, ordem.dataEntregaReal)
                     return (
                       <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
                       <td className="px-6 py-4">
@@ -441,6 +490,11 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                         <Badge variant={getStatusVariant(ordem.status)}>
                           {ordem.status}
                         </Badge>
+                        {ordem.status === 'Pausado' && ordem.motivoPausa && (
+                          <p className="mt-1 max-w-40 line-clamp-2 text-[10px] text-amber-700 dark:text-amber-300" title={ordem.motivoPausa}>
+                            {ordem.motivoPausa}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                          <div className="flex items-center gap-2">
@@ -452,10 +506,15 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                              </span>
                            )}
                          </div>
-                         {ordem.tipoWorkflow && (
+                         {workflowLabel(ordem.tipoWorkflow) && (
                            <p className="text-[9px] font-bold text-indigo-500 uppercase mt-0.5 flex items-center gap-1">
                              <GitBranch className="h-2.5 w-2.5" />
-                             {ordem.tipoWorkflow === 'protocolo' ? 'Protocolo' : ordem.tipoWorkflow === 'protese_total' ? 'Total' : 'PPR'}
+                             {workflowLabel(ordem.tipoWorkflow)}
+                           </p>
+                         )}
+                         {ordem.subetapaAtual && (
+                           <p className="mt-1 max-w-48 truncate text-[10px] text-slate-500 dark:text-slate-400" title={ordem.subetapaAtual}>
+                             {ordem.subetapaAtual}
                            </p>
                          )}
                       </td>
@@ -465,7 +524,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                             <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                           </div>
                           <div suppressHydrationWarning>
-                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatDate(ordem.dataEntrega)}</p>
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{daysInfo.text === 'Data inválida' ? '—' : formatDate(ordem.dataEntrega)}</p>
                             <p className={`text-[10px] font-bold uppercase ${daysInfo.color}`}>{daysInfo.text}</p>
                           </div>
                         </div>
@@ -475,25 +534,32 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button 
-                            onClick={() => handleWorkflow(ordem)}
-                            className="p-2 text-slate-400 hover:text-purple-600 dark:text-slate-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded-xl transition-all"
-                            title="Fluxo de Trabalho"
-                          >
-                            <GitBranch className="h-5 w-5" />
-                          </button>
-                          
-                          <button 
-                            onClick={() => handleEdit(ordem)}
-                            className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
-                            title="Editar Ordem"
-                          >
-                            <Edit className="h-5 w-5" />
-                          </button>
+                          {!['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status) && (
+                            <>
+                              <button
+                                onClick={() => abrirOrdem(ordem.id, 'fluxo')}
+                                disabled={openingOrdemId === ordem.id}
+                                aria-label={`Abrir fluxo da OS ${ordem.id}`}
+                                className="p-2 text-slate-400 hover:text-purple-600 dark:text-slate-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded-xl transition-all"
+                                title="Fluxo de Trabalho"
+                              >
+                                {openingOrdemId === ordem.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <GitBranch className="h-5 w-5" />}
+                              </button>
+                              <button
+                                onClick={() => abrirOrdem(ordem.id, 'editar')}
+                                disabled={openingOrdemId === ordem.id}
+                                aria-label={`Editar OS ${ordem.id}`}
+                                className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
+                                title="Editar Ordem"
+                              >
+                                <Edit className="h-5 w-5" />
+                              </button>
+                            </>
+                          )}
 
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all outline-none">
+                              <button aria-label={`Mais ações da OS ${ordem.id}`} className="p-2 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all outline-none">
                                 <MoreHorizontal className="h-5 w-5" />
                               </button>
                             </DropdownMenuTrigger>
@@ -513,7 +579,7 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                                 </>
                               )}
 
-                              <DropdownMenuItem onClick={() => handleView(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                              <DropdownMenuItem onClick={() => abrirOrdem(ordem.id, 'ver')} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
                                 <Eye className="mr-2 h-4 w-4 text-slate-400" />
                                 Visualizar Detalhes
                               </DropdownMenuItem>
@@ -537,10 +603,12 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                               
                               <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
                               
-                              <DropdownMenuItem onClick={() => handleDelete(ordem.id)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Excluir Ordem
-                              </DropdownMenuItem>
+                              {!['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status) && (
+                                <DropdownMenuItem onClick={() => handleCancelar(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  Cancelar Ordem
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -558,22 +626,23 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Mostrando{' '}
               <span className="font-semibold text-slate-700 dark:text-slate-200">
-                {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredOrdens.length)}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredOrdens.length)}
+                {resultado.total === 0 ? 0 : (resultado.pagina - 1) * resultado.porPagina + 1}–{Math.min(resultado.pagina * resultado.porPagina, resultado.total)}
               </span>{' '}
-              de <span className="font-semibold text-slate-700 dark:text-slate-200">{filteredOrdens.length}</span> ordens
+              de <span className="font-semibold text-slate-700 dark:text-slate-200">{resultado.total}</span> ordens
             </p>
             <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={resultado.pagina === 1 || isPending}
+                onClick={() => atualizarFiltros({ pagina: resultado.pagina - 1 })}
                 className="h-8 w-8 p-0"
+                aria-label="Página anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              {Array.from({ length: resultado.totalPaginas }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === resultado.totalPaginas || Math.abs(p - resultado.pagina) <= 1)
                 .reduce<(number | '...')[]>((acc, p, idx, arr) => {
                   if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...')
                   acc.push(p)
@@ -587,9 +656,9 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
                       key={p}
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(p as number)}
+                      onClick={() => atualizarFiltros({ pagina: p as number })}
                       className={`h-8 w-8 p-0 text-sm font-medium ${
-                        currentPage === p
+                        resultado.pagina === p
                           ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
                           : ''
                       }`}
@@ -602,9 +671,10 @@ export function OrdensView({ initialData, clientes, servicos }: OrdensViewProps)
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === totalPages || totalPages === 0}
-                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={resultado.pagina === resultado.totalPaginas || resultado.total === 0 || isPending}
+                onClick={() => atualizarFiltros({ pagina: resultado.pagina + 1 })}
                 className="h-8 w-8 p-0"
+                aria-label="Próxima página"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>

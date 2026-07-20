@@ -11,6 +11,7 @@ interface EtiquetaDados {
     nome: string
   }
   dataEntrega: string | Date
+  tokenRastreamento: string
 }
 
 interface EtiquetaImpressaoProps {
@@ -18,7 +19,7 @@ interface EtiquetaImpressaoProps {
 }
 
 export const EtiquetaImpressao = forwardRef<HTMLDivElement, EtiquetaImpressaoProps>(({ ordem }, ref) => {
-  const qrData = `https://labgest-web.vercel.app/check/${ordem.id}`
+  const qrData = `https://labgest-web.vercel.app/check/${ordem.tokenRastreamento}`
 
   return (
     <div ref={ref} className="bg-white p-2 w-[100mm] h-[60mm] mx-auto text-slate-900 border border-slate-200 print:border-0 flex flex-row items-center justify-between overflow-hidden">

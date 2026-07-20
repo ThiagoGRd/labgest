@@ -84,13 +84,21 @@ model Ordem {
   tentativaAtual                                         Int?            @default(0) @map("tentativa_atual")
   tipoWorkflow                                           String?         @map("tipo_workflow") @db.VarChar(50)
   passoFluxoAtual                                        String?         @map("passo_fluxo_atual") @db.VarChar(80)
-  arcadas                                                 Int             @default(1) @db.SmallInt
+  arcadas                                                Int             @default(1) @db.SmallInt
   prazoEtapaAtual                                        DateTime?       @map("prazo_etapa_atual") @db.Timestamptz(6)
   fornecedorEstrutura                                    String?         @map("fornecedor_estrutura") @db.VarChar(255)
   dataEnvioFornecedor                                    DateTime?       @map("data_envio_fornecedor") @db.Timestamptz(6)
   prazoFornecedor                                        DateTime?       @map("prazo_fornecedor") @db.Timestamptz(6)
   dataRecebimentoFornecedor                              DateTime?       @map("data_recebimento_fornecedor") @db.Timestamptz(6)
   justificativaAtrasoFornecedor                          String?         @map("justificativa_atraso_fornecedor")
+  tokenRastreamento                                      String          @unique(map: "idx_ordens_token_rastreamento") @default(uuid()) @map("token_rastreamento") @db.Uuid
+  dataEntregaReal                                        DateTime?       @map("data_entrega_real") @db.Timestamptz(6)
+  motivoCancelamento                                     String?         @map("motivo_cancelamento")
+  canceladoEm                                            DateTime?       @map("cancelado_em") @db.Timestamptz(6)
+  canceladoPor                                           String?         @map("cancelado_por") @db.VarChar(255)
+  motivoPausa                                            String?         @map("motivo_pausa")
+  pausadoEm                                              DateTime?       @map("pausado_em") @db.Timestamptz(6)
+  pausadoPor                                             String?         @map("pausado_por") @db.VarChar(255)
   fotosProva                                             Json?           @default("[]") @map("fotos_prova")
   fotosCaso                                              Json?           @default("[]") @map("fotos_caso")
   elementos                                              String?         @db.VarChar(100)

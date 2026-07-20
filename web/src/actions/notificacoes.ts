@@ -15,14 +15,14 @@ export async function getNotificacoesConfig() {
   }
 }
 
-export async function saveNotificacoesConfig(config: any) {
+export async function saveNotificacoesConfig(config: Record<string, boolean>) {
   await requireUser()
   console.log('Salvando preferências:', config)
   revalidatePath('/configuracoes')
   return { success: true }
 }
 
-export async function notificarMudancaStatus(ordemId: number, novoStatus: string) {
+export async function gerarNotificacaoWhatsApp(ordemId: number) {
   await requireUser()
   try {
     const ordem = await prisma.ordem.findUnique({
@@ -36,31 +36,25 @@ export async function notificarMudancaStatus(ordemId: number, novoStatus: string
 
     // Limpar telefone (apenas números)
     const telefone = ordem.cliente.telefone.replace(/\D/g, '')
+    const telefoneWhatsapp = telefone.startsWith('55') ? telefone : `55${telefone}`
+    if (telefoneWhatsapp.length < 12 || telefoneWhatsapp.length > 13) {
+      return { success: false, error: 'Telefone do cliente inválido para WhatsApp.' }
+    }
     
-    // Mensagem baseada no status
+    const statusAtual = ordem.status || 'Aguardando'
     let mensagem = ''
-    if (novoStatus === 'Finalizado') {
+    if (statusAtual === 'Finalizado') {
       mensagem = `Olá Dr(a). ${ordem.cliente.nome}, tudo bem? 
-O trabalho do paciente *${ordem.nomePaciente}* (${ordem.servicoNome}) foi finalizado e já está saindo para entrega! 🛵💨
+O trabalho do paciente *${ordem.nomePaciente}* (${ordem.servicoNome}) foi finalizado e está pronto para combinar a entrega.
 Acesse o portal para mais detalhes: https://labgest-portal.vercel.app`
+    } else if (statusAtual === 'Entregue') {
+      mensagem = `Olá Dr(a). ${ordem.cliente.nome}, o trabalho do paciente *${ordem.nomePaciente}* (${ordem.servicoNome}) foi registrado como entregue.`
     } else {
-      mensagem = `Olá Dr(a). ${ordem.cliente.nome}, o status do pedido *${ordem.nomePaciente}* mudou para: *${novoStatus}*.`
+      mensagem = `Olá Dr(a). ${ordem.cliente.nome}, o status atual do pedido *${ordem.nomePaciente}* é: *${statusAtual}*.`
     }
 
     const encodedMsg = encodeURIComponent(mensagem)
-    const whatsappLink = `https://wa.me/55${telefone}?text=${encodedMsg}`
-
-    // Atualizar status no banco se for finalizado
-    if (novoStatus === 'Finalizado') {
-      await prisma.ordem.update({
-        where: { id: ordemId },
-        data: { 
-          status: 'Finalizado',
-          dataFinalizacao: new Date()
-        }
-      })
-      revalidatePath('/ordens')
-    }
+    const whatsappLink = `https://wa.me/${telefoneWhatsapp}?text=${encodedMsg}`
 
     return { success: true, whatsappLink }
   } catch (error) {
