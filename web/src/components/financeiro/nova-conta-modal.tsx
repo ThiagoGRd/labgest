@@ -22,6 +22,9 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
   const [tipo, setTipo] = useState(tipoInicial)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [parcelado, setParcelado] = useState(false)
+  const [parcelas, setParcelas] = useState(2)
+  const [valorTotal, setValorTotal] = useState('')
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
@@ -36,6 +39,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
       categoria: tipo === 'pagar' ? String(formData.get('categoria') || '') : undefined,
       fornecedor: tipo === 'pagar' ? String(formData.get('fornecedor') || '') : undefined,
       observacoes: String(formData.get('observacoes') || ''),
+      parcelas: tipo === 'pagar' && parcelado ? parcelas : 1,
     })
     setLoading(false)
     if (!resultado.success) return setError(resultado.error || 'Não foi possível salvar.')
@@ -54,8 +58,8 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
           <Input id={`${formId}-descricao`} name="descricao" placeholder={tipo === 'receber' ? 'Ex.: Ajuste adicional da OS 123' : 'Ex.: Compra de resina'} required minLength={3} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Valor" htmlFor={`${formId}-valor`}>
-            <Input id={`${formId}-valor`} name="valor" type="number" min="0.01" step="0.01" placeholder="R$ 0,00" required />
+          <Field label={tipo === 'pagar' && parcelado ? 'Valor total da compra' : 'Valor'} htmlFor={`${formId}-valor`}>
+            <Input id={`${formId}-valor`} name="valor" value={valorTotal} onChange={(event) => setValorTotal(event.target.value)} type="number" min="0.01" step="0.01" placeholder="R$ 0,00" required />
           </Field>
           <Field label="Vencimento" htmlFor={`${formId}-vencimento`}>
             <Input id={`${formId}-vencimento`} name="vencimento" type="date" required />
@@ -73,6 +77,23 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
           </Field>
         ) : (
           <>
+            <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+              <label className="flex cursor-pointer items-start gap-3" htmlFor={`${formId}-parcelado`}>
+                <input id={`${formId}-parcelado`} type="checkbox" checked={parcelado} onChange={(event) => setParcelado(event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                <span><span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">Compra parcelada</span><span className="block text-xs text-slate-500">Cria uma conta a pagar para cada vencimento mensal.</span></span>
+              </label>
+              {parcelado && (
+                <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+                  <Field label="Quantidade de parcelas" htmlFor={`${formId}-parcelas`}>
+                    <Input id={`${formId}-parcelas`} type="number" min="2" max="60" value={parcelas} onChange={(event) => setParcelas(Math.max(2, Math.min(60, Number(event.target.value) || 2)))} required />
+                  </Field>
+                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valor aproximado por parcela</p>
+                    <p className="mt-1 font-bold text-slate-900 dark:text-white">{valorTotal && Number(valorTotal) > 0 ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valorTotal) / parcelas) : 'R$ 0,00'}</p>
+                  </div>
+                </div>
+              )}
+            </div>
             <Field label="Fornecedor" htmlFor={`${formId}-fornecedor`}><Input id={`${formId}-fornecedor`} name="fornecedor" placeholder="Nome do fornecedor" /></Field>
             <Field label="Categoria" htmlFor={`${formId}-categoria`}>
               <Select name="categoria" defaultValue="Outros"><SelectTrigger id={`${formId}-categoria`}><SelectValue /></SelectTrigger><SelectContent>{categorias.map((categoria) => <SelectItem key={categoria} value={categoria}>{categoria}</SelectItem>)}</SelectContent></Select>

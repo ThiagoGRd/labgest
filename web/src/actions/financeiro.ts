@@ -1,6 +1,7 @@
 'use server'
 
 import { Prisma, prisma } from '@labgest/database'
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/lib/auth-utils'
@@ -16,6 +17,7 @@ const contaSchema = z.object({
   categoria: z.string().trim().max(50).optional(),
   fornecedor: z.string().trim().max(255).optional(),
   observacoes: z.string().trim().max(2000).optional(),
+  parcelas: z.number().int().min(1).max(60).default(1),
 })
 
 const baixaSchema = z.object({
@@ -35,6 +37,13 @@ function revalidarFinanceiro() {
 
 function inicioDoDia(data = new Date()) {
   return new Date(data.getFullYear(), data.getMonth(), data.getDate())
+}
+
+function adicionarMesesMantendoDia(data: Date, quantidade: number) {
+  const ano = data.getFullYear()
+  const mes = data.getMonth() + quantidade
+  const ultimoDia = new Date(ano, mes + 1, 0).getDate()
+  return new Date(ano, mes, Math.min(data.getDate(), ultimoDia))
 }
 
 function statusReceber(status: string | null, vencimento: Date, recebido: number, total: number) {
@@ -133,7 +142,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const inicio = new Date(ano, mes - 1, 1)
   const fim = new Date(ano, mes, 0, 23, 59, 59)
 
-  const [receber, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, todasMovimentacoes, vencidasGlobais] = await Promise.all([
+  const [receber, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, vencidasGlobais] = await Promise.all([
     prisma.contaReceber.findMany({
       where: { dataVencimento: { gte: inicio, lte: fim } },
       include: { cliente: { select: { nome: true } }, ordem: { select: { nomePaciente: true, servicoNome: true } } },
@@ -156,7 +165,6 @@ export async function getFinanceiroPageData(filtroMes?: string) {
     prisma.cliente.findMany({ where: { ativo: true }, select: { id: true, nome: true }, orderBy: { nome: 'asc' } }),
     prisma.contaReceber.findMany({ select: { dataVencimento: true } }),
     prisma.contaPagar.findMany({ select: { dataVencimento: true } }),
-    prisma.movimentacaoFinanceira.findMany({ where: { estornadaEm: null }, select: { tipo: true, valor: true } }),
     prisma.contaReceber.findMany({
       where: { dataVencimento: { lt: inicioDoDia() }, status: { notIn: ['Recebido', 'Cancelado'] } },
       select: { valor: true, valorRecebido: true },
@@ -193,6 +201,8 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       descricao: conta.descricao,
       categoria: conta.categoria || 'Outros',
       fornecedor: conta.fornecedor || 'Não informado',
+      parcelaNumero: conta.parcelaNumero,
+      parcelaTotal: conta.parcelaTotal,
       valor,
       liquidado,
       restante: Math.max(0, valor - liquidado),
@@ -209,8 +219,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const previstoReceber = contasReceber.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
   const previstoPagar = contasPagar.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
   const vencidoReceber = vencidasGlobais.reduce((s, c) => s + Math.max(0, Number(c.valor) - Number(c.valorRecebido)), 0)
-  const saldoInicial = contasFinanceiras.reduce((s, c) => s + Number(c.saldoInicial), 0)
-  const saldoAtual = todasMovimentacoes.reduce((s, m) => s + (m.tipo === 'Entrada' ? Number(m.valor) : -Number(m.valor)), saldoInicial)
+  const resultadoProjetado = entradas - saidas + previstoReceber - previstoPagar
 
   const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
   for (const conta of [...mesesReceber, ...mesesPagar]) {
@@ -234,13 +243,12 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       formaPagamento: m.formaPagamento || 'Não informada',
     })),
     resumo: {
-      saldoAtual,
       entradas,
       saidas,
       resultadoRealizado: entradas - saidas,
       previstoReceber,
       previstoPagar,
-      saldoProjetado: saldoAtual + previstoReceber - previstoPagar,
+      resultadoProjetado,
       vencidoReceber,
       quantidadeVencidas: vencidasGlobais.length,
     },
@@ -276,15 +284,35 @@ export async function createConta(input: z.input<typeof contaSchema>) {
         observacoes: data.observacoes, status: 'Pendente', usuarioId: usuario.id,
       } })
     } else {
-      await prisma.contaPagar.create({ data: {
-        descricao: data.descricao, valor: data.valor, dataVencimento: vencimento,
-        dataCompetencia: competencia, categoria: data.categoria || 'Outros',
-        fornecedor: data.fornecedor, observacoes: data.observacoes,
-        status: 'Pendente', usuarioId: usuario.id,
-      } })
+      const quantidadeParcelas = data.parcelas
+      const grupoParcelamento = quantidadeParcelas > 1 ? randomUUID() : null
+      const totalCentavos = Math.round(data.valor * 100)
+      const centavosPorParcela = Math.floor(totalCentavos / quantidadeParcelas)
+      const centavosRestantes = totalCentavos - centavosPorParcela * quantidadeParcelas
+
+      await prisma.$transaction(
+        Array.from({ length: quantidadeParcelas }, (_, indice) => {
+          const numero = indice + 1
+          const valorCentavos = centavosPorParcela + (indice < centavosRestantes ? 1 : 0)
+          return prisma.contaPagar.create({ data: {
+            descricao: quantidadeParcelas > 1 ? `${data.descricao} (${numero}/${quantidadeParcelas})` : data.descricao,
+            valor: valorCentavos / 100,
+            dataVencimento: adicionarMesesMantendoDia(vencimento, indice),
+            dataCompetencia: competencia,
+            categoria: data.categoria || 'Outros',
+            fornecedor: data.fornecedor,
+            observacoes: data.observacoes,
+            status: 'Pendente',
+            usuarioId: usuario.id,
+            grupoParcelamento,
+            parcelaNumero: quantidadeParcelas > 1 ? numero : null,
+            parcelaTotal: quantidadeParcelas > 1 ? quantidadeParcelas : null,
+          } })
+        }),
+      )
     }
     revalidarFinanceiro()
-    return { success: true }
+    return { success: true, parcelasCriadas: data.tipo === 'pagar' ? data.parcelas : 1 }
   } catch (error) {
     const mensagem = error instanceof z.ZodError ? error.issues[0]?.message : 'Não foi possível criar o lançamento.'
     return { success: false, error: mensagem }
