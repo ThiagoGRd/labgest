@@ -17,28 +17,17 @@ export async function getRelatorioFinanceiro() {
     // Últimos 6 meses
     const inicioPeriodo = new Date(hoje.getFullYear(), hoje.getMonth() - 5, 1)
 
-    // Agrupar Receitas (Contas Receber Pagas + Pendentes)
-    const receitas = await prisma.contaReceber.findMany({
+    // Resultado realizado: somente dinheiro efetivamente movimentado.
+    const movimentacoes = await prisma.movimentacaoFinanceira.findMany({
       where: {
-        dataVencimento: { gte: inicioPeriodo },
+        dataMovimentacao: { gte: inicioPeriodo },
+        estornadaEm: null,
       },
       select: {
         valor: true,
-        dataVencimento: true,
-        status: true
-      }
-    })
-
-    // Agrupar Despesas (Contas Pagar)
-    const despesas = await prisma.contaPagar.findMany({
-      where: {
-        dataVencimento: { gte: inicioPeriodo },
+        dataMovimentacao: true,
+        tipo: true,
       },
-      select: {
-        valor: true,
-        dataVencimento: true,
-        status: true
-      }
     })
 
     // Processar dados para gráfico mensal
@@ -51,21 +40,17 @@ export async function getRelatorioFinanceiro() {
       dadosMensais.set(key, { mes: key, receita: 0, despesa: 0, lucro: 0, ordem: i })
     }
 
-    receitas.forEach(r => {
-      const key = r.dataVencimento.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+    movimentacoes.forEach(movimentacao => {
+      const key = movimentacao.dataMovimentacao.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
       if (dadosMensais.has(key)) {
         const dado = dadosMensais.get(key)
-        dado.receita += Number(r.valor)
-        dado.lucro += Number(r.valor)
-      }
-    })
-
-    despesas.forEach(d => {
-      const key = d.dataVencimento.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
-      if (dadosMensais.has(key)) {
-        const dado = dadosMensais.get(key)
-        dado.despesa += Number(d.valor)
-        dado.lucro -= Number(d.valor)
+        if (movimentacao.tipo === 'Entrada') {
+          dado.receita += Number(movimentacao.valor)
+          dado.lucro += Number(movimentacao.valor)
+        } else {
+          dado.despesa += Number(movimentacao.valor)
+          dado.lucro -= Number(movimentacao.valor)
+        }
       }
     })
 

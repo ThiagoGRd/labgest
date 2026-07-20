@@ -42,6 +42,7 @@ export async function garantirEfeitosFinalizacao(
         clienteId: ordem.clienteId,
         clienteNome: ordem.clienteNome,
         valor: ordem.valorFinal,
+        dataCompetencia: finalizadaEm,
         dataVencimento: vencimento,
         status: 'Pendente',
         observacoes: `Gerado automaticamente — Ordem #${ordemId} finalizada em ${finalizadaEm.toLocaleDateString('pt-BR')}`,

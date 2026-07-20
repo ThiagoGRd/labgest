@@ -188,20 +188,21 @@ model Estoque {
 }
 
 model Usuario {
-  id            Int            @id @default(autoincrement())
-  nome          String         @db.VarChar(255)
-  email         String         @unique @db.VarChar(255)
-  senha         String         @db.VarChar(255)
-  tipo          String?        @default("operador") @db.VarChar(20)
-  ativo         Boolean?       @default(true)
-  dataCriacao   DateTime?      @default(now()) @map("data_criacao") @db.Timestamp(6)
-  ultimoAcesso  DateTime?      @map("ultimo_acesso") @db.Timestamp(6)
-  permissoes    String[]       @default([])
-  createdAt     DateTime?      @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt     DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  contasPagar   ContaPagar[]
-  contasReceber ContaReceber[]
-  notificacoes  Notificacao[]
+  id                       Int                      @id @default(autoincrement())
+  nome                     String                   @db.VarChar(255)
+  email                    String                   @unique @db.VarChar(255)
+  senha                    String                   @db.VarChar(255)
+  tipo                     String?                  @default("operador") @db.VarChar(20)
+  ativo                    Boolean?                 @default(true)
+  dataCriacao              DateTime?                @default(now()) @map("data_criacao") @db.Timestamp(6)
+  ultimoAcesso             DateTime?                @map("ultimo_acesso") @db.Timestamp(6)
+  permissoes               String[]                 @default([])
+  createdAt                DateTime?                @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt                DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  contasPagar              ContaPagar[]
+  contasReceber            ContaReceber[]
+  movimentacoesFinanceiras MovimentacaoFinanceira[]
+  notificacoes             Notificacao[]
 
   @@index([ativo], map: "idx_usuarios_ativo")
   @@index([email], map: "idx_usuarios_email")
@@ -209,24 +210,30 @@ model Usuario {
 }
 
 model ContaReceber {
-  id               Int       @id @default(autoincrement())
-  descricao        String    @db.VarChar(255)
-  clienteId        Int?      @map("cliente_id")
-  clienteNome      String?   @map("cliente_nome") @db.VarChar(255)
-  ordemId          Int?      @map("ordem_id")
-  valor            Decimal   @db.Decimal(10, 2)
-  dataVencimento   DateTime  @map("data_vencimento") @db.Date
-  dataRecebimento  DateTime? @map("data_recebimento") @db.Date
-  status           String?   @default("Pendente") @db.VarChar(20)
-  observacoes      String?
-  formaRecebimento String?   @map("forma_recebimento") @db.VarChar(100)
-  dataCriacao      DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
-  usuarioId        Int?      @map("usuario_id")
-  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  cliente          Cliente?  @relation(fields: [clienteId], references: [id], onUpdate: NoAction)
-  ordem            Ordem?    @relation(fields: [ordemId], references: [id], onUpdate: NoAction)
-  usuario          Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                 Int                      @id @default(autoincrement())
+  descricao          String                   @db.VarChar(255)
+  clienteId          Int?                     @map("cliente_id")
+  clienteNome        String?                  @map("cliente_nome") @db.VarChar(255)
+  ordemId            Int?                     @map("ordem_id")
+  valor              Decimal                  @db.Decimal(10, 2)
+  valorRecebido      Decimal                  @default(0.00) @map("valor_recebido") @db.Decimal(10, 2)
+  dataCompetencia    DateTime?                @map("data_competencia") @db.Date
+  dataVencimento     DateTime                 @map("data_vencimento") @db.Date
+  dataRecebimento    DateTime?                @map("data_recebimento") @db.Date
+  status             String?                  @default("Pendente") @db.VarChar(20)
+  observacoes        String?
+  formaRecebimento   String?                  @map("forma_recebimento") @db.VarChar(100)
+  canceladoEm        DateTime?                @map("cancelado_em") @db.Timestamptz(6)
+  canceladoPor       String?                  @map("cancelado_por") @db.VarChar(255)
+  motivoCancelamento String?                  @map("motivo_cancelamento")
+  dataCriacao        DateTime?                @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
+  usuarioId          Int?                     @map("usuario_id")
+  createdAt          DateTime?                @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cliente            Cliente?                 @relation(fields: [clienteId], references: [id], onUpdate: NoAction)
+  ordem              Ordem?                   @relation(fields: [ordemId], references: [id], onUpdate: NoAction)
+  usuario            Usuario?                 @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  movimentacoes      MovimentacaoFinanceira[]
 
   @@index([status], map: "idx_contas_receber_status")
   @@index([dataVencimento], map: "idx_contas_receber_vencimento")
@@ -234,25 +241,70 @@ model ContaReceber {
 }
 
 model ContaPagar {
-  id             Int       @id @default(autoincrement())
-  descricao      String    @db.VarChar(255)
-  categoria      String?   @default("Outros") @db.VarChar(50)
-  fornecedor     String?   @db.VarChar(255)
-  valor          Decimal   @db.Decimal(10, 2)
-  dataVencimento DateTime  @map("data_vencimento") @db.Date
-  dataPagamento  DateTime? @map("data_pagamento") @db.Date
-  status         String?   @default("Pendente") @db.VarChar(20)
-  observacoes    String?
-  formaPagamento String?   @map("forma_pagamento") @db.VarChar(100)
-  dataCriacao    DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
-  usuarioId      Int?      @map("usuario_id")
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  usuario        Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                 Int                      @id @default(autoincrement())
+  descricao          String                   @db.VarChar(255)
+  categoria          String?                  @default("Outros") @db.VarChar(50)
+  fornecedor         String?                  @db.VarChar(255)
+  valor              Decimal                  @db.Decimal(10, 2)
+  valorPago          Decimal                  @default(0.00) @map("valor_pago") @db.Decimal(10, 2)
+  dataCompetencia    DateTime?                @map("data_competencia") @db.Date
+  dataVencimento     DateTime                 @map("data_vencimento") @db.Date
+  dataPagamento      DateTime?                @map("data_pagamento") @db.Date
+  status             String?                  @default("Pendente") @db.VarChar(20)
+  observacoes        String?
+  formaPagamento     String?                  @map("forma_pagamento") @db.VarChar(100)
+  canceladoEm        DateTime?                @map("cancelado_em") @db.Timestamptz(6)
+  canceladoPor       String?                  @map("cancelado_por") @db.VarChar(255)
+  motivoCancelamento String?                  @map("motivo_cancelamento")
+  dataCriacao        DateTime?                @default(dbgenerated("CURRENT_DATE")) @map("data_criacao") @db.Date
+  usuarioId          Int?                     @map("usuario_id")
+  createdAt          DateTime?                @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  usuario            Usuario?                 @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  movimentacoes      MovimentacaoFinanceira[]
 
   @@index([status], map: "idx_contas_pagar_status")
   @@index([dataVencimento], map: "idx_contas_pagar_vencimento")
   @@map("contas_pagar")
+}
+
+model ContaFinanceira {
+  id            Int                      @id @default(autoincrement())
+  nome          String                   @db.VarChar(120)
+  tipo          String                   @default("Banco") @db.VarChar(30)
+  saldoInicial  Decimal                  @default(0.00) @map("saldo_inicial") @db.Decimal(12, 2)
+  ativo         Boolean                  @default(true)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  movimentacoes MovimentacaoFinanceira[]
+
+  @@map("contas_financeiras")
+}
+
+model MovimentacaoFinanceira {
+  id                Int              @id @default(autoincrement())
+  tipo              String           @db.VarChar(10)
+  valor             Decimal          @db.Decimal(10, 2)
+  dataMovimentacao  DateTime         @map("data_movimentacao") @db.Date
+  formaPagamento    String?          @map("forma_pagamento") @db.VarChar(100)
+  observacoes       String?
+  contaReceberId    Int?             @map("conta_receber_id")
+  contaPagarId      Int?             @map("conta_pagar_id")
+  contaFinanceiraId Int?             @map("conta_financeira_id")
+  usuarioId         Int?             @map("usuario_id")
+  estornadaEm       DateTime?        @map("estornada_em") @db.Timestamptz(6)
+  estornadaPor      String?          @map("estornada_por") @db.VarChar(255)
+  motivoEstorno     String?          @map("motivo_estorno")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  contaReceber      ContaReceber?    @relation(fields: [contaReceberId], references: [id], onDelete: Restrict)
+  contaPagar        ContaPagar?      @relation(fields: [contaPagarId], references: [id], onDelete: Restrict)
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id], onDelete: Restrict)
+  usuario           Usuario?         @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([dataMovimentacao])
+  @@index([contaReceberId])
+  @@index([contaPagarId])
+  @@map("movimentacoes_financeiras")
 }
 
 model Notificacao {

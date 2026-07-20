@@ -24,31 +24,49 @@ export async function getContasCliente() {
   }
 
   const contas = await prisma.contaReceber.findMany({
-    where: { clienteId: logado.cliente.id },
-    orderBy: { dataVencimento: 'desc' },
+    where: { clienteId: logado.cliente.id, status: { not: 'Cancelado' } },
+    orderBy: { dataVencimento: 'asc' },
     include: {
       ordem: { select: { nomePaciente: true, servicoNome: true } }
     }
   })
 
-  const formatConta = (c: (typeof contas)[number]) => ({
-    id: c.id,
-    descricao: c.descricao,
-    ordemId: c.ordemId,
-    paciente: c.ordem?.nomePaciente || '-',
-    servico: c.ordem?.servicoNome || '-',
-    valor: Number(c.valor),
-    vencimento: c.dataVencimento.toISOString(),
-    recebimento: c.dataRecebimento ? c.dataRecebimento.toISOString() : null,
-    status: c.status === 'Recebido' ? 'Pago' : (c.status || 'Pendente')
-  })
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const formatConta = (c: (typeof contas)[number]) => {
+    const valor = Number(c.valor)
+    const liquidado = Number(c.valorRecebido)
+    const restante = Math.max(0, valor - liquidado)
+    const diasAtraso = c.dataVencimento < hoje && restante > 0
+      ? Math.floor((hoje.getTime() - c.dataVencimento.getTime()) / 86400000)
+      : 0
+    const status = restante === 0
+      ? 'Pago'
+      : liquidado > 0
+        ? (diasAtraso ? 'Parcial atrasado' : 'Parcial')
+        : diasAtraso ? 'Vencido' : 'Pendente'
+    return {
+      id: c.id,
+      descricao: c.descricao,
+      ordemId: c.ordemId,
+      paciente: c.ordem?.nomePaciente || '-',
+      servico: c.ordem?.servicoNome || '-',
+      valor,
+      liquidado,
+      restante,
+      vencimento: c.dataVencimento.toISOString(),
+      recebimento: c.dataRecebimento ? c.dataRecebimento.toISOString() : null,
+      diasAtraso,
+      status,
+    }
+  }
 
   const pendentes = contas
-    .filter(c => c.status !== 'Recebido')
+    .filter(c => Number(c.valorRecebido) < Number(c.valor))
     .map(formatConta)
 
   const pagas = contas
-    .filter(c => c.status === 'Recebido')
+    .filter(c => Number(c.valorRecebido) >= Number(c.valor))
     .map(formatConta)
 
   return { pendentes, pagas }
