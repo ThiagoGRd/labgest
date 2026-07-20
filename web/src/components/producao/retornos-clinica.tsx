@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Clock3, Eye, PackageCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,11 @@ export function RetornosClinica({
   onAbrirOrdem,
   onConfirmarRecebimento,
 }: RetornosClinicaProps) {
-  const [agora] = useState(() => Date.now())
+  const [instanteAtual, setInstanteAtual] = useState(() => Date.now())
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setInstanteAtual(Date.now()), 60_000)
+    return () => window.clearInterval(intervalo)
+  }, [])
   if (retornos.length === 0) return null
 
   return (
@@ -106,7 +110,7 @@ export function RetornosClinica({
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
                   <Clock3 className="h-3.5 w-3.5" />
-                  {tempoDesdeResposta(ordem.cicloRespostaEm, agora)}
+                  {tempoDesdeResposta(ordem.cicloRespostaEm, instanteAtual)}
                 </span>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => onAbrirOrdem(ordem.id)}>
@@ -118,7 +122,7 @@ export function RetornosClinica({
                     onClick={() => onConfirmarRecebimento(ordem.id)}
                     className={aprovado ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-600 text-white hover:bg-amber-700'}
                   >
-                    <PackageCheck className="h-3.5 w-3.5" /> Recebi
+                    <PackageCheck className="h-3.5 w-3.5" /> Confirmar entrada
                   </Button>
                 </div>
               </div>

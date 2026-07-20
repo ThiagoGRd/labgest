@@ -91,6 +91,8 @@ model Ordem {
   prazoFornecedor                                        DateTime?       @map("prazo_fornecedor") @db.Timestamptz(6)
   dataRecebimentoFornecedor                              DateTime?       @map("data_recebimento_fornecedor") @db.Timestamptz(6)
   justificativaAtrasoFornecedor                          String?         @map("justificativa_atraso_fornecedor")
+  estoqueBaixadoEm                                       DateTime?       @map("estoque_baixado_em") @db.Timestamptz(6)
+  cobrancaGeradaEm                                       DateTime?       @map("cobranca_gerada_em") @db.Timestamptz(6)
   tokenRastreamento                                      String          @unique(map: "idx_ordens_token_rastreamento") @default(uuid()) @map("token_rastreamento") @db.Uuid
   dataEntregaReal                                        DateTime?       @map("data_entrega_real") @db.Timestamptz(6)
   motivoCancelamento                                     String?         @map("motivo_cancelamento")

@@ -1,11 +1,10 @@
 'use server'
 
-import { prisma } from '@labgest/database'
+import { Prisma, prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
-import { abaterEstoquePorServico } from './estoque'
-import { gerarCobrancaAutomatica } from './financeiro'
 import { inferirTipoProtese, isEtapaId, isTipoProtese, normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
+import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 
 export async function getProducao() {
   await requireUser()
@@ -64,7 +63,7 @@ export async function getProducao() {
     })
   } catch (error) {
     console.error('Erro ao buscar produção:', error)
-    return []
+    throw new Error('Não foi possível carregar a produção. Atualize a página para tentar novamente.')
   }
 }
 
@@ -76,80 +75,87 @@ export async function moverOrdem(id: number, novaEtapa: string) {
 
   try {
     const novoStatus = statusParaEtapa(novaEtapa)
-    const ordem = novaEtapa === 'em_prova'
-      ? await prisma.$transaction(async (tx) => {
-          const ordemAtual = await tx.ordem.findUnique({
-            where: { id },
-            select: { id: true },
+    const resultado = await prisma.$transaction(async (tx) => {
+      const ordemAtual = await tx.ordem.findUnique({
+        where: { id },
+      })
+      if (!ordemAtual) return { success: false, error: 'Ordem não encontrada' }
+      if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
+        return { success: false, error: 'Esta ordem já está encerrada e não pode ser movimentada.' }
+      }
+      if (isTipoProtese(ordemAtual.tipoWorkflow) && ordemAtual.passoFluxoAtual) {
+        return {
+          success: false,
+          error: 'Esta ordem possui fluxo clínico-laboratorial. Avance pela etapa específica da prótese.',
+        }
+      }
+
+      const agora = new Date()
+      const historico = (Array.isArray(ordemAtual.historicoEtapas) ? ordemAtual.historicoEtapas : []) as Prisma.InputJsonObject[]
+      const proximoHistorico = [
+        ...historico,
+        {
+          acao: 'movimentou_kanban_legado',
+          de: ordemAtual.etapaAtual || 'recebimento',
+          para: novaEtapa,
+          data: agora.toISOString(),
+        },
+      ]
+
+      if (novaEtapa === 'em_prova') {
+        const cicloAtivo = await tx.cicloProducao.findFirst({
+          where: { ordemId: id, status: { in: ['no_lab', 'em_prova'] } },
+          orderBy: { numeroCiclo: 'desc' },
+        })
+
+        if (cicloAtivo) {
+          await tx.cicloProducao.update({
+            where: { id: cicloAtivo.id },
+            data: { status: 'em_prova', dataSaida: cicloAtivo.dataSaida ?? agora },
           })
-          if (!ordemAtual) throw new Error('Ordem não encontrada')
-
-          const cicloAtivo = await tx.cicloProducao.findFirst({
-            where: { ordemId: id, status: { in: ['no_lab', 'em_prova'] } },
-            orderBy: { numeroCiclo: 'desc' },
-          })
-
-          if (cicloAtivo) {
-            await tx.cicloProducao.update({
-              where: { id: cicloAtivo.id },
-              data: {
-                status: 'em_prova',
-                dataSaida: cicloAtivo.dataSaida ?? new Date(),
-              },
-            })
-          } else {
-            const totalCiclos = await tx.cicloProducao.count({ where: { ordemId: id } })
-            const dataComprometida = new Date()
-            dataComprometida.setDate(dataComprometida.getDate() + 7)
-
-            await tx.cicloProducao.create({
-              data: {
-                ordemId: id,
-                numeroCiclo: totalCiclos + 1,
-                etapa: 'Prova clínica',
-                dataEntrada: new Date(),
-                dataSaida: new Date(),
-                prazoDias: 7,
-                dataComprometida,
-                status: 'em_prova',
-                registradoPor: 'recuperacao-automatica-kanban',
-              },
-            })
+        } else {
+          return {
+            success: false,
+            error: 'Inicie um ciclo de prova antes de enviar o trabalho para a clínica.',
           }
+        }
 
-          return tx.ordem.update({
-            where: { id },
-            data: {
-              etapaAtual: novaEtapa,
-              status: novoStatus,
-              dataFinalizacao: null,
-            },
-            select: { servicoId: true },
-          })
-        })
-      : await prisma.ordem.update({
+        await tx.ordem.update({
           where: { id },
-          data: {
-            etapaAtual: novaEtapa,
-            status: novoStatus,
-            dataFinalizacao: novaEtapa === 'pronto' ? new Date() : null,
-          },
-          select: { servicoId: true },
+          data: { etapaAtual: novaEtapa, status: novoStatus, dataFinalizacao: null, historicoEtapas: proximoHistorico },
         })
+        return { success: true }
+      }
 
-    // Se finalizou, abate estoque e gera cobrança automaticamente
-    if (novaEtapa === 'pronto' && ordem.servicoId) {
-      await abaterEstoquePorServico(ordem.servicoId)
-    }
-    if (novaEtapa === 'pronto') {
-      // Gera conta a receber (ignora erro se já existir)
-      await gerarCobrancaAutomatica(id).catch(() => {})
-    }
+      if (novaEtapa === 'pronto') {
+        await tx.ordem.update({
+          where: { id },
+          data: { etapaAtual: novaEtapa, status: novoStatus, dataFinalizacao: agora, historicoEtapas: proximoHistorico },
+        })
+        await garantirEfeitosFinalizacao(tx, id, agora)
+        return { success: true }
+      }
+
+      await tx.ordem.update({
+        where: { id },
+        data: {
+          etapaAtual: novaEtapa,
+          status: novoStatus,
+          dataFinalizacao: null,
+          historicoEtapas: proximoHistorico,
+        },
+      })
+      return { success: true }
+    })
+
+    if (!resultado.success) return resultado
 
     revalidatePath('/producao')
     revalidatePath('/ordens')
     revalidatePath('/prioridades')
-    return { success: true }
+    revalidatePath('/financeiro')
+    revalidatePath('/estoque')
+    return resultado
   } catch (error) {
     console.error('Erro ao mover ordem:', error)
     return { success: false, error: 'Erro ao mover ordem' }

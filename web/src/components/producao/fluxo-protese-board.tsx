@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { confirmarRecebimentoFornecedor, concluirEtapaLaboratorial, registrarEnvioFornecedor } from '@/actions/workflow-protese'
 import { getFluxoProtese, type TipoProteseId } from '@/lib/workflow-config'
+import { timestampValido } from '@/lib/producao-utils'
+import { toast } from 'sonner'
 
 export interface OrdemFluxoProtese {
   id: number
@@ -33,8 +35,9 @@ interface FluxoProteseBoardProps {
 }
 
 function formatarPrazo(data?: string | null) {
-  if (!data) return 'Sem prazo ativo'
-  return new Date(data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const timestamp = timestampValido(data)
+  if (timestamp === null) return 'Prazo não definido'
+  return new Date(timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }: FluxoProteseBoardProps) {
@@ -57,7 +60,10 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
     setErros((anterior) => ({ ...anterior, [ordemId]: '' }))
     try {
       const resultado = await acao()
-      if (resultado.success) router.refresh()
+      if (resultado.success) {
+        toast.success('Etapa atualizada.')
+        router.refresh()
+      }
       else setErros((anterior) => ({ ...anterior, [ordemId]: resultado.error || 'Não foi possível atualizar a ordem' }))
     } catch {
       setErros((anterior) => ({ ...anterior, [ordemId]: 'A atualização falhou. Tente novamente.' }))
@@ -115,8 +121,9 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
             <div className="min-h-[540px] space-y-3 rounded-b-2xl border-x border-b border-slate-200 bg-slate-50/60 p-3 dark:border-white/5 dark:bg-slate-900/20">
               {ordensDoPasso.map((ordem) => {
                 const prazo = passo.responsavel === 'fornecedor' ? ordem.prazoFornecedor : ordem.prazoEtapaAtual
-                const atrasado = Boolean(prazo && agora > new Date(prazo).getTime())
                 const pausada = ordem.status === 'Pausado'
+                const timestampPrazo = timestampValido(prazo)
+                const atrasado = !pausada && timestampPrazo !== null && agora > timestampPrazo
                 return (
                   <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                     <div className="flex items-start justify-between gap-2">
@@ -125,9 +132,9 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     </div>
                     <p className="mt-1 truncate text-xs text-slate-500">{ordem.dentista}</p>
                     {pausada && <p className="mt-2 flex items-center gap-1 text-xs font-bold text-amber-600"><PauseCircle className="h-3.5 w-3.5" /> Ordem pausada</p>}
-                    <div className={`mt-3 flex items-center gap-1.5 text-xs font-semibold ${atrasado ? 'text-red-600' : 'text-slate-500'}`}>
-                      {atrasado ? <AlertTriangle className="h-3.5 w-3.5" /> : <Icone className="h-3.5 w-3.5" />}
-                      {atrasado ? `Atrasado desde ${formatarPrazo(prazo)}` : formatarPrazo(prazo)}
+                    <div className={`mt-3 flex items-center gap-1.5 text-xs font-semibold ${atrasado ? 'text-red-600' : pausada ? 'text-amber-600' : 'text-slate-500'}`}>
+                      {atrasado ? <AlertTriangle className="h-3.5 w-3.5" /> : pausada ? <PauseCircle className="h-3.5 w-3.5" /> : <Icone className="h-3.5 w-3.5" />}
+                      {pausada ? 'Prazo suspenso' : atrasado ? `Atrasado desde ${formatarPrazo(prazo)}` : formatarPrazo(prazo)}
                     </div>
                     {ordem.arcadas === 2 && <p className="mt-1 text-[11px] font-medium text-indigo-600">Duas arcadas</p>}
 
@@ -141,7 +148,8 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
 
                     {!pausada && passo.responsavel === 'fornecedor' && !ordem.dataEnvioFornecedor && (
                       <div className="mt-4 space-y-2">
-                        <input value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Nome do fornecedor" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
+                        <label htmlFor={`fornecedor-${ordem.id}`} className="text-xs font-semibold text-slate-600 dark:text-slate-300">Nome do fornecedor</label>
+                        <input id={`fornecedor-${ordem.id}`} value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Ex.: Estruturas Silva" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
                         <Button type="button" className="w-full bg-orange-600 text-white hover:bg-orange-700" disabled={processando === ordem.id || !fornecedores[ordem.id]?.trim()} onClick={() => executar(ordem.id, () => registrarEnvioFornecedor(ordem.id, fornecedores[ordem.id] || ''))}>Registrar envio — 15 dias</Button>
                       </div>
                     )}
@@ -149,7 +157,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     {!pausada && passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && (
                       <div className="mt-4 space-y-2">
                         <p className="text-xs text-slate-600 dark:text-slate-300">Fornecedor: <strong>{ordem.fornecedorEstrutura}</strong></p>
-                        {atrasado && <textarea value={justificativas[ordem.id] || ''} onChange={(event) => setJustificativas((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Justificativa informada pelo fornecedor" rows={2} className="w-full resize-none rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/20" />}
+                        {atrasado && <><label htmlFor={`justificativa-${ordem.id}`} className="text-xs font-semibold text-red-700 dark:text-red-300">Justificativa do atraso</label><textarea id={`justificativa-${ordem.id}`} value={justificativas[ordem.id] || ''} onChange={(event) => setJustificativas((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="O que o fornecedor informou?" rows={2} className="w-full resize-none rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/20" /></>}
                         <Button type="button" className="w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={processando === ordem.id || (atrasado && !justificativas[ordem.id]?.trim())} onClick={() => executar(ordem.id, () => confirmarRecebimentoFornecedor(ordem.id, justificativas[ordem.id]))}>Confirmar recebimento</Button>
                       </div>
                     )}

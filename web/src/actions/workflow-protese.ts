@@ -12,6 +12,7 @@ import {
 } from '@/lib/workflow-config'
 import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
+import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 
 function historicoComEvento(historico: Prisma.JsonValue, evento: Prisma.JsonObject) {
   return [...(Array.isArray(historico) ? historico : []), evento] as Prisma.JsonArray
@@ -104,6 +105,10 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
       },
     })
 
+    if (statusCalculado === 'Finalizado' && status !== 'Pausado') {
+      await garantirEfeitosFinalizacao(tx, ordemId, agora)
+    }
+
     return { success: true, tipo: fluxo.nome, etapa: passo.nome }
   })
 
@@ -146,23 +151,30 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
       })
     }
 
+    const agora = new Date()
+    const novoStatus = statusParaPassoProtese(proximo)
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
         subetapaAtual: proximo.nome,
-        status: statusParaPassoProtese(proximo),
-        prazoEtapaAtual: calcularPrazoPasso(new Date(), proximo, ordem.arcadas),
+        status: novoStatus,
+        dataFinalizacao: novoStatus === 'Finalizado' ? agora : null,
+        prazoEtapaAtual: calcularPrazoPasso(agora, proximo, ordem.arcadas),
         historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
           acao: 'concluiu_etapa_laboratorial',
           de: passoAtual.nome,
           para: proximo.nome,
-          data: new Date().toISOString(),
+          data: agora.toISOString(),
           por: usuario.email || 'laboratorio',
         }),
       },
     })
+
+    if (novoStatus === 'Finalizado') {
+      await garantirEfeitosFinalizacao(tx, ordemId, agora)
+    }
 
     return { success: true, proximo: proximo.nome }
   })

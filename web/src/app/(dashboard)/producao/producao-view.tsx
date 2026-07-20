@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -12,13 +12,17 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { concluirAjusteSemNovaProva, enviarParaProva } from '@/actions/ciclos'
 import { getOrdemById } from '@/actions/ordens'
-import { FLUXOS_PROTESE, KANBAN_ETAPAS, TIPOS_PROTESE, etapaLabel, normalizarEtapa, type TipoProteseId } from '@/lib/workflow-config'
+import { FLUXOS_PROTESE, KANBAN_ETAPAS, TIPOS_PROTESE, etapaLabel, isTipoProtese, normalizarEtapa, type TipoProteseId } from '@/lib/workflow-config'
 import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import { AbrirCicloModal } from '@/components/producao/abrir-ciclo-modal'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
 import { RetornosClinica } from '@/components/producao/retornos-clinica'
 import { FluxoProteseBoard } from '@/components/producao/fluxo-protese-board'
 import { DefinirEtapaFluxoModal } from '@/components/producao/definir-etapa-fluxo-modal'
+import { ListaProducao } from '@/components/producao/lista-producao'
+import { ResumoProducao } from '@/components/producao/resumo-producao'
+import type { FilaProducao, OrdemProducao, VisualizacaoProducao } from '@/components/producao/types'
+import { diasRestantes, filaDaOrdem, ordenarOrdensOperacionais } from '@/lib/producao-utils'
 import {
   Calendar,
   GripVertical,
@@ -32,47 +36,15 @@ import {
   CheckCircle2,
   PauseCircle,
   PencilLine,
+  Route,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const etapas = KANBAN_ETAPAS
 
 
-interface Ordem {
-  id: number
-  paciente: string
-  dentista: string
-  servico: string
-  status: string
-  updatedAt: string
-  etapa: string
-  subetapa?: string | null
-  prioridade: string
-  entrega: string
-  cor?: string | null
-  elementos?: string | null
-  foto?: string | null
-  tipoWorkflow?: string | null
-  passoFluxoAtual?: string | null
-  arcadas?: number
-  prazoEtapaAtual?: string | null
-  fornecedorEstrutura?: string | null
-  dataEnvioFornecedor?: string | null
-  prazoFornecedor?: string | null
-  dataRecebimentoFornecedor?: string | null
-  justificativaAtrasoFornecedor?: string | null
-  cicloAtivoId?: number | null
-  cicloStatus?: string | null
-  cicloNumero?: number | null
-  cicloComprometido?: string | null
-  cicloDentistaDeci?: string | null
-  cicloRespostaEm?: string | null
-  cicloObs?: string | null
-  cicloFotos?: string[]
-}
-
 interface ProducaoViewProps {
-  initialOrdens: Ordem[]
+  initialOrdens: OrdemProducao[]
 }
 
 function getPriorityColor(priority: string) {
@@ -85,21 +57,12 @@ function getPriorityColor(priority: string) {
   return map[priority] || 'border-l-slate-400'
 }
 
-function getDaysRemaining(dateStr: string, isEmProva: boolean) {
-  if (isEmProva) return null // prazo pausado quando está em prova
-  const hoje = new Date()
-  hoje.setHours(0, 0, 0, 0)
-  const entrega = new Date(dateStr)
-  entrega.setHours(0, 0, 0, 0)
-  return Math.ceil((entrega.getTime() - hoje.getTime()) / 86400000)
-}
-
-function ehRetornoPendente(ordem: Ordem) {
+function ehRetornoPendente(ordem: OrdemProducao) {
   return Boolean(ordem.cicloDentistaDeci) && ordem.cicloStatus === 'em_prova'
 }
 
-function agruparOrdens(ordens: Ordem[]) {
-  const agrupado: Record<string, Ordem[]> = {}
+function agruparOrdens(ordens: OrdemProducao[]) {
+  const agrupado: Record<string, OrdemProducao[]> = {}
   etapas.forEach((etapa) => { agrupado[etapa.id] = [] })
 
   ordens.forEach((ordem) => {
@@ -123,32 +86,35 @@ function KanbanCard({
   onAbrirCiclo,
   onConcluirAjuste,
   onDefinirEtapa,
+  onAbrirFluxo,
 }: {
-  ordem: Ordem
+  ordem: OrdemProducao
   etapaId: string
-  onDragStart: (e: React.DragEvent, ordem: Ordem, etapaId: string) => void
+  onDragStart: (e: React.DragEvent, ordem: OrdemProducao, etapaId: string) => void
   onPatientClick: () => void
   onEnviarProva: () => void
   onConfirmarRetorno: () => void
   onAbrirCiclo: () => void
   onConcluirAjuste: () => void
   onDefinirEtapa: () => void
+  onAbrirFluxo: () => void
 }) {
   const isEmProva = ordem.cicloStatus === 'em_prova' || etapaId === 'em_prova'
   const hasRetorno = Boolean(ordem.cicloDentistaDeci) && ordem.cicloStatus === 'em_prova'
   const isAjusteNoLab = etapaId === 'ajuste' && ordem.cicloStatus === 'no_lab'
-  const daysLeft = getDaysRemaining(
+  const daysLeft = diasRestantes(
     ordem.cicloComprometido || ordem.entrega,
-    isEmProva
+    isEmProva || ordem.status === 'Pausado'
   )
   const isAtrasado = daysLeft !== null && daysLeft < 0
   const isPausada = ordem.status === 'Pausado'
+  const fluxoEspecifico = isTipoProtese(ordem.tipoWorkflow) && Boolean(ordem.passoFluxoAtual)
 
   return (
     <div
-      draggable={!isPausada}
+      draggable={!isPausada && !isTipoProtese(ordem.tipoWorkflow)}
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-l-4 ${getPriorityColor(ordem.prioridade)} ${isPausada ? 'cursor-default opacity-80' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md transition-all duration-200 group`}
+      className={`bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-l-4 ${getPriorityColor(ordem.prioridade)} ${isPausada || isTipoProtese(ordem.tipoWorkflow) ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} ${isPausada ? 'opacity-80' : ''} hover:shadow-md transition-all duration-200 group`}
     >
       {/* Header */}
       <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
@@ -210,7 +176,9 @@ function KanbanCard({
         <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
           <span className={`text-xs font-medium ${isAtrasado ? 'text-red-500' : isEmProva ? 'text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`}>
-            {isEmProva
+            {isPausada
+              ? 'Prazo suspenso'
+              : isEmProva
               ? '⏸ Na clínica'
               : isAtrasado
               ? `${Math.abs(daysLeft!)}d atrasado`
@@ -218,7 +186,7 @@ function KanbanCard({
               ? 'Entrega hoje'
               : daysLeft !== null
               ? `${daysLeft}d restantes`
-              : new Date(ordem.entrega).toLocaleDateString('pt-BR')
+              : 'Prazo não definido'
             }
           </span>
         </div>
@@ -233,6 +201,15 @@ function KanbanCard({
 
       {/* Ações de Ciclo */}
       <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex gap-2">
+        {fluxoEspecifico && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAbrirFluxo() }}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 transition-all"
+          >
+            <Route className="h-3.5 w-3.5" /> Abrir fluxo da prótese
+          </button>
+        )}
         {!ordem.passoFluxoAtual && (
           <button
             type="button"
@@ -244,7 +221,7 @@ function KanbanCard({
           </button>
         )}
 
-        {!isPausada && !ordem.cicloAtivoId && (etapaId === 'confeccao' || etapaId === 'ajuste') && (
+        {!fluxoEspecifico && !isPausada && !ordem.cicloAtivoId && (etapaId === 'confeccao' || etapaId === 'ajuste') && (
           <button
             onClick={(e) => { e.stopPropagation(); onAbrirCiclo() }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
@@ -255,7 +232,7 @@ function KanbanCard({
         )}
 
         {/* Se está no lab → botão Enviar p/ Prova */}
-        {!isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
+        {!fluxoEspecifico && !isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'no_lab' && (
           <>
             <button
               onClick={(e) => { e.stopPropagation(); onEnviarProva() }}
@@ -276,14 +253,14 @@ function KanbanCard({
           </>
         )}
 
-        {!isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'em_prova' && !hasRetorno && (
+        {!fluxoEspecifico && !isPausada && ordem.cicloAtivoId && ordem.cicloStatus === 'em_prova' && !hasRetorno && (
           <span className="flex-1 py-1.5 text-center text-[11px] font-bold text-amber-600 dark:text-amber-400">
             Aguardando decisão do dentista
           </span>
         )}
 
         {/* Se está em prova e dentista enviou feedback → confirmar retorno */}
-        {!isPausada && ordem.cicloAtivoId && hasRetorno && (
+        {!fluxoEspecifico && !isPausada && ordem.cicloAtivoId && hasRetorno && (
           <button
             onClick={(e) => { e.stopPropagation(); onConfirmarRetorno() }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all"
@@ -324,25 +301,32 @@ function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino, loading }: C
 
 export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const router = useRouter()
-  const [ordensPorEtapa, setOrdensPorEtapa] = useState<Record<string, Ordem[]>>(() => agruparOrdens(initialOrdens))
-  const [draggedItem, setDraggedItem] = useState<{ ordem: Ordem; fromEtapa: string } | null>(null)
+  const ordensPorEtapa = useMemo(() => agruparOrdens(initialOrdens), [initialOrdens])
+  const [draggedItem, setDraggedItem] = useState<{ ordem: OrdemProducao; fromEtapa: string } | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
-  const [pendingMove, setPendingMove] = useState<{ ordem: Ordem; fromEtapa: string; toEtapa: string } | null>(null)
+  const [pendingMove, setPendingMove] = useState<{ ordem: OrdemProducao; fromEtapa: string; toEtapa: string } | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [selectedFullOrdem, setSelectedFullOrdem] = useState<Awaited<ReturnType<typeof getOrdemById>>>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('todas')
   const [tipoSelecionado, setTipoSelecionado] = useState<'todos' | TipoProteseId>('todos')
-  const [ordemParaDefinirEtapa, setOrdemParaDefinirEtapa] = useState<Ordem | null>(null)
+  const [filaSelecionada, setFilaSelecionada] = useState<FilaProducao>('laboratorio')
+  const [visualizacao, setVisualizacao] = useState<VisualizacaoProducao>('kanban')
+  const [ordemParaDefinirEtapa, setOrdemParaDefinirEtapa] = useState<OrdemProducao | null>(null)
   const [movendoOrdem, setMovendoOrdem] = useState(false)
-  const [ajusteParaConcluir, setAjusteParaConcluir] = useState<Ordem | null>(null)
+  const [ajusteParaConcluir, setAjusteParaConcluir] = useState<OrdemProducao | null>(null)
   const [concluindoAjuste, setConcluindoAjuste] = useState(false)
 
   // Modais de ciclo
-  const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<Ordem | null>(null)
-  const [confirmarRetornoOrdem, setConfirmarRetornoOrdem] = useState<Ordem | null>(null)
+  const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<OrdemProducao | null>(null)
+  const [confirmarRetornoOrdem, setConfirmarRetornoOrdem] = useState<OrdemProducao | null>(null)
 
-  const handleDragStart = (e: React.DragEvent, ordem: Ordem, etapaId: string) => {
+  const handleDragStart = (e: React.DragEvent, ordem: OrdemProducao, etapaId: string) => {
+    if (isTipoProtese(ordem.tipoWorkflow)) {
+      e.preventDefault()
+      toast.info('Use a etapa específica da prótese para avançar esta ordem.')
+      return
+    }
     setDraggedItem({ ordem, fromEtapa: etapaId })
     e.dataTransfer.effectAllowed = 'move'
   }
@@ -371,47 +355,36 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const confirmMove = async () => {
     if (!pendingMove) return
     setMovendoOrdem(true)
-    const { ordem, fromEtapa, toEtapa } = pendingMove
-    setOrdensPorEtapa(prev => {
-      const newOrdens = { ...prev }
-      newOrdens[fromEtapa] = newOrdens[fromEtapa].filter(o => o.id !== ordem.id)
-      newOrdens[toEtapa] = [...(newOrdens[toEtapa] || []), { ...ordem, etapa: toEtapa }]
-      return newOrdens
-    })
+    const { ordem, toEtapa } = pendingMove
     try {
       const result = await moverOrdem(ordem.id, toEtapa)
       if (!result.success) throw new Error(result.error || 'Não foi possível mover a ordem.')
       toast.success('Ordem movimentada.')
       setChecklistOpen(false)
       setPendingMove(null)
+      router.refresh()
     } catch (error) {
-      setOrdensPorEtapa(prev => {
-        const newOrdens = { ...prev }
-        newOrdens[toEtapa] = newOrdens[toEtapa].filter(o => o.id !== ordem.id)
-        newOrdens[fromEtapa] = [...(newOrdens[fromEtapa] || []), ordem]
-        return newOrdens
-      })
       toast.error(error instanceof Error ? error.message : 'Não foi possível mover a ordem.')
     } finally {
       setMovendoOrdem(false)
     }
   }
 
-  const handleEnviarProva = async (ordem: Ordem) => {
+  const handleEnviarProva = async (ordem: OrdemProducao) => {
     if (!ordem.cicloAtivoId) return
     const result = await enviarParaProva(ordem.cicloAtivoId)
-    if (!result.success) return
-    // Move visualmente para em_prova
-    setOrdensPorEtapa(prev => {
-      const newOrdens = { ...prev }
-      const etapaOrigem = Object.keys(newOrdens).find(k => newOrdens[k].some(o => o.id === ordem.id)) || ''
-      if (etapaOrigem) newOrdens[etapaOrigem] = newOrdens[etapaOrigem].filter(o => o.id !== ordem.id)
-      newOrdens['em_prova'] = [...(newOrdens['em_prova'] || []), { ...ordem, cicloStatus: 'em_prova' }]
-      return newOrdens
-    })
+    if (!result.success) {
+      const mensagem = 'error' in result && typeof result.error === 'string'
+        ? result.error
+        : 'Não foi possível enviar o trabalho para prova.'
+      toast.error(mensagem)
+      return
+    }
+    toast.success('Trabalho enviado para prova.')
+    router.refresh()
   }
 
-  const handleConcluirAjuste = (ordem: Ordem) => {
+  const handleConcluirAjuste = (ordem: OrdemProducao) => {
     if (!ordem.cicloAtivoId) return
     setAjusteParaConcluir(ordem)
   }
@@ -435,24 +408,29 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     }
   }
 
+  const todasOrdens = useMemo(() => Object.values(ordensPorEtapa).flat(), [ordensPorEtapa])
   const termoNormalizado = searchTerm.trim().toLowerCase()
-  const ordensFiltradasPorEtapa = Object.fromEntries(
-    Object.entries(ordensPorEtapa).map(([etapaId, ordens]) => [
-      etapaId,
-      ordens.filter((ordem) => {
-        const correspondeBusca = !termoNormalizado
-          || String(ordem.paciente).toLowerCase().includes(termoNormalizado)
-          || String(ordem.id).includes(termoNormalizado)
-        const correspondePrioridade = priorityFilter === 'todas' || ordem.prioridade === priorityFilter
-        return correspondeBusca && correspondePrioridade
-      }),
-    ])
-  ) as Record<string, Ordem[]>
+  const ordensBuscaPrioridade = useMemo(() => ordenarOrdensOperacionais(todasOrdens.filter((ordem) => {
+    const correspondeBusca = !termoNormalizado
+      || ordem.paciente.toLowerCase().includes(termoNormalizado)
+      || ordem.dentista.toLowerCase().includes(termoNormalizado)
+      || String(ordem.id).includes(termoNormalizado)
+    const correspondePrioridade = priorityFilter === 'todas' || ordem.prioridade === priorityFilter
+    return correspondeBusca && correspondePrioridade
+  })), [priorityFilter, todasOrdens, termoNormalizado])
 
-  const totalOrdens = Object.values(ordensFiltradasPorEtapa).reduce((acc, arr) => acc + arr.length, 0)
+  const ordensExibidas = useMemo(() => tipoSelecionado === 'todos'
+    ? ordensBuscaPrioridade.filter((ordem) => filaDaOrdem(ordem) === filaSelecionada)
+    : ordensBuscaPrioridade.filter((ordem) => ordem.tipoWorkflow === tipoSelecionado),
+  [filaSelecionada, ordensBuscaPrioridade, tipoSelecionado])
+
+  const ordensFiltradasPorEtapa = useMemo(() => agruparOrdens(ordensExibidas), [ordensExibidas])
+  const contagens = useMemo(() => todasOrdens.reduce<Record<FilaProducao, number>>((acc, ordem) => {
+    acc[filaDaOrdem(ordem)] += 1
+    return acc
+  }, { laboratorio: 0, clinica: 0, fornecedor: 0, sem_etapa: 0 }), [todasOrdens])
   // Pendências operacionais nunca obedecem aos filtros do Kanban: precisam permanecer visíveis.
-  const retornosPendentes = Object.values(ordensPorEtapa)
-    .flat()
+  const retornosPendentes = todasOrdens
     .filter(ehRetornoPendente)
     .sort((a, b) => {
       const dataA = a.cicloRespostaEm ? new Date(a.cicloRespostaEm).getTime() : 0
@@ -461,8 +439,13 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     })
 
   const handlePatientClick = async (id: number) => {
-    const fullOrdem = await getOrdemById(id)
-    if (fullOrdem) { setSelectedFullOrdem(fullOrdem); setViewModalOpen(true) }
+    try {
+      const fullOrdem = await getOrdemById(id)
+      if (fullOrdem) { setSelectedFullOrdem(fullOrdem); setViewModalOpen(true) }
+      else toast.error('Não foi possível abrir esta ordem.')
+    } catch {
+      toast.error('Não foi possível abrir esta ordem.')
+    }
   }
 
   return (
@@ -529,18 +512,33 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
 
       <Header
         title="Produção"
-        subtitle={`${totalOrdens} ordens em andamento${retornosPendentes.length > 0 ? ` · ${retornosPendentes.length} retorno${retornosPendentes.length > 1 ? 's' : ''} aguardando ação` : ''}`}
+        subtitle={`${contagens.laboratorio} no laboratório · ${contagens.clinica} na clínica · ${contagens.fornecedor} com fornecedor${retornosPendentes.length > 0 ? ` · ${retornosPendentes.length} retorno${retornosPendentes.length > 1 ? 's' : ''} para confirmar` : ''}`}
       />
 
-      <div className="p-6">
+      <main className="p-4 sm:p-6">
+        {tipoSelecionado === 'todos' && (
+          <ResumoProducao
+            contagens={contagens}
+            selecionada={filaSelecionada}
+            retornos={retornosPendentes.length}
+            onSelecionar={(fila) => {
+              setFilaSelecionada(fila)
+              if (fila !== 'laboratorio') setVisualizacao('lista')
+            }}
+          />
+        )}
+
         {/* Toolbar */}
-        <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             <select
               value={tipoSelecionado}
-              onChange={(event) => setTipoSelecionado(event.target.value as 'todos' | TipoProteseId)}
+              onChange={(event) => {
+                setTipoSelecionado(event.target.value as 'todos' | TipoProteseId)
+                if (event.target.value !== 'todos') setVisualizacao('kanban')
+              }}
               aria-label="Selecionar tipo de prótese"
-              className="max-w-full rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200"
+              className="max-w-full flex-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200 sm:flex-none"
             >
               <option value="todos">Visão geral — todas as próteses</option>
               {TIPOS_PROTESE.map((tipo) => (
@@ -550,14 +548,16 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             <input
               type="text"
               placeholder="Buscar paciente ou #ID..."
+              aria-label="Buscar paciente, dentista ou número da ordem"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 text-slate-900 dark:text-white"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-zinc-800 dark:text-white sm:w-64"
             />
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+              aria-label="Filtrar por prioridade"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
             >
               <option value="todas">Todas as Prioridades</option>
               <option value="Baixa">Baixa</option>
@@ -566,10 +566,12 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
               <option value="Urgente">Urgente</option>
             </select>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="icon"><LayoutGrid className="h-4 w-4" /></Button>
-            <Button variant="outline" size="icon"><List className="h-4 w-4" /></Button>
-          </div>
+          {tipoSelecionado === 'todos' && (
+            <div className="hidden items-center gap-2 md:flex" role="group" aria-label="Modo de visualização">
+              <Button type="button" variant={visualizacao === 'kanban' ? 'secondary' : 'outline'} size="icon" onClick={() => setVisualizacao('kanban')} aria-label="Visualizar como Kanban" aria-pressed={visualizacao === 'kanban'}><LayoutGrid className="h-4 w-4" /></Button>
+              <Button type="button" variant={visualizacao === 'lista' ? 'secondary' : 'outline'} size="icon" onClick={() => setVisualizacao('lista')} aria-label="Visualizar como lista" aria-pressed={visualizacao === 'lista'}><List className="h-4 w-4" /></Button>
+            </div>
+          )}
         </div>
 
         <RetornosClinica
@@ -584,16 +586,36 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
         {tipoSelecionado !== 'todos' ? (
           <FluxoProteseBoard
             tipo={tipoSelecionado}
-            ordens={Object.values(ordensFiltradasPorEtapa).flat().filter((ordem) => ordem.tipoWorkflow === tipoSelecionado)}
+            ordens={ordensExibidas}
             onAbrirOrdem={handlePatientClick}
             onDefinirEtapa={(ordemId) => {
               const ordem = Object.values(ordensPorEtapa).flat().find((item) => item.id === ordemId)
               if (ordem) setOrdemParaDefinirEtapa(ordem)
             }}
           />
+        ) : visualizacao === 'lista' ? (
+          <ListaProducao
+            ordens={ordensExibidas.filter((ordem) => !ehRetornoPendente(ordem))}
+            onAbrirOrdem={handlePatientClick}
+            onDefinirEtapa={setOrdemParaDefinirEtapa}
+            onAbrirFluxo={(ordem) => {
+              if (isTipoProtese(ordem.tipoWorkflow)) setTipoSelecionado(ordem.tipoWorkflow)
+            }}
+          />
         ) : (
         /* KanBan Board */
-        <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory min-h-[calc(100vh-250px)]">
+        <>
+        <div className="md:hidden">
+          <ListaProducao
+            ordens={ordensExibidas.filter((ordem) => !ehRetornoPendente(ordem))}
+            onAbrirOrdem={handlePatientClick}
+            onDefinirEtapa={setOrdemParaDefinirEtapa}
+            onAbrirFluxo={(ordem) => {
+              if (isTipoProtese(ordem.tipoWorkflow)) setTipoSelecionado(ordem.tipoWorkflow)
+            }}
+          />
+        </div>
+        <div className="hidden gap-4 overflow-x-auto pb-4 snap-x snap-mandatory min-h-[calc(100vh-250px)] md:flex">
           {etapas.map((etapa) => (
             <div
               key={etapa.id}
@@ -631,6 +653,9 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                     onAbrirCiclo={() => setAbrirCicloOrdem(ordem)}
                     onConcluirAjuste={() => handleConcluirAjuste(ordem)}
                     onDefinirEtapa={() => setOrdemParaDefinirEtapa(ordem)}
+                    onAbrirFluxo={() => {
+                      if (isTipoProtese(ordem.tipoWorkflow)) setTipoSelecionado(ordem.tipoWorkflow)
+                    }}
                   />
                 ))}
 
@@ -638,7 +663,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
                   <EmptyState
                     icon={FileText}
                     title="Sem ordens"
-                    description="Arraste uma ordem para esta etapa"
+                    description={filaSelecionada === 'laboratorio' ? 'Nenhuma ordem desta fila está nesta etapa' : 'Nenhuma ordem nesta etapa'}
                     className="py-6"
                   />
                 )}
@@ -646,6 +671,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             </div>
           ))}
         </div>
+        </>
         )}
 
         {/* Legenda */}
@@ -667,7 +693,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             <span className="text-xs">Trabalho cíclico (vai e volta)</span>
           </div>
         </div>
-      </div>
+      </main>
     </DashboardLayout>
   )
 }
