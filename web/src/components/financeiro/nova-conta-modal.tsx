@@ -16,7 +16,6 @@ interface NovaContaModalProps {
 }
 
 const categoriasPagar = ['Material', 'Fixo', 'Manutenção', 'Impostos', 'Salários', 'Marketing', 'Outros']
-const categoriasReceber = ['Serviço', 'Consultoria', 'Outros']
 const clientes = ['Dr. João Santos', 'Dra. Ana Lima', 'Dr. Paulo Costa', 'Dra. Carla Melo']
 
 export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuccess }: NovaContaModalProps) {
@@ -73,7 +72,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
       } else {
         setError(result.error || 'Erro ao criar conta')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -87,6 +86,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
       title={tipo === 'receber' ? 'Nova Conta a Receber' : 'Nova Conta a Pagar'}
       description={tipo === 'receber' ? 'Cadastre um novo recebimento' : 'Cadastre uma nova despesa'}
       size="md"
+      dismissible={!loading}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -223,7 +223,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial = 'receber', onSuc
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={loading} className={tipo === 'receber' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}>

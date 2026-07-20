@@ -2,14 +2,17 @@
 
 import { useState, useTransition } from 'react'
 import {
-  Building2, Clock, AlertTriangle, RefreshCw, CheckCircle2,
+  Building2, AlertTriangle, RefreshCw, CheckCircle2,
   PackageCheck, Send, Plus, ChevronRight, Search, X, Loader2,
-  Calendar, User, Stethoscope, FileText, ArrowRightLeft, Undo2, Pencil
+  Calendar, User, Stethoscope, Undo2, Pencil
 } from 'lucide-react'
 import {
-  criarPedido, atualizarSituacao, marcarRetrabalho, excluirPedido, atualizarPedido,
+  criarPedido, atualizarSituacao, marcarRetrabalho, atualizarPedido,
   type LabExternoPedido, type LabExterno, type SituacaoPedido
 } from '@/actions/labs-externos'
+import { Modal } from '@/components/ui/modal'
+import { ReasonModal } from '@/components/ui/reason-modal'
+import { toast } from 'sonner'
 
 interface Stats {
   total_enviados: number
@@ -30,6 +33,17 @@ interface Props {
 
 type Aba = 'todos' | 'enviados' | 'provando' | 'prontos' | 'entregues' | 'atrasados' | 'retrabalhos'
 
+interface PedidoFormData {
+  labId: number
+  labNome: string
+  paciente: string
+  dentista: string
+  dataEnvio: string
+  prazo: string
+  servico: string
+  situacao: SituacaoPedido
+}
+
 const SITUACAO_CONFIG: Record<SituacaoPedido, { label: string; color: string; bg: string; next?: SituacaoPedido; prev?: SituacaoPedido }> = {
   Enviado:  { label: 'Enviado',  color: 'text-blue-400',   bg: 'bg-blue-500/20',   next: 'Provando' },
   Provando: { label: 'Provando', color: 'text-purple-400', bg: 'bg-purple-500/20', next: 'Pronto',   prev: 'Enviado' },
@@ -48,13 +62,12 @@ function isOverdue(pedido: LabExternoPedido): boolean {
 }
 
 function PedidoCard({
-  pedido, onAvancar, onVoltar, onRetrabalho, onExcluir, onEdit, isPending
+  pedido, onAvancar, onVoltar, onRetrabalho, onEdit, isPending
 }: {
   pedido: LabExternoPedido
   onAvancar: (id: number, next: SituacaoPedido) => void
   onVoltar: (id: number, prev: SituacaoPedido) => void
   onRetrabalho: (id: number) => void
-  onExcluir: (id: number) => void
   onEdit: (pedido: LabExternoPedido) => void
   isPending: boolean
 }) {
@@ -181,11 +194,12 @@ function PedidoCard({
   )
 }
 
-function ModalPedido({ labs, pedidoEdicao, onClose, onSave }: {
+function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
   labs: LabExterno[]
   pedidoEdicao?: LabExternoPedido
   onClose: () => void
-  onSave: (data: any) => void
+  onSave: (data: PedidoFormData) => void
+  isPending: boolean
 }) {
   const [form, setForm] = useState({
     labId:     pedidoEdicao?.labId ? String(pedidoEdicao.labId) : String(labs[0]?.id ?? ''),
@@ -206,19 +220,16 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="glass-card rounded-2xl border border-slate-200 dark:border-white/20 bg-white dark:bg-gray-900 w-full max-w-lg shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            {pedidoEdicao ? <Pencil className="w-5 h-5 text-blue-500 dark:text-blue-400" /> : <Plus className="w-5 h-5 text-blue-500 dark:text-blue-400" />}
-            {pedidoEdicao ? 'Editar Pedido' : 'Novo Pedido — Lab Externo'}
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={pedidoEdicao ? 'Editar pedido' : 'Novo pedido — Lab externo'}
+      description="Acompanhe envio, prazo e retorno da peça"
+      size="md"
+      dismissible={!isPending}
+      mobileFullscreen
+    >
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-500 dark:text-gray-400 mb-1 block">Laboratório *</label>
@@ -307,20 +318,21 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave }: {
             <button
               type="button"
               onClick={onClose}
+              disabled={isPending}
               className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/20 text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/40 transition-colors text-sm"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm"
+              disabled={isPending}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Cadastrar
+              {isPending ? 'Salvando...' : pedidoEdicao ? 'Salvar alterações' : 'Cadastrar'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -329,6 +341,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   const [busca, setBusca]           = useState('')
   const [showModal, setShowModal]   = useState(false)
   const [pedidoEditando, setPedidoEditando] = useState<LabExternoPedido | undefined>(undefined)
+  const [retrabalhoId, setRetrabalhoId] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function getPedidosFiltrados(): LabExternoPedido[] {
@@ -352,28 +365,56 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   }
 
   function handleAvancar(id: number, next: SituacaoPedido) {
-    startTransition(() => atualizarSituacao(id, next))
+    startTransition(async () => {
+      try {
+        await atualizarSituacao(id, next)
+      } catch {
+        toast.error('Não foi possível atualizar a situação do pedido.')
+      }
+    })
   }
 
   function handleVoltar(id: number, prev: SituacaoPedido) {
-    startTransition(() => atualizarSituacao(id, prev))
+    startTransition(async () => {
+      try {
+        await atualizarSituacao(id, prev)
+      } catch {
+        toast.error('Não foi possível voltar a situação do pedido.')
+      }
+    })
   }
 
   function handleRetrabalho(id: number) {
-    const motivo = prompt('Motivo do retrabalho:')
-    if (motivo === null) return
-    startTransition(() => marcarRetrabalho(id, motivo))
+    setRetrabalhoId(id)
   }
 
-  function handleSalvarPedido(data: any) {
+  function confirmarRetrabalho(motivo: string) {
+    if (retrabalhoId === null) return
     startTransition(async () => {
-      if (pedidoEditando) {
-        await atualizarPedido(pedidoEditando.id, data)
-      } else {
-        await criarPedido(data)
+      try {
+        await marcarRetrabalho(retrabalhoId, motivo)
+        setRetrabalhoId(null)
+        toast.success('Retrabalho registrado.')
+      } catch {
+        toast.error('Não foi possível registrar o retrabalho.')
       }
-      setShowModal(false)
-      setPedidoEditando(undefined)
+    })
+  }
+
+  function handleSalvarPedido(data: PedidoFormData) {
+    startTransition(async () => {
+      try {
+        if (pedidoEditando) {
+          await atualizarPedido(pedidoEditando.id, data)
+        } else {
+          await criarPedido(data)
+        }
+        setShowModal(false)
+        setPedidoEditando(undefined)
+        toast.success(pedidoEditando ? 'Pedido atualizado.' : 'Pedido cadastrado.')
+      } catch {
+        toast.error('Não foi possível salvar o pedido.')
+      }
     })
   }
 
@@ -484,7 +525,6 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
               onAvancar={handleAvancar}
               onVoltar={handleVoltar}
               onRetrabalho={handleRetrabalho}
-              onExcluir={(id) => startTransition(() => excluirPedido(id))}
               onEdit={(p) => { setPedidoEditando(p); setShowModal(true) }}
               isPending={isPending}
             />
@@ -498,8 +538,20 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
           pedidoEdicao={pedidoEditando}
           onClose={() => { setShowModal(false); setPedidoEditando(undefined) }}
           onSave={handleSalvarPedido}
+          isPending={isPending}
         />
       )}
+      <ReasonModal
+        isOpen={retrabalhoId !== null}
+        onClose={() => setRetrabalhoId(null)}
+        onConfirm={confirmarRetrabalho}
+        title="Registrar retrabalho"
+        description="A justificativa ficará vinculada ao pedido"
+        label="Motivo do retrabalho"
+        placeholder="Descreva o problema encontrado e o ajuste necessário."
+        confirmLabel="Registrar retrabalho"
+        loading={isPending}
+      />
     </div>
   )
 }

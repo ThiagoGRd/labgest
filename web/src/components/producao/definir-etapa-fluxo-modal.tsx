@@ -60,6 +60,7 @@ export function DefinirEtapaFluxoModal({ ordem, onClose, onSuccess }: DefinirEta
       title="Definir fluxo e etapa"
       description={`OS #${ordem.id} · ${ordem.paciente}`}
       size="sm"
+      dismissible={!salvando}
     >
       <div className="space-y-5">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">

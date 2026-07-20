@@ -4,25 +4,24 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { baixarConta, sincronizarFinanceiroRetroativo, editarConta, excluirConta } from '@/actions/financeiro'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
+import { Modal } from '@/components/ui/modal'
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
+import { toast } from 'sonner'
 import { RefreshCw, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
 import {
-  TrendingUp,
-  TrendingDown,
   DollarSign,
   Calendar,
   CheckCircle2,
-  AlertCircle,
   Plus,
   ArrowUpRight,
   ArrowDownRight,
-  Filter
 } from 'lucide-react'
 
 interface Conta {
@@ -84,8 +83,10 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
     observacoes: string
   } | null>(null)
   const [editLoading, setEditLoading] = useState(false)
+  const [pendingAction, setPendingAction] = useState<{ kind: 'baixa' | 'excluir'; id: number; tipo: 'receber' | 'pagar' } | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
-  const abrirEdicao = (conta: any, tipo: 'receber' | 'pagar') => {
+  const abrirEdicao = (conta: Conta, tipo: 'receber' | 'pagar') => {
     setEditando({
       id: conta.id,
       tipo,
@@ -100,16 +101,23 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
   const handleSalvarEdicao = async () => {
     if (!editando) return
     setEditLoading(true)
-    const res = await editarConta(editando.id, editando.tipo, {
-      descricao: editando.descricao,
-      valor: Number(editando.valor),
-      vencimento: editando.vencimento,
-      categoria: editando.categoria,
-      observacoes: editando.observacoes,
-    })
-    setEditLoading(false)
-    if (res.success) setEditando(null)
-    else alert('Erro ao salvar edição.')
+    try {
+      const res = await editarConta(editando.id, editando.tipo, {
+        descricao: editando.descricao,
+        valor: Number(editando.valor),
+        vencimento: editando.vencimento,
+        categoria: editando.categoria,
+        observacoes: editando.observacoes,
+      })
+      if (res.success) {
+        setEditando(null)
+        toast.success('Lançamento atualizado.')
+      } else toast.error(res.error || 'Não foi possível salvar a edição.')
+    } catch {
+      toast.error('Não foi possível salvar a edição.')
+    } finally {
+      setEditLoading(false)
+    }
   }
 
   const handleSincronizar = async () => {
@@ -128,16 +136,31 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
   const totalPagar = pagar.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
   const saldoPrevisto = totalReceber - totalPagar
 
-  const handleBaixa = async (id: number, tipo: 'receber' | 'pagar') => {
-    if (confirm('Confirmar recebimento/pagamento desta conta?')) {
-      await baixarConta(id, tipo)
-    }
+  const handleBaixa = (id: number, tipo: 'receber' | 'pagar') => {
+    setPendingAction({ kind: 'baixa', id, tipo })
   }
 
-  const handleExcluir = async (id: number, tipo: 'receber' | 'pagar') => {
-    if (confirm('Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.')) {
-      const res = await excluirConta(id, tipo)
-      if (!res.success) alert('Erro ao excluir lançamento.')
+  const handleExcluir = (id: number, tipo: 'receber' | 'pagar') => {
+    setPendingAction({ kind: 'excluir', id, tipo })
+  }
+
+  const confirmarAcao = async () => {
+    if (!pendingAction) return
+    setActionLoading(true)
+    try {
+      const res = pendingAction.kind === 'baixa'
+        ? await baixarConta(pendingAction.id, pendingAction.tipo)
+        : await excluirConta(pendingAction.id, pendingAction.tipo)
+      if (!res.success) {
+        toast.error(res.error || 'Não foi possível concluir a ação.')
+        return
+      }
+      toast.success(pendingAction.kind === 'baixa' ? 'Baixa confirmada.' : 'Lançamento excluído.')
+      setPendingAction(null)
+    } catch {
+      toast.error('Não foi possível concluir a ação.')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -154,15 +177,30 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
         onClose={() => setModalOpen(false)}
         tipoInicial={modalType}
       />
+      <ConfirmActionModal
+        isOpen={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={confirmarAcao}
+        title={pendingAction?.kind === 'excluir' ? 'Excluir lançamento' : 'Confirmar baixa'}
+        description={pendingAction?.kind === 'excluir'
+          ? 'Este lançamento será excluído permanentemente. Esta ação não pode ser desfeita.'
+          : `Confirma o ${pendingAction?.tipo === 'receber' ? 'recebimento' : 'pagamento'} desta conta?`}
+        confirmLabel={pendingAction?.kind === 'excluir' ? 'Excluir lançamento' : 'Confirmar baixa'}
+        destructive={pendingAction?.kind === 'excluir'}
+        loading={actionLoading}
+      />
 
       {/* Modal de Edição de Conta */}
       {editando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 space-y-4">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Editar {editando.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}
-            </h2>
-
+        <Modal
+          isOpen
+          onClose={() => setEditando(null)}
+          title={`Editar ${editando.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}`}
+          description="Revise os dados antes de salvar"
+          size="md"
+          dismissible={!editLoading}
+        >
+          <div className="space-y-4">
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Descrição</label>
@@ -223,7 +261,7 @@ export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes,
               </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       <Header 

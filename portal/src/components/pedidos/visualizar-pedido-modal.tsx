@@ -145,15 +145,20 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
 
   const handleConcluirEtapaClinica = async () => {
     setConcluindoEtapa(true)
-    const resultado = await concluirEtapaClinica(pedido.id)
-    setConcluindoEtapa(false)
-    if (!resultado.success) {
-      toast.error(resultado.error || 'Não foi possível concluir a etapa')
-      return
+    try {
+      const resultado = await concluirEtapaClinica(pedido.id)
+      if (!resultado.success) {
+        toast.error(resultado.error || 'Não foi possível concluir a etapa')
+        return
+      }
+      toast.success('Etapa clínica concluída')
+      router.refresh()
+      onClose()
+    } catch {
+      toast.error('Não foi possível concluir a etapa. Tente novamente.')
+    } finally {
+      setConcluindoEtapa(false)
     }
-    toast.success('Etapa clínica concluída')
-    router.refresh()
-    onClose()
   }
 
   // Extrair Ficha Clínica
@@ -168,6 +173,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
       description={pedido.servico}
       size="xl"
       mobileFullscreen
+      dismissible={!concluindoEtapa}
     >
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:gap-8">
         

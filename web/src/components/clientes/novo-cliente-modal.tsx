@@ -45,7 +45,7 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
       } else {
         setError(result.error || 'Erro ao criar cliente')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -59,6 +59,7 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
       title="Novo Cliente"
       description="Cadastre um novo dentista"
       size="md"
+      dismissible={!loading}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -147,7 +148,7 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={loading}>

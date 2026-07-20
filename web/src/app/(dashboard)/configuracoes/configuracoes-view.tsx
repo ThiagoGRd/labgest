@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { updateLabConfig } from '@/actions/configuracoes'
@@ -21,15 +22,14 @@ import {
   Save,
   Loader2,
   Plus,
-  Edit,
   Trash2,
-  GripVertical,
   CheckCircle2,
   XCircle,
   Moon,
   Sun,
   Monitor,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 // Interfaces
 interface Configuracao {
@@ -58,6 +58,8 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
   const [activeSection, setActiveSection] = useState('laboratorio')
   const [saving, setSaving] = useState(false)
   const [showNewUser, setShowNewUser] = useState(false)
+  const [usuarioParaExcluir, setUsuarioParaExcluir] = useState<Usuario | null>(null)
+  const [excluindoUsuario, setExcluindoUsuario] = useState(false)
   const { theme, setTheme } = useTheme()
   
   // State Lab Config
@@ -90,7 +92,8 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
     setSaving(true)
     try {
       const result = await updateLabConfig(labConfig)
-      if (!result.success) alert('Erro ao salvar')
+      if (!result.success) toast.error('Não foi possível salvar as configurações.')
+      else toast.success('Configurações salvas.')
     } finally {
       setSaving(false)
     }
@@ -110,7 +113,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
         setShowNewUser(false)
         setNewUser({ nome: '', email: '', tipo: 'operador', senha: '' })
       } else {
-        alert(result.error)
+        toast.error(result.error || 'Não foi possível cadastrar o usuário.')
       }
     } finally {
       setSaving(false)
@@ -135,8 +138,36 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
     { id: 'seguranca', label: 'Segurança', icon: Shield },
   ]
 
+  const handleExcluirUsuario = async () => {
+    if (!usuarioParaExcluir) return
+    setExcluindoUsuario(true)
+    try {
+      const result = await excluirUsuario(usuarioParaExcluir.id, usuarioParaExcluir.email)
+      if (result?.success === false) {
+        toast.error(result.error || 'Não foi possível excluir o usuário.')
+        return
+      }
+      toast.success('Usuário excluído.')
+      setUsuarioParaExcluir(null)
+    } catch {
+      toast.error('Não foi possível excluir o usuário.')
+    } finally {
+      setExcluindoUsuario(false)
+    }
+  }
+
   return (
     <DashboardLayout>
+      <ConfirmActionModal
+        isOpen={usuarioParaExcluir !== null}
+        onClose={() => setUsuarioParaExcluir(null)}
+        onConfirm={handleExcluirUsuario}
+        title="Excluir usuário"
+        description={usuarioParaExcluir ? `${usuarioParaExcluir.nome} perderá o acesso ao sistema. Esta ação não pode ser desfeita.` : ''}
+        confirmLabel="Excluir usuário"
+        destructive
+        loading={excluindoUsuario}
+      />
       <Header title="Configurações" subtitle="Personalize o sistema" />
       
       <div className="p-6">
@@ -272,11 +303,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                               {user.ativo ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                             </button>
                             <button 
-                              onClick={() => {
-                                if (confirm('Tem certeza que deseja excluir este usuário?')) {
-                                  excluirUsuario(user.id, user.email)
-                                }
-                              }}
+                              onClick={() => setUsuarioParaExcluir(user)}
                               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                             >
                               <Trash2 className="h-4 w-4" />

@@ -149,6 +149,8 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
       title="Novo Pedido"
       description="Adicione múltiplos serviços para o mesmo paciente"
       size="lg"
+      dismissible={!loading}
+      mobileFullscreen
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -345,7 +347,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
         </div>
 
         <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 dark:border-zinc-800">
-          <Button type="button" variant="outline" onClick={onClose} className="rounded-xl px-6">Cancelar</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="rounded-xl px-6">Cancelar</Button>
           <Button 
             type="submit" 
             disabled={loading || itens.length === 0} 

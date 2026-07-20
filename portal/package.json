@@ -11,6 +11,7 @@
   "dependencies": {
     "@labgest/shared": "*",
     "@radix-ui/react-checkbox": "^1.1.2",
+    "@radix-ui/react-dialog": "^1.1.20",
     "@radix-ui/react-select": "^2.2.6",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.2",

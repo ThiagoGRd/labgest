@@ -11,19 +11,17 @@ import { Avatar } from '@/components/ui/avatar'
 import { NovoClienteModal } from '@/components/clientes/novo-cliente-modal'
 import {
   Search,
-  Filter,
   Download,
   Eye,
   Edit,
-  Trash2,
   Phone,
   Mail,
   MapPin,
   FileText,
   DollarSign,
   UserPlus,
-  MoreVertical,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 // Tipo dos dados vindo do servidor
 interface Cliente {
@@ -81,7 +79,7 @@ export function ClientesView({ initialData }: ClientesViewProps) {
         onSuccess={() => {
           // A página será revalidada automaticamente pelo Server Action
           setModalOpen(false)
-          alert('Cliente cadastrado com sucesso!')
+          toast.success('Cliente cadastrado com sucesso!')
         }}
       />
       

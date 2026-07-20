@@ -59,7 +59,7 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
   dataComprometida.setDate(dataComprometida.getDate() + prazoDias)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Registrar Entrada no Lab" description={`Paciente: ${paciente} — Ciclo ${numeroCicloAtual}`}>
+    <Modal isOpen={isOpen} onClose={onClose} title="Registrar Entrada no Lab" description={`Paciente: ${paciente} — Ciclo ${numeroCicloAtual}`} dismissible={!loading}>
       <div className="space-y-5">
         <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-sm text-indigo-700 dark:text-indigo-300">
           📥 Registre a entrada deste trabalho no laboratório e defina o prazo de entrega para esta etapa.
@@ -112,7 +112,7 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">Cancelar</Button>
           <Button onClick={handleConfirmar} disabled={loading} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white">
             <SendHorizontal className="h-4 w-4 mr-2" />
             {loading ? 'Registrando...' : 'Confirmar Entrada'}

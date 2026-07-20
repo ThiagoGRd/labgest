@@ -17,6 +17,8 @@ import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
 import { etapaLabel, FLUXOS_PROTESE, getWorkflowLabel, isTipoProtese } from '@/lib/workflow-config'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
+import { ReasonModal } from '@/components/ui/reason-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { NotaEntrega } from '@/components/ordens/nota-entrega'
@@ -49,6 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
 
 // Types
 type ResultadoOrdens = Awaited<ReturnType<typeof getOrdens>>
@@ -144,6 +147,9 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   const [printOrdem, setPrintOrdem] = useState<DadosFicha | null>(null)
   const [printEtiqueta, setPrintEtiqueta] = useState<DadosEtiqueta | null>(null)
   const [openingOrdemId, setOpeningOrdemId] = useState<number | null>(null)
+  const [ordemParaCancelar, setOrdemParaCancelar] = useState<Ordem | null>(null)
+  const [ordemParaEntregar, setOrdemParaEntregar] = useState<Ordem | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
@@ -232,41 +238,90 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     if (result.success && result.whatsappLink) {
       window.open(result.whatsappLink, '_blank', 'noopener,noreferrer')
     } else {
-      alert('Erro ao gerar mensagem: ' + (result.error || 'Tente novamente'))
+      toast.error(result.error || 'Não foi possível gerar a mensagem.')
     }
   }
 
-  const handleCancelar = async (ordem: Ordem) => {
-    const motivo = window.prompt(`Informe o motivo do cancelamento da OS #${ordem.id}:`)
-    if (!motivo?.trim()) return
-    const result = await cancelarOrdem(ordem.id, motivo)
-    if (!result.success) alert(result.error || 'Não foi possível cancelar a ordem')
-    else router.refresh()
+  const handleCancelar = (ordem: Ordem) => {
+    setOrdemParaCancelar(ordem)
   }
 
-  const handleMarcarEntregue = async (ordem: Ordem) => {
-    if (!confirm(`Confirmar entrega da OS #${ordem.id} para ${ordem.paciente}?`)) return
-    const result = await marcarEntregue(ordem.id)
-    if (!result.success) {
-      alert('Erro ao marcar como entregue: ' + (result.error || 'Tente novamente'))
-      return
+  const confirmarCancelamento = async (motivo: string) => {
+    if (!ordemParaCancelar) return
+    setActionLoading(true)
+    try {
+      const result = await cancelarOrdem(ordemParaCancelar.id, motivo)
+      if (!result.success) {
+        toast.error(result.error || 'Não foi possível cancelar a ordem.')
+        return
+      }
+      toast.success('Ordem cancelada.')
+      setOrdemParaCancelar(null)
+      router.refresh()
+    } catch {
+      toast.error('Não foi possível cancelar a ordem.')
+    } finally {
+      setActionLoading(false)
     }
-    setNotaEntregaDados({
-      id: ordem.id,
-      paciente: ordem.paciente,
-      cliente: { nome: ordem.cliente.nome },
-      servico: ordem.servico,
-      valor: ordem.valor,
-      dataEntrega: new Date().toISOString(),
-    })
-    setTimeout(() => {
-      handlePrintNotaEntrega()
-    }, 100)
-    router.refresh()
+  }
+
+  const handleMarcarEntregue = (ordem: Ordem) => {
+    setOrdemParaEntregar(ordem)
+  }
+
+  const confirmarEntrega = async () => {
+    if (!ordemParaEntregar) return
+    setActionLoading(true)
+    try {
+      const result = await marcarEntregue(ordemParaEntregar.id)
+      if (!result.success) {
+        toast.error(result.error || 'Não foi possível marcar a ordem como entregue.')
+        return
+      }
+      const ordem = ordemParaEntregar
+      setOrdemParaEntregar(null)
+      toast.success('Entrega confirmada.')
+      setNotaEntregaDados({
+        id: ordem.id,
+        paciente: ordem.paciente,
+        cliente: { nome: ordem.cliente.nome },
+        servico: ordem.servico,
+        valor: ordem.valor,
+        dataEntrega: new Date().toISOString(),
+      })
+      setTimeout(() => {
+        handlePrintNotaEntrega()
+      }, 100)
+      router.refresh()
+    } catch {
+      toast.error('Não foi possível marcar a ordem como entregue.')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   return (
     <DashboardLayout user={user}>
+      <ReasonModal
+        isOpen={ordemParaCancelar !== null}
+        onClose={() => setOrdemParaCancelar(null)}
+        onConfirm={confirmarCancelamento}
+        title={ordemParaCancelar ? `Cancelar OS #${ordemParaCancelar.id}` : 'Cancelar ordem'}
+        description="O motivo ficará registrado no histórico"
+        label="Motivo do cancelamento"
+        placeholder="Explique por que esta ordem está sendo cancelada."
+        confirmLabel="Cancelar ordem"
+        loading={actionLoading}
+      />
+      <ConfirmActionModal
+        isOpen={ordemParaEntregar !== null}
+        onClose={() => setOrdemParaEntregar(null)}
+        onConfirm={confirmarEntrega}
+        title="Confirmar entrega"
+        description={ordemParaEntregar ? `Confirma a entrega da OS #${ordemParaEntregar.id} para ${ordemParaEntregar.paciente}?` : ''}
+        confirmLabel="Confirmar entrega"
+        loading={actionLoading}
+      />
       {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}

@@ -59,6 +59,7 @@ export function ConfirmarRetornoModal({
       onClose={onClose}
       title="Registrar Retorno do Trabalho"
       description={`Paciente: ${paciente}`}
+      dismissible={!loading}
     >
       <div className="space-y-5">
 
@@ -136,7 +137,7 @@ export function ConfirmarRetornoModal({
         )}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">Cancelar</Button>
           <Button
             onClick={handleConfirmar}
             disabled={loading || retornoInvalido}

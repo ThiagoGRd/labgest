@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Send, MessageSquare, Loader2, Camera, X, Image as ImageIcon, ZoomIn } from 'lucide-react'
+import { Modal } from '@/components/ui/modal'
+import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagem } from '@/actions/mensagens'
 import { createClient } from '@/lib/supabase/client'
 
@@ -35,7 +36,7 @@ async function uploadFotoChat(file: File): Promise<string> {
   return urlData.publicUrl
 }
 
-export function ChatPedido({ ordemId, mensagensIniciais, dentistaNome }: ChatPedidoProps) {
+export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
   const [mensagens, setMensagens] = useState<Mensagem[]>(mensagensIniciais || [])
   const [texto, setTexto] = useState('')
   const [loading, setLoading] = useState(false)
@@ -69,7 +70,7 @@ export function ChatPedido({ ordemId, mensagensIniciais, dentistaNome }: ChatPed
     try {
       const url = await uploadFotoChat(file)
       setFotoUrl(url)
-    } catch (err: any) {
+    } catch {
       setFotoError('Erro ao enviar imagem. Tente novamente.')
       setFotoFile(null)
       setFotoPreview('')
@@ -112,15 +113,19 @@ export function ChatPedido({ ordemId, mensagensIniciais, dentistaNome }: ChatPed
     <>
       {/* Lightbox */}
       {lightbox && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setLightbox(null)}
+        <Modal
+          isOpen
+          onClose={() => setLightbox(null)}
+          title="Foto da conversa"
+          description="Visualização ampliada"
+          size="2xl"
+          tone="dark"
+          mobileFullscreen
         >
-          <img src={lightbox} alt="Foto ampliada" className="max-w-full max-h-full rounded-xl shadow-2xl" />
-          <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+          <div className="flex min-h-[50dvh] items-center justify-center">
+            <img src={lightbox} alt="Foto ampliada da conversa" className="max-h-[72dvh] max-w-full rounded-xl object-contain shadow-2xl" />
+          </div>
+        </Modal>
       )}
 
       <div className="flex flex-col h-[420px] border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">

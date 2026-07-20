@@ -33,6 +33,21 @@ import {
   type ChecklistEstetico,
 } from '@/lib/workflow-config'
 
+interface HistoricoEtapa {
+  acao: string
+  etapa: string
+  para?: string
+  motivo?: string
+  tentativa?: number
+  data: string
+}
+
+interface FotoProva {
+  url: string
+  numeroProva: number
+  descricao?: string
+}
+
 interface Ordem {
   id: number
   paciente: string
@@ -42,9 +57,9 @@ interface Ordem {
   etapaAtual: string
   tipoWorkflow: TipoWorkflow
   tentativaAtual: number
-  historicoEtapas: any[]
+  historicoEtapas: HistoricoEtapa[]
   checklistEstetico: Partial<ChecklistEstetico>
-  fotosProva?: any[]
+  fotosProva?: FotoProva[]
 }
 
 interface WorkflowModalProps {
@@ -56,6 +71,7 @@ interface WorkflowModalProps {
 
 export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowModalProps) {
   const [loading, setLoading] = useState(false)
+  const [savingChecklist, setSavingChecklist] = useState(false)
   const [showRetorno, setShowRetorno] = useState(false)
   const [showPhotoComparison, setShowPhotoComparison] = useState(false)
   const [motivoRetorno, setMotivoRetorno] = useState('')
@@ -82,32 +98,23 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
   const handleAvancar = async () => {
     setLoading(true)
     setError('')
-    console.log('[WorkflowModal] Avançando etapa...', {
-      ordemId: ordem.id,
-      etapaAtual: ordem.etapaAtual,
-      tipoWorkflow: ordem.tipoWorkflow,
-      isProva,
-      checklist: mergedChecklist,
-    })
     try {
       // Salvar checklist primeiro se é prova
       if (isProva) {
-        console.log('[WorkflowModal] Salvando checklist...')
         const checklistResult = await updateChecklistEstetico(ordem.id, mergedChecklist)
-        console.log('[WorkflowModal] Checklist salvo:', checklistResult)
+        if (!checklistResult.success) {
+          setError(checklistResult.error || 'Não foi possível salvar o checklist')
+          return
+        }
       }
       const result = await avancarEtapa(ordem.id)
-      console.log('[WorkflowModal] Resultado avancarEtapa:', result)
       if (result.success) {
-        console.log('[WorkflowModal] Sucesso! Nova etapa:', result.novaEtapa)
         onSuccess?.()
         onClose()
       } else {
-        console.error('[WorkflowModal] Erro:', result.error)
         setError(result.error || 'Erro ao avançar')
       }
     } catch (err) {
-      console.error('[WorkflowModal] Erro inesperado:', err)
       setError('Erro inesperado: ' + String(err))
     } finally {
       setLoading(false)
@@ -141,8 +148,16 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
   const handleChecklistChange = async (key: keyof ChecklistEstetico, value: boolean) => {
     const newChecklist = { ...mergedChecklist, [key]: value }
     setChecklist(newChecklist)
-    // Salvar automaticamente
-    await updateChecklistEstetico(ordem.id, newChecklist)
+    setSavingChecklist(true)
+    setError('')
+    try {
+      const result = await updateChecklistEstetico(ordem.id, newChecklist)
+      if (!result.success) setError(result.error || 'Não foi possível salvar o checklist')
+    } catch {
+      setError('Não foi possível salvar o checklist')
+    } finally {
+      setSavingChecklist(false)
+    }
   }
 
   const handleClose = () => {
@@ -161,6 +176,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
       title={`Fluxo da Ordem #${ordem.id}`}
       description={ordem.paciente}
       size="lg"
+      dismissible={!loading && !savingChecklist}
     >
       <div className="space-y-6">
         {/* Header info */}
@@ -180,7 +196,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
         </div>
 
         {error && (
-          <div className="p-3 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
+          <div role="alert" className="p-3 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
             {error}
           </div>
         )}
@@ -377,7 +393,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
                       Motivo: {h.motivo}
                     </p>
                   )}
-                  {h.tentativa > 0 && (
+                  {(h.tentativa || 0) > 0 && (
                     <span className="text-[9px] font-bold text-orange-600 uppercase">
                       Tentativa #{h.tentativa}
                     </span>
@@ -396,6 +412,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
             title={`Comparação de Prova #${ordem.tentativaAtual! + 1}`}
             description={ordem.paciente}
             size="lg"
+            dismissible={!loading && !savingChecklist}
           >
             <PhotoComparison
               ordemId={ordem.id}
@@ -426,14 +443,14 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
               )}
             </div>
             <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={handleClose} className="rounded-xl">
+              <Button type="button" variant="outline" onClick={handleClose} disabled={loading || savingChecklist} className="rounded-xl">
                 Fechar
               </Button>
               {currentIdx < etapas.length - 1 && (
                 <Button
                   type="button"
                   onClick={handleAvancar}
-                  disabled={loading || (isProva && !podeAvancar)}
+                  disabled={loading || savingChecklist || (isProva && !podeAvancar)}
                   className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
                   title={isProva && !podeAvancar ? 'Complete o checklist antes de avançar' : ''}
                 >

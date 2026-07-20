@@ -127,6 +127,8 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
       title={`Editar Ordem #${ordem.id}`}
       description="Alteração das especificações do caso"
       size="lg"
+      dismissible={!loading}
+      mobileFullscreen
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -261,7 +263,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
         </div>
 
         <div className="flex justify-end gap-3 pt-6 border-t border-black/5 dark:border-white/5">
-          <Button type="button" variant="outline" onClick={onClose} className="rounded-xl px-6">Cancelar</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="rounded-xl px-6">Cancelar</Button>
           <Button type="submit" disabled={loading} className="rounded-xl px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Alterações'}
           </Button>

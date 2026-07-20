@@ -6,6 +6,8 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Modal } from '@/components/ui/modal'
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { moverOrdem } from '@/actions/producao'
 import { concluirAjusteSemNovaProva, enviarParaProva } from '@/actions/ciclos'
@@ -31,6 +33,7 @@ import {
   PauseCircle,
   PencilLine,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const etapas = KANBAN_ETAPAS
 
@@ -299,22 +302,23 @@ interface ChecklistModalProps {
   onClose: () => void
   onConfirm: () => void
   etapaDestino: string
+  loading: boolean
 }
 
 // Checklist modal simplificado para mover entre etapas
-function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino }: ChecklistModalProps) {
-  if (!isOpen) return null
+function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino, loading }: ChecklistModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-slate-200 dark:border-zinc-800">
-        <h3 className="font-bold text-slate-900 dark:text-white mb-2">Mover para {etapaDestino}?</h3>
-        <p className="text-sm text-slate-500 dark:text-zinc-400 mb-6">Confirma a mudança de etapa desta ordem?</p>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
-          <Button onClick={onConfirm} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white">Confirmar</Button>
+    <Modal isOpen={isOpen} onClose={onClose} title={`Mover para ${etapaDestino}?`} description="Confirme a mudança de etapa" size="sm" dismissible={!loading}>
+      <div className="space-y-6">
+        <p className="text-sm text-slate-600 dark:text-zinc-300">
+          A ordem será movimentada no Kanban e o histórico operacional será atualizado.
+        </p>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button onClick={onConfirm} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-700">{loading ? 'Movendo...' : 'Confirmar movimentação'}</Button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -330,6 +334,9 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
   const [priorityFilter, setPriorityFilter] = useState('todas')
   const [tipoSelecionado, setTipoSelecionado] = useState<'todos' | TipoProteseId>('todos')
   const [ordemParaDefinirEtapa, setOrdemParaDefinirEtapa] = useState<Ordem | null>(null)
+  const [movendoOrdem, setMovendoOrdem] = useState(false)
+  const [ajusteParaConcluir, setAjusteParaConcluir] = useState<Ordem | null>(null)
+  const [concluindoAjuste, setConcluindoAjuste] = useState(false)
 
   // Modais de ciclo
   const [abrirCicloOrdem, setAbrirCicloOrdem] = useState<Ordem | null>(null)
@@ -363,6 +370,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
 
   const confirmMove = async () => {
     if (!pendingMove) return
+    setMovendoOrdem(true)
     const { ordem, fromEtapa, toEtapa } = pendingMove
     setOrdensPorEtapa(prev => {
       const newOrdens = { ...prev }
@@ -370,18 +378,23 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
       newOrdens[toEtapa] = [...(newOrdens[toEtapa] || []), { ...ordem, etapa: toEtapa }]
       return newOrdens
     })
-    const result = await moverOrdem(ordem.id, toEtapa)
-    if (!result.success) {
+    try {
+      const result = await moverOrdem(ordem.id, toEtapa)
+      if (!result.success) throw new Error(result.error || 'Não foi possível mover a ordem.')
+      toast.success('Ordem movimentada.')
+      setChecklistOpen(false)
+      setPendingMove(null)
+    } catch (error) {
       setOrdensPorEtapa(prev => {
         const newOrdens = { ...prev }
         newOrdens[toEtapa] = newOrdens[toEtapa].filter(o => o.id !== ordem.id)
         newOrdens[fromEtapa] = [...(newOrdens[fromEtapa] || []), ordem]
         return newOrdens
       })
-      alert(result.error || 'Erro ao mover ordem.')
+      toast.error(error instanceof Error ? error.message : 'Não foi possível mover a ordem.')
+    } finally {
+      setMovendoOrdem(false)
     }
-    setChecklistOpen(false)
-    setPendingMove(null)
   }
 
   const handleEnviarProva = async (ordem: Ordem) => {
@@ -398,15 +411,28 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     })
   }
 
-  const handleConcluirAjuste = async (ordem: Ordem) => {
+  const handleConcluirAjuste = (ordem: Ordem) => {
     if (!ordem.cicloAtivoId) return
-    if (!window.confirm('O ajuste está concluído e pode seguir diretamente para acabamento?')) return
-    const result = await concluirAjusteSemNovaProva(ordem.cicloAtivoId)
-    if (!result.success) {
-      alert(result.error || 'Não foi possível concluir o ajuste.')
-      return
+    setAjusteParaConcluir(ordem)
+  }
+
+  const confirmarConclusaoAjuste = async () => {
+    if (!ajusteParaConcluir?.cicloAtivoId) return
+    setConcluindoAjuste(true)
+    try {
+      const result = await concluirAjusteSemNovaProva(ajusteParaConcluir.cicloAtivoId)
+      if (!result.success) {
+        toast.error(result.error || 'Não foi possível concluir o ajuste.')
+        return
+      }
+      setAjusteParaConcluir(null)
+      toast.success('Ajuste concluído e enviado para acabamento.')
+      router.refresh()
+    } catch {
+      toast.error('Não foi possível concluir o ajuste.')
+    } finally {
+      setConcluindoAjuste(false)
     }
-    router.refresh()
   }
 
   const termoNormalizado = searchTerm.trim().toLowerCase()
@@ -463,8 +489,18 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           onClose={() => { setChecklistOpen(false); setPendingMove(null) }}
           onConfirm={confirmMove}
           etapaDestino={etapaLabel(pendingMove.toEtapa)}
+          loading={movendoOrdem}
         />
       )}
+      <ConfirmActionModal
+        isOpen={ajusteParaConcluir !== null}
+        onClose={() => setAjusteParaConcluir(null)}
+        onConfirm={confirmarConclusaoAjuste}
+        title="Concluir ajuste"
+        description="Confirma que o ajuste está concluído e pode seguir diretamente para acabamento, sem uma nova prova?"
+        confirmLabel="Seguir para acabamento"
+        loading={concluindoAjuste}
+      />
 
       {/* Modal Abrir Ciclo */}
       {abrirCicloOrdem && (

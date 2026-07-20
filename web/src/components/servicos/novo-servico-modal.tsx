@@ -62,7 +62,7 @@ export default function NovaServicoModal({ isOpen, onClose, onSuccess }: NovoSer
       } else {
         setError(result.error || 'Erro ao criar serviço')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -80,6 +80,7 @@ export default function NovaServicoModal({ isOpen, onClose, onSuccess }: NovoSer
       title="Novo Serviço"
       description="Cadastre um novo tipo de serviço"
       size="md"
+      dismissible={!loading}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -195,7 +196,7 @@ export default function NovaServicoModal({ isOpen, onClose, onSuccess }: NovoSer
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={loading}>

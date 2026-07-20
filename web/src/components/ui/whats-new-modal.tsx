@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Sparkles, ChevronDown, ChevronUp, CheckCircle2, ArrowUpCircle, Wrench } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, ArrowUpCircle, Wrench } from 'lucide-react'
 import { VERSAO_ATUAL, HISTORICO_RELEASES, type NotaRelease } from '@/lib/release-notes'
+import { Modal } from '@/components/ui/modal'
 
 const STORAGE_KEY = `labgest_seen_version`
 
@@ -60,7 +61,8 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
   useEffect(() => {
     const seen = localStorage.getItem(STORAGE_KEY)
     if (seen !== VERSAO_ATUAL || forceOpen) {
-      setOpen(true)
+      const timeout = window.setTimeout(() => setOpen(true), 0)
+      return () => window.clearTimeout(timeout)
     }
   }, [forceOpen])
 
@@ -75,41 +77,26 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
   const [latest, ...anteriores] = HISTORICO_RELEASES
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/50 overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
-
-        {/* Header com gradiente */}
-        <div className="relative px-6 pt-8 pb-6 bg-gradient-to-br from-indigo-600/20 via-purple-600/10 to-transparent border-b border-white/10">
-          <button
-            onClick={handleClose}
-            className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-          >
-            <X className="h-4 w-4 text-white" />
-          </button>
-
-          <div className="flex items-center gap-3 mb-2">
+    <Modal
+      isOpen={open}
+      onClose={handleClose}
+      title="Novidades do sistema"
+      description="Confira as últimas atualizações do LabGest"
+      size="md"
+      tone="dark"
+      mobileFullscreen
+    >
+      <div className="space-y-5">
+          <div className="flex items-center gap-3 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600/20 via-purple-600/10 to-transparent p-4">
             <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">O que há de novo</p>
-              <h2 className="text-xl font-black text-white">Novidades do Sistema</h2>
+              <p className="text-sm text-zinc-300">Melhorias pensadas para o dia a dia do laboratório.</p>
             </div>
           </div>
-          <p className="text-sm text-zinc-400">
-            Confira as últimas atualizações do LabGest.
-          </p>
-        </div>
 
-        {/* Conteúdo scrollável */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* Release atual em destaque */}
           <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -147,10 +134,7 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
               </div>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+        <div className="flex items-center justify-between border-t border-white/10 pt-4">
           <p className="text-xs text-zinc-600">LabGest v{VERSAO_ATUAL}</p>
           <button
             onClick={handleClose}
@@ -160,6 +144,6 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

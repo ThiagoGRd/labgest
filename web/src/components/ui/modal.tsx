@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +11,9 @@ interface ModalProps {
   description?: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  mobileFullscreen?: boolean
+  dismissible?: boolean
+  tone?: 'default' | 'dark'
 }
 
 const sizeClasses = {
@@ -22,83 +24,56 @@ const sizeClasses = {
   '2xl': 'max-w-6xl',
 }
 
-export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
-  const [mounted, setMounted] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
-  const overlayRef = useRef<HTMLDivElement>(null)
-
-  // Manage mounting cycle for animations
-  useEffect(() => {
-    if (isOpen) {
-      setMounted(true)
-      // Small timeout to ensure DOM is ready for transition
-      requestAnimationFrame(() => setIsVisible(true))
-      document.body.style.overflow = 'hidden'
-    } else {
-      setIsVisible(false)
-      const timeout = setTimeout(() => {
-        setMounted(false)
-        document.body.style.overflow = 'unset'
-      }, 300) // Match transition duration
-      return () => clearTimeout(timeout)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose()
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen, onClose])
-
-  if (!mounted) return null
-
-  return createPortal(
-    <div
-      className={cn(
-        "fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 transition-all duration-300 ease-in-out",
-        isVisible ? "opacity-100" : "opacity-0"
-      )}
-    >
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300" 
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal Content */}
-      <div 
-        className={cn(
-          "relative w-full rounded-3xl overflow-hidden glass-panel flex flex-col max-h-[90vh] shadow-2xl transition-all duration-300 ease-out transform",
-          isVisible ? "scale-100 translate-y-0" : "scale-95 translate-y-4",
-          sizeClasses[size]
-        )}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/50 dark:bg-black/20 backdrop-blur-md">
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold tracking-tight text-foreground/90">{title}</h2>
-            {description && (
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/80">{description}</p>
-            )}
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  description,
+  children,
+  size = 'md',
+  mobileFullscreen = false,
+  dismissible = true,
+  tone = 'default',
+}: ModalProps) {
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open && dismissible) onClose() }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out data-[state=open]:fade-in" />
+        <Dialog.Content
+          onEscapeKeyDown={(event) => { if (!dismissible) event.preventDefault() }}
+          onPointerDownOutside={(event) => { if (!dismissible) event.preventDefault() }}
+          className={cn(
+            'fixed z-[9999] flex w-full flex-col overflow-hidden glass-panel shadow-2xl outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out data-[state=open]:fade-in data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+            mobileFullscreen
+              ? 'inset-x-0 bottom-0 h-[96dvh] max-h-[96dvh] rounded-t-3xl sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:h-auto sm:max-h-[90vh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl'
+              : 'left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-3xl',
+            mobileFullscreen ? 'sm:w-[calc(100%-3rem)]' : 'w-[calc(100%-2rem)] sm:w-[calc(100%-3rem)]',
+            sizeClasses[size]
+          )}
+        >
+          <div className={cn('flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5', tone === 'dark' ? 'bg-zinc-950' : 'bg-white/50 dark:bg-black/20')}>
+            <div className="min-w-0 space-y-1 pr-3">
+              <Dialog.Title className={cn('truncate text-xl font-bold tracking-tight', tone === 'dark' ? 'text-white' : 'text-foreground/90')}>{title}</Dialog.Title>
+              {description && (
+                <Dialog.Description className={cn('text-xs font-medium uppercase tracking-wider', tone === 'dark' ? 'text-zinc-400' : 'text-muted-foreground/80')}>{description}</Dialog.Description>
+              )}
+            </div>
+            <Dialog.Close asChild disabled={!dismissible}>
+              <button
+                type="button"
+                disabled={!dismissible}
+                aria-label="Fechar"
+                className={cn('rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40', tone === 'dark' ? 'text-zinc-400 hover:bg-white/10 hover:text-white' : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10')}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </Dialog.Close>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <X className="h-5 w-5" />
-            <span className="sr-only">Close</span>
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="px-6 py-6 overflow-y-auto custom-scrollbar bg-white/40 dark:bg-black/20 flex-1">
-          {children}
-        </div>
-      </div>
-    </div>,
-    document.body
+          <div className={cn('custom-scrollbar flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-6', tone === 'dark' ? 'bg-zinc-950' : 'bg-white/40 dark:bg-black/20')}>
+            {children}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

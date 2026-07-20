@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/modal'
 import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagemLab } from '@/actions/mensagens'
 
@@ -105,15 +106,19 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
   return (
     <>
       {lightbox && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setLightbox(null)}
+        <Modal
+          isOpen
+          onClose={() => setLightbox(null)}
+          title="Foto da conversa"
+          description="Visualização ampliada"
+          size="2xl"
+          tone="dark"
+          mobileFullscreen
         >
-          <img src={lightbox} alt="Foto" className="max-w-full max-h-full rounded-xl shadow-2xl" />
-          <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+          <div className="flex min-h-[50dvh] items-center justify-center">
+            <img src={lightbox} alt="Foto ampliada da conversa" className="max-h-[72dvh] max-w-full rounded-xl object-contain shadow-2xl" />
+          </div>
+        </Modal>
       )}
 
       <div className="flex flex-col h-[400px] border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">

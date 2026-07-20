@@ -75,7 +75,7 @@ export function NovoItemEstoqueModal({ isOpen, onClose, onSuccess }: NovoItemEst
       } else {
         setError(result.error || 'Erro ao criar item')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)
@@ -89,6 +89,7 @@ export function NovoItemEstoqueModal({ isOpen, onClose, onSuccess }: NovoItemEst
       title="Novo Item de Estoque"
       description="Cadastre um novo material ou produto"
       size="lg"
+      dismissible={!loading}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -235,7 +236,7 @@ export function NovoItemEstoqueModal({ isOpen, onClose, onSuccess }: NovoItemEst
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={loading}>
