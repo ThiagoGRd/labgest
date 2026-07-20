@@ -7,21 +7,25 @@ import { Menu } from 'lucide-react'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
+  user?: {
+    nome: string
+    email: string
+    tipo: string
+  }
 }
 
-function DashboardContent({ children }: DashboardLayoutProps) {
+function DashboardContent({ children, user }: DashboardLayoutProps) {
   const { collapsed, toggleMobile } = useSidebar()
 
-  // TODO: Pegar usuário do contexto de autenticação
-  const user = {
-    nome: 'Thiago Cruz',
-    email: 'thiago@labgest.com',
-    tipo: 'Administrador',
+  const usuarioExibido = user ?? {
+    nome: 'Equipe LabGest',
+    email: '',
+    tipo: 'Usuário',
   }
 
   return (
     <div className="min-h-screen mesh-bg relative overflow-hidden">
-      <Sidebar user={user} />
+      <Sidebar user={usuarioExibido} />
       
       {/* Mobile Top Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-16 glass-panel border-b border-white/20 dark:border-white/10 flex items-center justify-between px-4">
@@ -55,10 +59,10 @@ function DashboardContent({ children }: DashboardLayoutProps) {
   )
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, user }: DashboardLayoutProps) {
   return (
     <SidebarProvider>
-      <DashboardContent>{children}</DashboardContent>
+      <DashboardContent user={user}>{children}</DashboardContent>
     </SidebarProvider>
   )
 }
