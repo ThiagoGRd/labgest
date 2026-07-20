@@ -2,586 +2,208 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, CalendarDays,
+  CheckCircle2, CircleDollarSign, FileBarChart, Landmark, Plus, RefreshCw,
+  Pencil, Search, TrendingUp, WalletCards, XCircle,
+} from 'lucide-react'
+import { cancelarConta, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
+import { BaixaContaModal } from '@/components/financeiro/baixa-conta-modal'
+import { EditarContaModal } from '@/components/financeiro/editar-conta-modal'
+import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { ReasonModal } from '@/components/ui/reason-modal'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { baixarConta, sincronizarFinanceiroRetroativo, editarConta, excluirConta } from '@/actions/financeiro'
-import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
-import { Modal } from '@/components/ui/modal'
-import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
+import { formatCurrency, formatDate } from '@/lib/date-utils'
 import { toast } from 'sonner'
-import { RefreshCw, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { formatDate, formatCurrency } from '@/lib/date-utils'
-import {
-  DollarSign,
-  Calendar,
-  CheckCircle2,
-  Plus,
-  ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react'
 
-interface Conta {
+interface Lancamento {
   id: number
   descricao: string
-  cliente?: string
-  categoria?: string
   valor: number
+  liquidado: number
+  restante: number
   vencimento: string
   status: string
-  observacoes?: string
+  observacoes: string
+  cliente?: string
+  clienteId?: number | null
+  paciente?: string | null
+  servico?: string | null
   ordemId?: number | null
+  categoria?: string
+  fornecedor?: string
 }
 
-interface FinanceiroViewProps {
-  receber: Conta[]
-  pagar: Conta[]
-  totalReceberMes: number
-  qtdReceberMes: number
-  mesesDisponiveis?: string[]
-  mesSelecionado?: string
+interface FinanceiroData {
+  periodo: string
+  receber: Lancamento[]
+  pagar: Lancamento[]
+  clientes: Array<{ id: number; nome: string }>
+  contasFinanceiras: Array<{ id: number; nome: string; tipo: string }>
+  movimentacoes: Array<{ id: number; tipo: string; valor: number; data: string; descricao: string; pessoa: string; conta: string; formaPagamento: string }>
+  resumo: {
+    saldoAtual: number; entradas: number; saidas: number; resultadoRealizado: number
+    previstoReceber: number; previstoPagar: number; saldoProjetado: number
+    vencidoReceber: number; quantidadeVencidas: number
+  }
+  mesesDisponiveis: string[]
 }
 
+interface FinanceiroViewProps { dados: FinanceiroData }
 
-function formatMesLabel(mesStr: string) {
-  const [ano, mes] = mesStr.split('-').map(Number)
+const tabItems = [
+  { value: 'visao', label: 'Visão geral', short: 'Resumo' },
+  { value: 'receber', label: 'A receber', short: 'Receber' },
+  { value: 'pagar', label: 'A pagar', short: 'Pagar' },
+  { value: 'caixa', label: 'Fluxo de caixa', short: 'Caixa' },
+  { value: 'relatorios', label: 'Relatórios', short: 'Relatórios' },
+] as const
+
+function mesLabel(periodo: string) {
+  const [ano, mes] = periodo.split('-').map(Number)
   return new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
-export function FinanceiroView({ receber, pagar, totalReceberMes, qtdReceberMes, mesesDisponiveis = [], mesSelecionado }: FinanceiroViewProps) {
-  const [activeTab, setActiveTab] = useState('receber')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalType, setModalType] = useState<'receber' | 'pagar'>('receber')
+function badgeVariant(status: string): 'success' | 'warning' | 'destructive' | 'secondary' {
+  if (status === 'Recebido' || status === 'Pago') return 'success'
+  if (status.includes('Vencido') || status.includes('atrasado')) return 'destructive'
+  if (status === 'Cancelado') return 'secondary'
+  return 'warning'
+}
+
+function statusAberto(status: string) {
+  return !['Recebido', 'Pago', 'Cancelado'].includes(status)
+}
+
+export function FinanceiroView({ dados }: FinanceiroViewProps) {
   const router = useRouter()
-
-  const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const [tab, setTab] = useState('visao')
+  const [busca, setBusca] = useState('')
+  const [status, setStatus] = useState('todos')
+  const [novoTipo, setNovoTipo] = useState<'receber' | 'pagar' | null>(null)
+  const [baixa, setBaixa] = useState<{ id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number } | null>(null)
+  const [edicao, setEdicao] = useState<(Lancamento & { tipo: 'receber' | 'pagar' }) | null>(null)
+  const [cancelamento, setCancelamento] = useState<{ id: number; tipo: 'receber' | 'pagar' } | null>(null)
+  const [cancelando, setCancelando] = useState(false)
   const [sincronizando, setSincronizando] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
 
-  // Navegação entre meses
-  const idxAtual = mesSelecionado ? mesesDisponiveis.indexOf(mesSelecionado) : -1
-  const mesAnterior = idxAtual < mesesDisponiveis.length - 1 ? mesesDisponiveis[idxAtual + 1] : null
-  const mesProximo = idxAtual > 0 ? mesesDisponiveis[idxAtual - 1] : null
-  const labelMesFiltro = mesSelecionado ? formatMesLabel(mesSelecionado) : 'Todos os períodos'
+  const filtrar = (itens: Lancamento[]) => itens.filter((item) => {
+    const texto = `${item.descricao} ${item.cliente || ''} ${item.fornecedor || ''} ${item.paciente || ''} ${item.ordemId || ''}`.toLowerCase()
+    return texto.includes(busca.toLowerCase()) && (status === 'todos' || (status === 'abertos' ? statusAberto(item.status) : item.status.toLowerCase().includes(status)))
+  })
+  const receberFiltrado = filtrar(dados.receber)
+  const pagarFiltrado = filtrar(dados.pagar)
+  const taxaInadimplencia = dados.resumo.previstoReceber > 0 ? (dados.resumo.vencidoReceber / dados.resumo.previstoReceber) * 100 : 0
+  const recebimentoPeriodo = dados.receber.reduce((s, c) => s + c.liquidado, 0)
+  const ticketMedio = dados.receber.length ? dados.receber.reduce((s, c) => s + c.valor, 0) / dados.receber.length : 0
 
-  const navegarMes = (mes: string | null) => {
-    if (mes) router.push(`/financeiro?mes=${mes}`)
-    else router.push('/financeiro')
+  async function confirmarCancelamento(motivo: string) {
+    if (!cancelamento) return
+    setCancelando(true)
+    const resultado = await cancelarConta(cancelamento.id, cancelamento.tipo, motivo)
+    setCancelando(false)
+    if (!resultado.success) return toast.error(resultado.error)
+    toast.success('Lançamento cancelado e preservado no histórico.')
+    setCancelamento(null)
   }
 
-  // Estado do modal de edição
-  const [editando, setEditando] = useState<{
-    id: number
-    tipo: 'receber' | 'pagar'
-    descricao: string
-    valor: string
-    vencimento: string
-    categoria: string
-    observacoes: string
-  } | null>(null)
-  const [editLoading, setEditLoading] = useState(false)
-  const [pendingAction, setPendingAction] = useState<{ kind: 'baixa' | 'excluir'; id: number; tipo: 'receber' | 'pagar' } | null>(null)
-  const [actionLoading, setActionLoading] = useState(false)
-
-  const abrirEdicao = (conta: Conta, tipo: 'receber' | 'pagar') => {
-    setEditando({
-      id: conta.id,
-      tipo,
-      descricao: conta.descricao,
-      valor: String(conta.valor),
-      vencimento: conta.vencimento.split('T')[0], // yyyy-mm-dd
-      categoria: conta.categoria || '',
-      observacoes: conta.observacoes || '',
-    })
-  }
-
-  const handleSalvarEdicao = async () => {
-    if (!editando) return
-    setEditLoading(true)
-    try {
-      const res = await editarConta(editando.id, editando.tipo, {
-        descricao: editando.descricao,
-        valor: Number(editando.valor),
-        vencimento: editando.vencimento,
-        categoria: editando.categoria,
-        observacoes: editando.observacoes,
-      })
-      if (res.success) {
-        setEditando(null)
-        toast.success('Lançamento atualizado.')
-      } else toast.error(res.error || 'Não foi possível salvar a edição.')
-    } catch {
-      toast.error('Não foi possível salvar a edição.')
-    } finally {
-      setEditLoading(false)
-    }
-  }
-
-  const handleSincronizar = async () => {
+  async function sincronizar() {
     setSincronizando(true)
-    setSyncMsg(null)
-    const res = await sincronizarFinanceiroRetroativo()
-    if (res.success) {
-      setSyncMsg(res.criadas === 0 ? 'Tudo sincronizado! Nenhuma cobrança pendente encontrada.' : `${res.criadas} cobranças criadas com sucesso!`)
-    } else {
-      setSyncMsg('Erro ao sincronizar. Tente novamente.')
-    }
+    const resultado = await sincronizarFinanceiroRetroativo()
     setSincronizando(false)
-  }
-
-  const totalReceber = receber.reduce((acc, curr) => curr.status !== 'Recebido' ? acc + curr.valor : acc, 0)
-  const totalPagar = pagar.reduce((acc, curr) => curr.status !== 'Pago' ? acc + curr.valor : acc, 0)
-  const saldoPrevisto = totalReceber - totalPagar
-
-  const handleBaixa = (id: number, tipo: 'receber' | 'pagar') => {
-    setPendingAction({ kind: 'baixa', id, tipo })
-  }
-
-  const handleExcluir = (id: number, tipo: 'receber' | 'pagar') => {
-    setPendingAction({ kind: 'excluir', id, tipo })
-  }
-
-  const confirmarAcao = async () => {
-    if (!pendingAction) return
-    setActionLoading(true)
-    try {
-      const res = pendingAction.kind === 'baixa'
-        ? await baixarConta(pendingAction.id, pendingAction.tipo)
-        : await excluirConta(pendingAction.id, pendingAction.tipo)
-      if (!res.success) {
-        toast.error(res.error || 'Não foi possível concluir a ação.')
-        return
-      }
-      toast.success(pendingAction.kind === 'baixa' ? 'Baixa confirmada.' : 'Lançamento excluído.')
-      setPendingAction(null)
-    } catch {
-      toast.error('Não foi possível concluir a ação.')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const openNewModal = (type: 'receber' | 'pagar') => {
-    setModalType(type)
-    setModalOpen(true)
-
+    if (!resultado.success) return toast.error(resultado.error)
+    toast.success(resultado.criadas ? `${resultado.criadas} cobranças recuperadas.` : 'Todas as ordens já estão sincronizadas.')
   }
 
   return (
     <DashboardLayout>
-      <NovaContaModal 
-        isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)}
-        tipoInicial={modalType}
-      />
-      <ConfirmActionModal
-        isOpen={pendingAction !== null}
-        onClose={() => setPendingAction(null)}
-        onConfirm={confirmarAcao}
-        title={pendingAction?.kind === 'excluir' ? 'Excluir lançamento' : 'Confirmar baixa'}
-        description={pendingAction?.kind === 'excluir'
-          ? 'Este lançamento será excluído permanentemente. Esta ação não pode ser desfeita.'
-          : `Confirma o ${pendingAction?.tipo === 'receber' ? 'recebimento' : 'pagamento'} desta conta?`}
-        confirmLabel={pendingAction?.kind === 'excluir' ? 'Excluir lançamento' : 'Confirmar baixa'}
-        destructive={pendingAction?.kind === 'excluir'}
-        loading={actionLoading}
-      />
+      {novoTipo && <NovaContaModal key={novoTipo} isOpen onClose={() => setNovoTipo(null)} tipoInicial={novoTipo} clientes={dados.clientes} />}
+      {baixa && <BaixaContaModal key={`${baixa.tipo}-${baixa.id}`} conta={baixa} contasFinanceiras={dados.contasFinanceiras} onClose={() => setBaixa(null)} />}
+      {edicao && <EditarContaModal key={`${edicao.tipo}-${edicao.id}`} conta={edicao} onClose={() => setEdicao(null)} />}
+      <ReasonModal isOpen={cancelamento !== null} onClose={() => setCancelamento(null)} onConfirm={confirmarCancelamento} title="Cancelar lançamento" description="O registro será preservado para auditoria." label="Motivo do cancelamento" confirmLabel="Cancelar lançamento" loading={cancelando} />
 
-      {/* Modal de Edição de Conta */}
-      {editando && (
-        <Modal
-          isOpen
-          onClose={() => setEditando(null)}
-          title={`Editar ${editando.tipo === 'receber' ? 'Conta a Receber' : 'Conta a Pagar'}`}
-          description="Revise os dados antes de salvar"
-          size="md"
-          dismissible={!editLoading}
-        >
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Descrição</label>
-                <input
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={editando.descricao}
-                  onChange={e => setEditando(prev => prev ? { ...prev, descricao: e.target.value } : null)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Valor (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={editando.valor}
-                    onChange={e => setEditando(prev => prev ? { ...prev, valor: e.target.value } : null)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Vencimento</label>
-                  <input
-                    type="date"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={editando.vencimento}
-                    onChange={e => setEditando(prev => prev ? { ...prev, vencimento: e.target.value } : null)}
-                  />
-                </div>
-              </div>
-              {editando.tipo === 'pagar' && (
-                <div>
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Categoria</label>
-                  <input
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={editando.categoria}
-                    onChange={e => setEditando(prev => prev ? { ...prev, categoria: e.target.value } : null)}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">Observações</label>
-                <textarea
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  value={editando.observacoes}
-                  onChange={e => setEditando(prev => prev ? { ...prev, observacoes: e.target.value } : null)}
-                />
-              </div>
+      <Header title="Financeiro" subtitle="Caixa, cobranças, despesas e resultado do laboratório" action={{ label: 'Novo lançamento', onClick: () => setNovoTipo(tab === 'pagar' ? 'pagar' : 'receber') }} />
+
+      <main className="space-y-6 p-4 sm:p-6">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Período de gestão</p><p className="mt-1 text-lg font-bold capitalize text-slate-900 dark:text-white">{mesLabel(dados.periodo)}</p></div>
+          <div className="flex gap-2">
+            <Select value={dados.periodo} onValueChange={(mes) => router.push(`/financeiro?mes=${mes}`)}>
+              <SelectTrigger aria-label="Selecionar período" className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>{dados.mesesDisponiveis.map((mes) => <SelectItem key={mes} value={mes}><span className="capitalize">{mesLabel(mes)}</span></SelectItem>)}</SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" onClick={sincronizar} disabled={sincronizando} aria-label="Sincronizar cobranças de ordens finalizadas" title="Sincronizar ordens finalizadas"><RefreshCw className={`h-4 w-4 ${sincronizando ? 'animate-spin' : ''}`} /></Button>
+          </div>
+        </div>
+
+        <Tabs value={tab} onValueChange={setTab}>
+          <div className="overflow-x-auto pb-1"><TabsList className="min-w-max">{tabItems.map((item) => <TabsTrigger key={item.value} value={item.value} className="px-4"><span className="hidden sm:inline">{item.label}</span><span className="sm:hidden">{item.short}</span></TabsTrigger>)}</TabsList></div>
+
+          <TabsContent value="visao" className="space-y-6">
+            <section aria-label="Indicadores financeiros" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard title="Saldo atual" value={dados.resumo.saldoAtual} detail="Movimentações realizadas" icon={Landmark} tone="blue" />
+              <MetricCard title="Resultado do mês" value={dados.resumo.resultadoRealizado} detail={`${formatCurrency(dados.resumo.entradas)} entradas • ${formatCurrency(dados.resumo.saidas)} saídas`} icon={TrendingUp} tone={dados.resumo.resultadoRealizado >= 0 ? 'green' : 'red'} />
+              <MetricCard title="Saldo projetado" value={dados.resumo.saldoProjetado} detail="Saldo + valores ainda em aberto" icon={WalletCards} tone="indigo" />
+              <MetricCard title="Recebimentos vencidos" value={dados.resumo.vencidoReceber} detail={`${dados.resumo.quantidadeVencidas} cobrança(s) exigem atenção`} icon={AlertTriangle} tone="red" />
+            </section>
+
+            <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+              <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Previsto × realizado</h2><p className="text-sm text-slate-500">Leitura do período selecionado</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
+                <FlowBlock title="Entradas" icon={ArrowUpRight} previsto={dados.resumo.previstoReceber + recebimentoPeriodo} realizado={dados.resumo.entradas} tone="emerald" />
+                <FlowBlock title="Saídas" icon={ArrowDownRight} previsto={dados.resumo.previstoPagar + dados.resumo.saidas} realizado={dados.resumo.saidas} tone="red" />
+              </CardContent></Card>
+              <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Agenda financeira</h2><p className="text-sm text-slate-500">Prioridades por vencimento</p></div></CardHeader><CardContent className="space-y-3">
+                {[...dados.receber.filter((c) => statusAberto(c.status)).map((c) => ({ ...c, tipo: 'Entrada' })), ...dados.pagar.filter((c) => statusAberto(c.status)).map((c) => ({ ...c, tipo: 'Saída' }))].sort((a, b) => a.vencimento.localeCompare(b.vencimento)).slice(0, 5).map((item) => (
+                  <div key={`${item.tipo}-${item.id}`} className="flex items-center justify-between gap-3 rounded-xl border p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{item.descricao}</p><p className="text-xs text-slate-500">{formatDate(item.vencimento)} • {item.tipo}</p></div><p className="shrink-0 text-sm font-bold">{formatCurrency(item.restante)}</p></div>
+                ))}
+                {dados.receber.length + dados.pagar.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Sem compromissos neste período.</p>}
+              </CardContent></Card>
             </div>
+          </TabsContent>
 
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setEditando(null)} disabled={editLoading}>
-                Cancelar
-              </Button>
-              <Button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleSalvarEdicao} disabled={editLoading}>
-                {editLoading ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          <TabsContent value="receber" className="space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('receber')} addLabel="Nova receita" /><LancamentosList itens={receberFiltrado} tipo="receber" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'receber' })} onCancelar={(id) => setCancelamento({ id, tipo: 'receber' })} /></TabsContent>
+          <TabsContent value="pagar" className="space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('pagar')} addLabel="Nova despesa" /><LancamentosList itens={pagarFiltrado} tipo="pagar" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'pagar' })} onCancelar={(id) => setCancelamento({ id, tipo: 'pagar' })} /></TabsContent>
 
-      <Header 
-        title="Financeiro" 
-        subtitle="Gestão de fluxo de caixa"
-        action={{
-          label: 'Nova Movimentação',
-          onClick: () => openNewModal(activeTab as 'receber' | 'pagar'),
-        }}
-      />
+          <TabsContent value="caixa" className="space-y-4">
+            <section className="grid gap-4 sm:grid-cols-3"><MetricCard title="Entradas realizadas" value={dados.resumo.entradas} detail="Dinheiro confirmado" icon={ArrowUpRight} tone="green" /><MetricCard title="Saídas realizadas" value={dados.resumo.saidas} detail="Pagamentos confirmados" icon={ArrowDownRight} tone="red" /><MetricCard title="Resultado realizado" value={dados.resumo.resultadoRealizado} detail="Entradas menos saídas" icon={Banknote} tone="blue" /></section>
+            <Card><CardHeader><div><h2 className="font-bold">Movimentações do caixa</h2><p className="text-sm text-slate-500">Somente baixas efetivamente confirmadas</p></div></CardHeader><CardContent className="space-y-2">{dados.movimentacoes.map((item) => <div key={item.id} className="grid gap-2 rounded-xl border p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="font-semibold">{item.descricao}</p><p className="text-xs text-slate-500">{item.pessoa || item.conta} • {item.formaPagamento}</p></div><p className="text-sm text-slate-500">{formatDate(item.data)}</p><p className={`font-bold ${item.tipo === 'Entrada' ? 'text-emerald-600' : 'text-red-600'}`}>{item.tipo === 'Entrada' ? '+' : '-'} {formatCurrency(item.valor)}</p></div>)}{dados.movimentacoes.length === 0 && <EmptyMessage text="Nenhuma movimentação realizada neste período." />}</CardContent></Card>
+          </TabsContent>
 
-      <div className="p-6 space-y-6">
-        {/* Seletor de Mês */}
-        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-5 py-3">
-          <button
-            onClick={() => navegarMes(mesAnterior)}
-            disabled={!mesAnterior}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
-          >
-            <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-          </button>
-          <div className="text-center">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Período</p>
-            <p className="text-base font-bold text-slate-900 dark:text-white capitalize">{labelMesFiltro}</p>
-          </div>
-          <button
-            onClick={() => navegarMes(mesProximo)}
-            disabled={!mesProximo}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
-          >
-            <ChevronRight className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-          </button>
-        </div>
-
-        {/* Banner de sincronização retroativa */}
-        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-5 py-3">
-          <div>
-            <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">Sincronizar ordens finalizadas</p>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
-              {syncMsg || 'Gera cobranças retroativas para ordens já finalizadas sem registro financeiro.'}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSincronizar}
-            disabled={sincronizando}
-            className="border-indigo-300 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-500/20 shrink-0 ml-4"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${sincronizando ? 'animate-spin' : ''}`} />
-            {sincronizando ? 'Sincronizando...' : 'Sincronizar Agora'}
-          </Button>
-        </div>
-
-        {/* Cards Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Card 1: A Receber Total */}
-          <Card className="bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg">
-                  <ArrowUpRight className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-500/10 px-2 py-1 rounded">
-                  Total A Receber
-                </span>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 opacity-70">Previsão de Entrada</p>
-              <h3 className="text-3xl font-bold text-emerald-900 dark:text-emerald-50 mt-1">{formatCurrency(totalReceber)}</h3>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: A Receber Este Mês — destaque */}
-          <Card className="bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg">
-                  <Calendar className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-500/10 px-2 py-1 rounded">
-                  Este Mês
-                </span>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 opacity-70">Vence em {mesAtual}</p>
-              <h3 className="text-3xl font-bold text-indigo-900 dark:text-indigo-50 mt-1">{formatCurrency(totalReceberMes)}</h3>
-              {qtdReceberMes > 0 && (
-                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 font-medium">
-                  {qtdReceberMes} {qtdReceberMes === 1 ? 'cobrança pendente' : 'cobranças pendentes'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Card 3: A Pagar */}
-          <Card className="bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-red-100 dark:bg-red-500/20 rounded-lg">
-                  <ArrowDownRight className="h-6 w-6 text-red-600 dark:text-red-400" />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-100/50 dark:bg-red-500/10 px-2 py-1 rounded">
-                  A Pagar
-                </span>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-red-700 dark:text-red-300 opacity-70">Previsão de Saída</p>
-              <h3 className="text-3xl font-bold text-red-900 dark:text-red-50 mt-1">{formatCurrency(totalPagar)}</h3>
-            </CardContent>
-          </Card>
-
-          {/* Card 4: Saldo */}
-          <Card className="bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg">
-                  <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-500/10 px-2 py-1 rounded">
-                  Saldo Previsto
-                </span>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300 opacity-70">Balanço</p>
-              <h3 className="text-3xl font-bold text-blue-900 dark:text-blue-50 mt-1">{formatCurrency(saldoPrevisto)}</h3>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lista de Contas */}
-        <Card>
-          <CardHeader className="pb-0">
-            <Tabs defaultValue="receber" value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="flex items-center justify-between mb-4">
-                <TabsList>
-                  <TabsTrigger value="receber" className="px-6">A Receber</TabsTrigger>
-                  <TabsTrigger value="pagar" className="px-6">A Pagar</TabsTrigger>
-                </TabsList>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openNewModal('receber')}>
-                    <Plus className="h-4 w-4 mr-2" /> Receita
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => openNewModal('pagar')}>
-                    <Plus className="h-4 w-4 mr-2" /> Despesa
-                  </Button>
-                </div>
-              </div>
-
-              <TabsContent value="receber" className="mt-0">
-                <div className="rounded-xl border border-black/5 dark:border-white/10 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/20">
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Descrição</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Cliente</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Vencimento</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Status</th>
-                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Valor</th>
-                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5 dark:divide-white/10">
-                      {receber.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-12 text-center text-slate-400 font-medium italic">
-                            Nenhuma conta a receber lançada.
-                          </td>
-                        </tr>
-                      ) : (
-                        receber.map((conta) => (
-                          <tr key={conta.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
-                            <td className="p-4 font-bold text-slate-900 dark:text-white">
-                              {conta.descricao}
-                              {conta.ordemId && (
-                                <span className="ml-2 text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">
-                                  OS #{conta.ordemId}
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-slate-600 dark:text-slate-300 font-medium">{conta.cliente}</td>
-                            <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400" suppressHydrationWarning>
-                                <Calendar className="h-4 w-4" />
-                                {formatDate(conta.vencimento)}
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <Badge variant={conta.status === 'Recebido' ? 'success' : 'warning'}>
-                                {conta.status === 'Recebido' ? 'Recebido' : 'Pendente'}
-                              </Badge>
-                            </td>
-                            <td className="p-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                              {formatCurrency(conta.valor)}
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
-                                  onClick={() => abrirEdicao(conta, 'receber')}
-                                  title="Editar conta"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
-                                  onClick={() => handleExcluir(conta.id, 'receber')}
-                                  title="Excluir lançamento"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                                {conta.status !== 'Recebido' && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold text-xs"
-                                    onClick={() => handleBaixa(conta.id, 'receber')}
-                                  >
-                                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                                    Receber
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="pagar" className="mt-0">
-                <div className="rounded-xl border border-black/5 dark:border-white/10 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-black/5 dark:border-white/10 bg-slate-50 dark:bg-black/20">
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Descrição</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Categoria</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Vencimento</th>
-                        <th className="h-12 px-4 text-left font-bold uppercase text-[10px] tracking-widest text-slate-500">Status</th>
-                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Valor</th>
-                        <th className="h-12 px-4 text-right font-bold uppercase text-[10px] tracking-widest text-slate-500">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5 dark:divide-white/10">
-                      {pagar.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-12 text-center text-slate-400 font-medium italic">
-                            Nenhuma conta a pagar lançada.
-                          </td>
-                        </tr>
-                      ) : (
-                        pagar.map((conta) => (
-                          <tr key={conta.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
-                            <td className="p-4 font-bold text-slate-900 dark:text-white">{conta.descricao}</td>
-                            <td className="p-4">
-                              <Badge variant="secondary">
-                                {conta.categoria}
-                              </Badge>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400" suppressHydrationWarning>
-                                <Calendar className="h-4 w-4" />
-                                {formatDate(conta.vencimento)}
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <Badge variant={conta.status === 'Pago' ? 'success' : 'destructive'}>
-                                {conta.status === 'Pago' ? 'Pago' : 'Pendente'}
-                              </Badge>
-                            </td>
-                            <td className="p-4 text-right font-bold text-red-600 dark:text-red-400">
-                              {formatCurrency(conta.valor)}
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
-                                  onClick={() => abrirEdicao(conta, 'pagar')}
-                                  title="Editar conta"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
-                                  onClick={() => handleExcluir(conta.id, 'pagar')}
-                                  title="Excluir lançamento"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                                {conta.status !== 'Pago' && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold text-xs"
-                                    onClick={() => handleBaixa(conta.id, 'pagar')}
-                                  >
-                                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                                    Pagar
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardHeader>
-        </Card>
-      </div>
+          <TabsContent value="relatorios" className="space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><ReportCard title="Inadimplência" value={`${taxaInadimplencia.toFixed(1)}%`} description="Do saldo a receber está vencido" icon={AlertTriangle} /><ReportCard title="Ticket médio" value={formatCurrency(ticketMedio)} description="Por cobrança no período" icon={CircleDollarSign} /><ReportCard title="Resultado caixa" value={formatCurrency(dados.resumo.resultadoRealizado)} description="Entradas menos saídas realizadas" icon={FileBarChart} /><ReportCard title="Compromissos" value={formatCurrency(dados.resumo.previstoPagar)} description="Ainda a pagar no período" icon={CalendarDays} /></section>
+            <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Indicadores prontos para decisão</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita prevista" value={dados.resumo.previstoReceber + recebimentoPeriodo} /><SummaryLine label="Receita realizada" value={dados.resumo.entradas} /><SummaryLine label="Despesa prevista" value={dados.resumo.previstoPagar + dados.resumo.saidas} /><SummaryLine label="Despesa realizada" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Saldo projetado" value={dados.resumo.saldoProjetado} /></CardContent></Card>
+          </TabsContent>
+        </Tabs>
+      </main>
     </DashboardLayout>
   )
 }
+
+function MetricCard({ title, value, detail, icon: Icon, tone }: { title: string; value: number; detail: string; icon: typeof Landmark; tone: 'blue' | 'green' | 'red' | 'indigo' }) {
+  const tones = { blue: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300', green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300', red: 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300', indigo: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' }
+  return <Card><CardContent className="p-5"><div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}><Icon className="h-5 w-5" /></div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</p><p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(value)}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></CardContent></Card>
+}
+
+function FlowBlock({ title, icon: Icon, previsto, realizado, tone }: { title: string; icon: typeof ArrowUpRight; previsto: number; realizado: number; tone: 'emerald' | 'red' }) {
+  const percentual = previsto > 0 ? Math.min(100, (realizado / previsto) * 100) : 0
+  return <div className="rounded-2xl border p-4"><div className="flex items-center gap-2"><Icon className={`h-5 w-5 ${tone === 'emerald' ? 'text-emerald-600' : 'text-red-600'}`} /><p className="font-bold">{title}</p></div><div className="mt-5 flex justify-between text-sm"><span className="text-slate-500">Realizado</span><strong>{formatCurrency(realizado)}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800"><div className={`h-full rounded-full ${tone === 'emerald' ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${percentual}%` }} /></div><div className="mt-2 flex justify-between text-xs text-slate-500"><span>{percentual.toFixed(0)}% confirmado</span><span>Previsto {formatCurrency(previsto)}</span></div></div>
+}
+
+function FilterBar({ busca, onBusca, status, onStatus, onAdd, addLabel }: { busca: string; onBusca: (value: string) => void; status: string; onStatus: (value: string) => void; onAdd: () => void; addLabel: string }) {
+  return <div className="flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input aria-label="Buscar lançamentos" value={busca} onChange={(event) => onBusca(event.target.value)} placeholder="Buscar cliente, fornecedor, paciente ou OS" className="pl-9" /></div><Select value={status} onValueChange={onStatus}><SelectTrigger aria-label="Filtrar por situação" className="w-full lg:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todas as situações</SelectItem><SelectItem value="abertos">Somente em aberto</SelectItem><SelectItem value="vencido">Vencidos</SelectItem><SelectItem value="parcial">Parciais</SelectItem><SelectItem value="cancelado">Cancelados</SelectItem></SelectContent></Select><Button onClick={onAdd}><Plus className="h-4 w-4" />{addLabel}</Button></div>
+}
+
+function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens: Lancamento[]; tipo: 'receber' | 'pagar'; onBaixa: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number }) => void; onEditar: (item: Lancamento) => void; onCancelar: (id: number) => void }) {
+  return <Card><CardContent className="p-0"><div className="hidden overflow-x-auto md:block"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:bg-white/5"><th className="px-5 py-4">Lançamento</th><th className="px-5 py-4">{tipo === 'receber' ? 'Cliente' : 'Fornecedor / categoria'}</th><th className="px-5 py-4">Vencimento</th><th className="px-5 py-4">Situação</th><th className="px-5 py-4 text-right">Saldo</th><th className="px-5 py-4 text-right">Ações</th></tr></thead><tbody>{itens.map((item) => <tr key={item.id} className="border-b last:border-0"><td className="px-5 py-4"><p className="font-semibold">{item.descricao}</p>{item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}</td><td className="px-5 py-4"><p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p><p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p></td><td className="px-5 py-4">{formatDate(item.vencimento)}</td><td className="px-5 py-4"><Badge variant={badgeVariant(item.status)}>{item.status}</Badge>{item.liquidado > 0 && statusAberto(item.status) && <p className="mt-1 text-xs text-slate-500">{formatCurrency(item.liquidado)} liquidado</p>}</td><td className="px-5 py-4 text-right font-bold">{formatCurrency(item.restante)}</td><td className="px-5 py-4"><div className="flex justify-end gap-1">{statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}</div></td></tr>)}</tbody></table></div><div className="divide-y md:hidden">{itens.map((item) => <article key={item.id} className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p><p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div><div className="flex items-end justify-between"><div><p className="text-xs text-slate-500">Vence em {formatDate(item.vencimento)}</p><p className="text-lg font-bold">{formatCurrency(item.restante)}</p></div><div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div></article>)}</div>{itens.length === 0 && <EmptyMessage text="Nenhum lançamento encontrado com estes filtros." />}</CardContent></Card>
+}
+
+function EmptyMessage({ text }: { text: string }) { return <div className="p-12 text-center text-sm text-slate-500">{text}</div> }
+function ReportCard({ title, value, description, icon: Icon }: { title: string; value: string; description: string; icon: typeof AlertTriangle }) { return <Card><CardContent className="p-5"><Icon className="mb-4 h-5 w-5 text-indigo-600" /><p className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</p><p className="mt-1 text-2xl font-bold">{value}</p><p className="mt-2 text-xs text-slate-500">{description}</p></CardContent></Card> }
+function SummaryLine({ label, value, alert }: { label: string; value: number; alert?: boolean }) { return <div className="flex items-center justify-between rounded-xl border p-4"><span className="text-sm text-slate-600 dark:text-slate-300">{label}</span><strong className={alert ? 'text-red-600' : ''}>{formatCurrency(value)}</strong></div> }

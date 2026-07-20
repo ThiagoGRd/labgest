@@ -82,7 +82,7 @@ export async function getNotificacoesPortal() {
   const faturasAbertas = await prisma.contaReceber.count({
     where: {
       clienteId: logado.cliente.id,
-      status: { notIn: ['Recebido', 'Pago'] }
+      status: { notIn: ['Recebido', 'Pago', 'Cancelado'] }
     }
   })
 
