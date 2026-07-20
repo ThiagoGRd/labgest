@@ -97,6 +97,17 @@ function workflowLabel(tipo: string | null | undefined) {
   return getWorkflowLabel(tipo as never)
 }
 
+function isValidDeliveryDate(dateStr: string) {
+  const dataIso = dateStr.split('T')[0]
+  const [ano, mes, dia] = dataIso.split('-').map(Number)
+  const data = new Date(Date.UTC(ano, mes - 1, dia))
+  return ano >= 2020
+    && ano <= new Date().getFullYear() + 2
+    && data.getUTCFullYear() === ano
+    && data.getUTCMonth() === mes - 1
+    && data.getUTCDate() === dia
+}
+
 
 function getDaysRemaining(dateStr: string, status: string, pausadoEm?: string | null, dataEntregaReal?: string | null) {
   if (status === 'Finalizado') return { text: 'Pronto para entrega', color: 'text-emerald-600' }
@@ -108,7 +119,7 @@ function getDaysRemaining(dateStr: string, status: string, pausadoEm?: string | 
   }
   const dataIso = dateStr.split('T')[0]
   const [ano, mes, dia] = dataIso.split('-').map(Number)
-  if (!ano || ano < 2020 || ano > new Date().getFullYear() + 2) return { text: 'Data inválida', color: 'text-red-600' }
+  if (!isValidDeliveryDate(dateStr)) return { text: 'Data inválida', color: 'text-red-600' }
   const hojePartes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' })
     .format(new Date()).split('-').map(Number)
   const diff = Math.round((Date.UTC(ano, mes - 1, dia) - Date.UTC(hojePartes[0], hojePartes[1] - 1, hojePartes[2])) / 86_400_000)
@@ -524,7 +535,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                             <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                           </div>
                           <div suppressHydrationWarning>
-                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{daysInfo.text === 'Data inválida' ? '—' : formatDate(ordem.dataEntrega)}</p>
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{isValidDeliveryDate(ordem.dataEntrega) ? formatDate(ordem.dataEntrega) : '—'}</p>
                             <p className={`text-[10px] font-bold uppercase ${daysInfo.color}`}>{daysInfo.text}</p>
                           </div>
                         </div>
