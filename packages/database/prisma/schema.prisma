@@ -247,6 +247,9 @@ model ContaPagar {
   fornecedor         String?                  @db.VarChar(255)
   valor              Decimal                  @db.Decimal(10, 2)
   valorPago          Decimal                  @default(0.00) @map("valor_pago") @db.Decimal(10, 2)
+  grupoParcelamento  String?                  @map("grupo_parcelamento") @db.Uuid
+  parcelaNumero      Int?                     @map("parcela_numero") @db.SmallInt
+  parcelaTotal       Int?                     @map("parcela_total") @db.SmallInt
   dataCompetencia    DateTime?                @map("data_competencia") @db.Date
   dataVencimento     DateTime                 @map("data_vencimento") @db.Date
   dataPagamento      DateTime?                @map("data_pagamento") @db.Date
@@ -265,6 +268,7 @@ model ContaPagar {
 
   @@index([status], map: "idx_contas_pagar_status")
   @@index([dataVencimento], map: "idx_contas_pagar_vencimento")
+  @@index([grupoParcelamento], map: "idx_contas_pagar_grupo_parcelamento")
   @@map("contas_pagar")
 }
 
