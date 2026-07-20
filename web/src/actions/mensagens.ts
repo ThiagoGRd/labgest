@@ -1,13 +1,22 @@
 'use server'
 
-import { prisma } from '@labgest/database'
+import { Prisma, prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+
+export interface MensagemLab {
+  id: string
+  role: 'lab'
+  nome: string
+  texto: string
+  fotoUrl?: string
+  createdAt: string
+}
 
 export async function enviarMensagemLab(ordemId: number, texto: string, fotoUrl?: string) {
   const usuario = await requireUser()
 
-  const ordem = await (prisma.ordem as any).findFirst({
+  const ordem = await prisma.ordem.findFirst({
     where: { id: ordemId }
   })
 
@@ -21,10 +30,10 @@ export async function enviarMensagemLab(ordemId: number, texto: string, fotoUrl?
 
   const mensagensAtuais = Array.isArray(ordem.mensagens) ? ordem.mensagens : []
   
-  const novaMensagem: Record<string, any> = {
+  const novaMensagem: MensagemLab = {
     id: Date.now().toString(),
     role: 'lab',
-    nome: (usuario as any).nome || 'Equipe LabGest',
+    nome: usuario.nome || 'Equipe LabGest',
     texto: texto.trim(),
     createdAt: new Date().toISOString(),
   }
@@ -35,9 +44,9 @@ export async function enviarMensagemLab(ordemId: number, texto: string, fotoUrl?
 
   const novasMensagens = [...mensagensAtuais, novaMensagem]
 
-  await (prisma.ordem.update as any)({
+  await prisma.ordem.update({
     where: { id: ordemId },
-    data: { mensagens: novasMensagens }
+    data: { mensagens: novasMensagens as Prisma.InputJsonArray }
   })
 
   revalidatePath('/ordens')

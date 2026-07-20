@@ -13,6 +13,52 @@ function parseDateLocal(dateStr: string): Date {
   return new Date(year, month - 1, day, 12, 0, 0)
 }
 
+function isRegistro(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+}
+
+function normalizarStrings(valor: unknown): string[] {
+  return Array.isArray(valor) ? valor.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizarHistorico(valor: unknown) {
+  if (!Array.isArray(valor)) return []
+
+  return valor.flatMap((item) => {
+    if (!isRegistro(item) || typeof item.data !== 'string' || typeof item.acao !== 'string') return []
+    return [{
+      data: item.data,
+      acao: item.acao,
+      para: typeof item.para === 'string' ? item.para : undefined,
+      motivo: typeof item.motivo === 'string' ? item.motivo : undefined,
+    }]
+  })
+}
+
+function normalizarMensagens(valor: unknown) {
+  if (!Array.isArray(valor)) return []
+
+  return valor.flatMap((item) => {
+    if (
+      !isRegistro(item)
+      || typeof item.id !== 'string'
+      || typeof item.role !== 'string'
+      || typeof item.nome !== 'string'
+      || typeof item.texto !== 'string'
+      || typeof item.createdAt !== 'string'
+    ) return []
+
+    return [{
+      id: item.id,
+      role: item.role,
+      nome: item.nome,
+      texto: item.texto,
+      fotoUrl: typeof item.fotoUrl === 'string' ? item.fotoUrl : undefined,
+      createdAt: item.createdAt,
+    }]
+  })
+}
+
 // Utilitário para pegar o cliente logado
 async function getClienteLogado() {
   const supabase = await createClient()
@@ -63,7 +109,11 @@ export async function criarPedidoBatch(data: {
       if (!servico) throw new Error(`Serviço ID ${item.servicoId} inválido`)
 
       // Detectar workflow
-      const tipoProtese = isTipoProtese(item.tipoProtese) ? item.tipoProtese : inferirTipoProtese(servico.nome)
+      const tipoProtese = isTipoProtese(item.tipoProtese)
+        ? item.tipoProtese
+        : isTipoProtese(servico.tipoWorkflow)
+          ? servico.tipoWorkflow
+          : inferirTipoProtese(servico.nome)
       const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
       const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
       const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
@@ -141,7 +191,7 @@ export async function criarPedido(data: {
     if (!servico) return { success: false, error: 'Serviço inválido' }
 
     // Detectar workflow
-    const tipoProtese = inferirTipoProtese(servico.nome)
+    const tipoProtese = isTipoProtese(servico.tipoWorkflow) ? servico.tipoWorkflow : inferirTipoProtese(servico.nome)
     const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
     const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
     const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
@@ -247,13 +297,13 @@ export async function getPedidoById(id: number) {
       id: c.id,
       numeroCiclo: c.numeroCiclo,
       etapa: c.etapa,
-      dataEntrada: c.dataEntrada?.toISOString(),
+      dataEntrada: c.dataEntrada.toISOString(),
       prazoDias: c.prazoDias,
-      dataComprometida: c.dataComprometida?.toISOString(),
+      dataComprometida: c.dataComprometida.toISOString(),
       dataSaida: c.dataSaida?.toISOString() || null,
       dataRetorno: c.dataRetorno?.toISOString() || null,
       observacoesDentista: c.observacoesDentista,
-      fotosProva: (c.fotosProva as string[]) || [],
+      fotosProva: normalizarStrings(c.fotosProva),
       decisao: c.decisao,
       status: c.status,
     }))
@@ -273,10 +323,10 @@ export async function getPedidoById(id: number) {
       corDentes: pedido.corDentes || '',
       elementos: pedido.elementos || '',
       observacoes: pedido.observacoes || '',
-      historicoEtapas: (pedido.historicoEtapas as unknown[]) || [],
-      mensagens: Array.isArray(pedido.mensagens) ? pedido.mensagens : [],
-      arquivos: (pedido.arquivoStl as string[]) || [],
-      fotosCaso: Array.isArray(pedido.fotosCaso) ? pedido.fotosCaso : [],
+      historicoEtapas: normalizarHistorico(pedido.historicoEtapas),
+      mensagens: normalizarMensagens(pedido.mensagens),
+      arquivos: normalizarStrings(pedido.arquivoStl),
+      fotosCaso: normalizarStrings(pedido.fotosCaso),
       ciclos,
       cicloAtivoId: cicloAtivo?.id ?? null,
       tipoWorkflow: pedido.tipoWorkflow,
@@ -381,7 +431,7 @@ export async function getServicosDisponiveis() {
     const servicos = await prisma.servico.findMany({
       where: { ativo: true },
       orderBy: { nome: 'asc' },
-      select: { id: true, nome: true, categoria: true, preco: true, tempoProducao: true }
+      select: { id: true, nome: true, categoria: true, preco: true, tempoProducao: true, tipoWorkflow: true }
     })
     
     return servicos.map(s => ({

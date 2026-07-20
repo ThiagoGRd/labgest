@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { Camera, FileImage, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from './button'
+import Image from 'next/image'
 
 interface CameraUploadProps {
   onUploadComplete: (path: string) => void
@@ -60,9 +61,9 @@ export function CameraUpload({
 
       setUploadedPath(data.path)
       onUploadComplete(data.path)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Upload error:', err)
-      setError(err.message || 'Erro ao enviar a imagem')
+      setError(err instanceof Error ? err.message : 'Erro ao enviar a imagem')
       setFile(null)
       setPreview('')
     } finally {
@@ -120,8 +121,8 @@ export function CameraUpload({
           <div className="flex items-center justify-between z-10 relative">
             <div className="flex items-center gap-3">
               {preview ? (
-                <div className="h-12 w-12 rounded-lg bg-black overflow-hidden flex items-center justify-center shrink-0">
-                   <img src={preview} alt="Preview" className="object-cover h-full w-full opacity-90" />
+                <div className="relative h-12 w-12 rounded-lg bg-black overflow-hidden flex items-center justify-center shrink-0">
+                   <Image src={preview} alt="Preview" fill unoptimized className="object-cover opacity-90" />
                 </div>
               ) : (
                 <div className={`p-3 rounded-lg ${error ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>

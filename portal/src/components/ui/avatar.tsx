@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 interface AvatarProps {
   src?: string | null
@@ -38,10 +39,14 @@ const sizeClasses = {
 
 export function Avatar({ src, name, size = 'md', className }: AvatarProps) {
   if (src) {
+    const pixels = size === 'sm' ? 32 : size === 'lg' ? 48 : 40
     return (
-      <img
+      <Image
         src={src}
         alt={name}
+        width={pixels}
+        height={pixels}
+        unoptimized
         className={cn(
           "rounded-full object-cover",
           sizeClasses[size],

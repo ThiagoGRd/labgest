@@ -34,6 +34,7 @@ interface Servico {
   categoria: string
   preco: number
   tempoProducao?: number
+  tipoWorkflow?: string | null
 }
 
 interface NovoPedidoViewProps {
@@ -335,7 +336,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo de serviço *</label>
                 <Select value={currentItem.servicoId} onValueChange={(value) => {
                   const servico = servicos.find((item) => item.id.toString() === value)
-                  setCurrentItem((prev) => ({ ...prev, servicoId: value, tipoProtese: (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
+                  setCurrentItem((prev) => ({ ...prev, servicoId: value, tipoProtese: servico?.tipoWorkflow || (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
                 }}>
                   <SelectTrigger className="h-12"><SelectValue placeholder="Selecione o serviço" /></SelectTrigger>
                   <SelectContent>

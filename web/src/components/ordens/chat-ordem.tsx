@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagemLab } from '@/actions/mensagens'
+import Image from 'next/image'
 
-interface Mensagem {
+export interface Mensagem {
   id: string
   role: string
   nome: string
@@ -94,7 +95,7 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
     try {
       const res = await enviarMensagemLab(ordemId, currentText, currentFoto || undefined)
       if (res.success && res.mensagem) {
-        setMensagens(prev => [...prev, res.mensagem as Mensagem])
+        setMensagens(prev => [...prev, res.mensagem])
       }
     } catch (error) {
       console.error(error)
@@ -115,8 +116,8 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
           tone="dark"
           mobileFullscreen
         >
-          <div className="flex min-h-[50dvh] items-center justify-center">
-            <img src={lightbox} alt="Foto ampliada da conversa" className="max-h-[72dvh] max-w-full rounded-xl object-contain shadow-2xl" />
+          <div className="relative min-h-[50dvh] w-full">
+            <Image src={lightbox} alt="Foto ampliada da conversa" fill sizes="90vw" unoptimized className="rounded-xl object-contain shadow-2xl" />
           </div>
         </Modal>
       )}
@@ -151,9 +152,12 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
                   }`}>
                     {msg.fotoUrl && (
                       <button onClick={() => setLightbox(msg.fotoUrl!)} className="block w-full relative group">
-                        <img
+                        <Image
                           src={msg.fotoUrl}
                           alt="Foto do caso"
+                          width={240}
+                          height={180}
+                          unoptimized
                           className="w-full max-w-[240px] object-cover rounded-t-2xl"
                           style={{ maxHeight: 180 }}
                         />
@@ -175,7 +179,7 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
         {fotoFile && (
           <div className="px-3 py-2 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50 flex items-center gap-3">
             <div className="relative h-12 w-12 rounded-lg overflow-hidden bg-slate-200 shrink-0">
-              <img src={fotoPreview} alt="Preview" className="object-cover h-full w-full" />
+              <Image src={fotoPreview} alt="Preview" width={48} height={48} unoptimized className="h-full w-full object-cover" />
               {fotoUploading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                   <Loader2 className="h-4 w-4 text-white animate-spin" />

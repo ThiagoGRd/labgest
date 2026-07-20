@@ -32,9 +32,10 @@ export type UserType = typeof USER_TYPE[keyof typeof USER_TYPE]
 export const SERVICE_CATEGORY = {
   PROTESE_TOTAL: 'Prótese Total',
   PARCIAL_REMOVIVEL: 'Parcial Removível',
-  PROVISORIO_UNITARIO: 'Provisório Unitário',
-  PONTE_ADESIVA: 'Ponte Adesiva',
   PROTOCOLO: 'Protocolo',
+  PROVISORIO_DIGITAL: 'Provisório Digital',
+  PLACAS: 'Placas',
+  CONSERTOS: 'Consertos',
   GERAL: 'Geral',
 } as const
 

@@ -193,10 +193,11 @@ export async function gerarRelatorioIA(userQuery?: string) {
     
     return JSON.parse(jsonStr)
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro na IA:', error)
+    const mensagem = error instanceof Error ? error.message : 'Erro desconhecido.'
     return {
-      analiseGeral: `Não foi possível gerar a análise neste momento. Motivo: ${error.message || 'Erro desconhecido.'}`,
+      analiseGeral: `Não foi possível gerar a análise neste momento. Motivo: ${mensagem}`,
       tendencias: [],
       sugestoesAcao: ['Verifique o token Gemini ou as cotas da API.', 'Reinicie o servidor Next.js para aplicar variáveis de ambiente.'],
       alertaRisco: null

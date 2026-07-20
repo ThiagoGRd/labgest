@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { updateProfile } from '@/actions/profile'
 import { User, Phone, MapPin, BadgeCheck, Loader2, Save } from 'lucide-react'
+import type { PortalUser } from '@/components/layout/portal-layout'
 
 interface PerfilViewProps {
-  user: any
+  user: PortalUser
   profile: {
     nome: string
     email: string | null
@@ -52,7 +53,7 @@ export function PerfilView({ user, profile }: PerfilViewProps) {
       } else {
         setError(result.error || 'Erro ao atualizar')
       }
-    } catch (err) {
+    } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
       setLoading(false)

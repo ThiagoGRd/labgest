@@ -19,6 +19,7 @@ import {
   Sparkles,
   Clock,
   Building2,
+  type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Avatar } from '@/components/ui/avatar'
@@ -28,7 +29,15 @@ import { WhatsNewModal } from '@/components/ui/whats-new-modal'
 import { MensagensBadge } from '@/components/ui/mensagens-badge'
 import { VERSAO_ATUAL } from '@/lib/release-notes'
 
-const navigation = [
+interface NavigationItem {
+  name: string
+  href: string
+  icon: LucideIcon
+  hasBadge?: boolean
+  hasAI?: boolean
+}
+
+const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Prioridades', href: '/prioridades', icon: Clock },
   { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
@@ -57,8 +66,11 @@ export function Sidebar({ user }: SidebarProps) {
   const [hasNew, setHasNew] = useState(false)
 
   useEffect(() => {
-    const seen = localStorage.getItem('labgest_seen_version')
-    setHasNew(seen !== VERSAO_ATUAL)
+    const timer = window.setTimeout(() => {
+      const seen = localStorage.getItem('labgest_seen_version')
+      setHasNew(seen !== VERSAO_ATUAL)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   // Fechar o menu mobile ao navegar
@@ -129,7 +141,7 @@ export function Sidebar({ user }: SidebarProps) {
               {!collapsed && item.hasAI && (
                 <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
               )}
-              {!collapsed && (item as any).hasBadge && (
+              {!collapsed && item.hasBadge && (
                 <MensagensBadge />
               )}
             </Link>

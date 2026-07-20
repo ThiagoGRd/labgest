@@ -1,5 +1,5 @@
 import React from "react"
-import { SearchX, Inbox, type LucideIcon } from "lucide-react"
+import { SearchX, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {

@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@labgest/database'
 
-interface NotificacaoPortal {
+export interface NotificacaoPortal {
   id: string
   titulo: string
   mensagem: string

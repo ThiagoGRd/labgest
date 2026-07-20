@@ -5,20 +5,16 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NovoItemEstoqueModal } from '@/components/estoque/novo-item-estoque-modal'
 import {
   Search,
-  Filter,
-  Download,
   Edit,
   AlertTriangle,
   Package,
   TrendingDown,
   Calendar,
   MapPin,
-  Barcode,
 } from 'lucide-react'
 
 // Types

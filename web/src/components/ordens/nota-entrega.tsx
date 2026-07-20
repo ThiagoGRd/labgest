@@ -17,11 +17,6 @@ function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function formatDate(value: string | Date) {
-  const d = typeof value === 'string' ? new Date(value) : value
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
 export const NotaEntrega = forwardRef<HTMLDivElement, NotaEntregaProps>(({ ordem }, ref) => {
   const dataEntrega = new Date()
 

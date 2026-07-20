@@ -197,7 +197,11 @@ export async function createBatchOrdens(data: {
     const operacoes = data.itens.map((item) => {
       const servico = servicosPorId.get(Number(item.servicoId))!
       const valor = Number(servico.preco)
-      const tipoProtese = isTipoProtese(item.tipoProtese) ? item.tipoProtese : inferirTipoProtese(servico.nome)
+      const tipoProtese = isTipoProtese(item.tipoProtese)
+        ? item.tipoProtese
+        : isTipoProtese(servico.tipoWorkflow)
+          ? servico.tipoWorkflow
+          : inferirTipoProtese(servico.nome)
       const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
       const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
       const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
@@ -469,7 +473,7 @@ export async function getDadosNovaOrdem() {
   try {
     const [clientes, servicosRaw] = await Promise.all([
       prisma.cliente.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
-      prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, preco: true, tempoProducao: true } })
+      prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, preco: true, tempoProducao: true, tipoWorkflow: true } })
     ])
 
     const servicos = servicosRaw.map(s => ({

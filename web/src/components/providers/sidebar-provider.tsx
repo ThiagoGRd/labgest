@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useCallback, useContext, useState, useSyncExternalStore } from 'react'
 
 interface SidebarContextType {
     collapsed: boolean
@@ -12,24 +12,32 @@ interface SidebarContextType {
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
+const SIDEBAR_STORAGE_KEY = 'sidebar-collapsed'
+const SIDEBAR_CHANGE_EVENT = 'labgest-sidebar-change'
+
+function subscribeCollapsed(callback: () => void) {
+    window.addEventListener('storage', callback)
+    window.addEventListener(SIDEBAR_CHANGE_EVENT, callback)
+    return () => {
+        window.removeEventListener('storage', callback)
+        window.removeEventListener(SIDEBAR_CHANGE_EVENT, callback)
+    }
+}
+
+function getCollapsedSnapshot() {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true'
+}
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-    const [collapsed, setCollapsed] = useState(false)
+    const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, () => false)
     const [isOpenMobile, setIsOpenMobile] = useState(false)
 
-    // Opcional: Persistir estado no localStorage
-    useEffect(() => {
-        const saved = localStorage.getItem('sidebar-collapsed')
-        if (saved) {
-            setCollapsed(JSON.parse(saved))
-        }
+    const setCollapsed = useCallback((value: boolean) => {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(value))
+        window.dispatchEvent(new Event(SIDEBAR_CHANGE_EVENT))
     }, [])
 
-    useEffect(() => {
-        localStorage.setItem('sidebar-collapsed', JSON.stringify(collapsed))
-    }, [collapsed])
-
-    const toggleCollapsed = () => setCollapsed((prev) => !prev)
+    const toggleCollapsed = () => setCollapsed(!collapsed)
     const toggleMobile = () => setIsOpenMobile((prev) => !prev)
 
     // Close mobile sidebar on route change can be handled in component 

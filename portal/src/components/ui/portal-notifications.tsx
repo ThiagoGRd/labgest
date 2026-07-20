@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Bell, Loader2, MessageSquare, AlertTriangle, CreditCard, X } from 'lucide-react'
 import { getNotificacoesPortal } from '@/actions/notificacoes'
 import Link from 'next/link'
+import type { LucideIcon } from 'lucide-react'
+import type { NotificacaoPortal } from '@/actions/notificacoes'
 
-const TIPO_ICONS: Record<string, any> = {
+const TIPO_ICONS: Record<NotificacaoPortal['tipo'], LucideIcon> = {
   info: MessageSquare,
   warning: AlertTriangle,
   destructive: CreditCard,
@@ -25,7 +27,7 @@ const TIPO_BADGE: Record<string, string> = {
 
 export function PortalNotifications() {
   const [open, setOpen] = useState(false)
-  const [notificacoes, setNotificacoes] = useState<any[]>([])
+  const [notificacoes, setNotificacoes] = useState<NotificacaoPortal[]>([])
   const [loading, setLoading] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
 

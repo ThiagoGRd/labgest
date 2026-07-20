@@ -15,7 +15,7 @@ interface NovaOrdemModalProps {
   isOpen: boolean
   onClose: () => void
   clientes: { id: number; nome: string }[]
-  servicos: { id: number; nome: string; preco: number; tempoProducao?: number }[]
+  servicos: { id: number; nome: string; preco: number; tempoProducao?: number; tipoWorkflow?: string | null }[]
   onSuccess?: () => void
 }
 
@@ -235,7 +235,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
                   value={currentItem.servicoId} 
                   onValueChange={(val) => {
                     const servico = servicos.find((item) => item.id.toString() === val)
-                    setCurrentItem((anterior) => ({ ...anterior, servicoId: val, tipoProtese: (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
+                    setCurrentItem((anterior) => ({ ...anterior, servicoId: val, tipoProtese: servico?.tipoWorkflow || (servico && inferirTipoProtese(servico.nome)) || 'geral' }))
                   }}
                 >
                   <SelectTrigger className="h-9 bg-white dark:bg-zinc-900 border-slate-200">

@@ -1,20 +1,28 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import {
-  Calendar,
   User,
   GripVertical,
   AlertTriangle,
   Clock,
-  Paperclip,
-  MoreHorizontal
 } from 'lucide-react'
 
+interface OrdemKanban {
+  id: number
+  paciente: string
+  dentista: string
+  servico: string
+  entrega: string
+  etapa: string
+  status: string
+  prioridade: string
+  elementos?: string | null
+}
+
 interface KanbanCardProps {
-  ordem: any
-  onDragStart: (e: React.DragEvent, ordem: any, etapaId: string) => void
+  ordem: OrdemKanban
+  onDragStart: (e: React.DragEvent, ordem: OrdemKanban, etapaId: string) => void
   etapaId: string
   onClick?: () => void
   onPatientClick?: () => void

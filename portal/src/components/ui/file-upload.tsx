@@ -13,36 +13,11 @@ interface FileUploadProps {
 export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [uploadedPath, setUploadedPath] = useState('')
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setError('')
-    if (acceptedFiles.length > 0) {
-      setFile(acceptedFiles[0])
-      handleUpload(acceptedFiles[0])
-    }
-  }, [])
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    maxFiles: 1,
-    accept: {
-      'model/stl': ['.stl'],
-      'application/vnd.ms-pki.stl': ['.stl'],
-      'application/x-stl': ['.stl'],
-      'application/octet-stream': ['.stl'],
-      'application/zip': ['.zip'],
-      'application/x-zip-compressed': ['.zip'],
-      'model/obj': ['.obj'],
-    },
-    maxSize: 50 * 1024 * 1024, // 50MB
-  })
-
-  const handleUpload = async (fileToUpload: File) => {
+  const handleUpload = useCallback(async (fileToUpload: File) => {
     setUploading(true)
-    setProgress(0)
 
     try {
       const supabase = createClient()
@@ -61,21 +36,42 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
 
       setUploadedPath(data.path)
       onUploadComplete(data.path)
-      setProgress(100)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Upload error:', err)
-      setError(err.message || 'Erro ao enviar arquivo')
+      setError(err instanceof Error ? err.message : 'Erro ao enviar arquivo')
       setFile(null)
     } finally {
       setUploading(false)
     }
-  }
+  }, [onUploadComplete])
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    setError('')
+    if (acceptedFiles.length > 0) {
+      setFile(acceptedFiles[0])
+      void handleUpload(acceptedFiles[0])
+    }
+  }, [handleUpload])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxFiles: 1,
+    accept: {
+      'model/stl': ['.stl'],
+      'application/vnd.ms-pki.stl': ['.stl'],
+      'application/x-stl': ['.stl'],
+      'application/octet-stream': ['.stl'],
+      'application/zip': ['.zip'],
+      'application/x-zip-compressed': ['.zip'],
+      'model/obj': ['.obj'],
+    },
+    maxSize: 50 * 1024 * 1024, // 50MB
+  })
 
   const removeFile = () => {
     setFile(null)
     setUploadedPath('')
     setError('')
-    setProgress(0)
     onUploadComplete('')
   }
 

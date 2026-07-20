@@ -29,13 +29,15 @@ const navigation = [
   { name: 'Meu Perfil', href: '/perfil', icon: User },
 ]
 
+export interface PortalUser {
+  nome: string
+  email: string
+  cro: string
+}
+
 interface PortalLayoutProps {
   children: React.ReactNode
-  user: {
-    nome: string
-    email: string
-    cro: string
-  }
+  user: PortalUser
 }
 
 export function PortalLayout({ children, user }: PortalLayoutProps) {

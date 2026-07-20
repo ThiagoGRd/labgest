@@ -79,7 +79,7 @@ export async function toggleClienteStatus(id: string, ativo: boolean) {
     })
     revalidatePath('/clientes')
     return { success: true }
-  } catch (error) {
+  } catch {
     return { success: false, error: 'Erro ao atualizar status' }
   }
 }

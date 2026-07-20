@@ -6,17 +6,21 @@ import { getMensagensNaoLidasLab } from '@/actions/notificacoes-lab'
 export function MensagensBadge() {
   const [count, setCount] = useState(0)
 
-  async function fetch() {
-    try {
-      const n = await getMensagensNaoLidasLab()
-      setCount(n)
-    } catch {}
-  }
-
   useEffect(() => {
-    fetch()
-    const interval = setInterval(fetch, 60000)
-    return () => clearInterval(interval)
+    let ativo = true
+    const carregar = async () => {
+      try {
+        const quantidade = await getMensagensNaoLidasLab()
+        if (ativo) setCount(quantidade)
+      } catch {}
+    }
+    const inicio = window.setTimeout(carregar, 0)
+    const interval = window.setInterval(carregar, 60_000)
+    return () => {
+      ativo = false
+      window.clearTimeout(inicio)
+      window.clearInterval(interval)
+    }
   }, [])
 
   if (count === 0) return null

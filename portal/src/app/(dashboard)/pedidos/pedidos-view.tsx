@@ -11,14 +11,12 @@ import { VisualizarPedidoModal } from '@/components/pedidos/visualizar-pedido-mo
 import { getPedidoById } from '@/actions/pedidos'
 import {
   Search,
-  Filter,
   Eye,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
   Loader2
 } from 'lucide-react'
+import type { PortalUser } from '@/components/layout/portal-layout'
+import type { BadgeProps } from '@/components/ui/badge'
 
 interface Pedido {
   id: number
@@ -31,12 +29,12 @@ interface Pedido {
 }
 
 interface PedidosViewProps {
-  user: any
+  user: PortalUser
   pedidos: Pedido[]
 }
 
 function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
+  const map: Record<string, BadgeProps['variant']> = {
     'Aguardando': 'aguardando',
     'Em Produção': 'emProducao',
     'Em Prova': 'warning',
@@ -58,7 +56,8 @@ function formatCurrency(value: number) {
 export function PedidosView({ user, pedidos }: PedidosViewProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
-  const [selectedPedido, setSelectedPedido] = useState<any>(null)
+  type PedidoDetalhado = NonNullable<React.ComponentProps<typeof VisualizarPedidoModal>['pedido']>
+  const [selectedPedido, setSelectedPedido] = useState<PedidoDetalhado | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [loadingId, setLoadingId] = useState<number | null>(null)
 
@@ -75,7 +74,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
     try {
       const pedidoDetalhado = await getPedidoById(id)
       if (pedidoDetalhado) {
-        setSelectedPedido(pedidoDetalhado)
+        setSelectedPedido(pedidoDetalhado as PedidoDetalhado)
         setModalOpen(true)
       }
     } catch (error) {

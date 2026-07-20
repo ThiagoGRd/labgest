@@ -24,7 +24,7 @@ export async function getUsuarios() {
       orderBy: { nome: 'asc' }
     })
     return usuarios
-  } catch (error) {
+  } catch {
     return []
   }
 }
@@ -40,7 +40,7 @@ export async function criarUsuario(data: {
     const supabaseAdmin = getSupabaseAdmin()
 
     // 1. Criar no Supabase Auth
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: data.email,
       password: data.senhaProvisoria,
       email_confirm: true,
@@ -67,9 +67,9 @@ export async function criarUsuario(data: {
 
     revalidatePath('/configuracoes')
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao criar usuário:', error)
-    return { success: false, error: error.message || 'Erro ao criar usuário' }
+    return { success: false, error: error instanceof Error ? error.message : 'Erro ao criar usuário' }
   }
 }
 
@@ -82,7 +82,7 @@ export async function toggleStatusUsuario(id: number, statusAtual: boolean) {
     })
     revalidatePath('/configuracoes')
     return { success: true }
-  } catch (error) {
+  } catch {
     return { success: false, error: 'Erro ao atualizar status' }
   }
 }
@@ -108,7 +108,7 @@ export async function excluirUsuario(id: number, email: string) {
 
     revalidatePath('/configuracoes')
     return { success: true }
-  } catch (error) {
+  } catch {
     return { success: false, error: 'Erro ao excluir usuário' }
   }
 }

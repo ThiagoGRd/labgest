@@ -12,6 +12,7 @@ import {
   Loader2,
   X,
 } from 'lucide-react'
+import Image from 'next/image'
 
 interface FeedbackProvaProps {
   cicloId: number
@@ -146,8 +147,8 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         <p className="mb-2 text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">📷 Fotos da Prova <span className="normal-case font-normal">(opcional)</span></p>
         <div className="flex flex-wrap gap-2">
           {fotos.map((foto, i) => (
-            <div key={i} className="relative group">
-              <img src={foto} alt={`Foto ${i+1}`} className="h-20 w-20 rounded-xl border border-slate-200 object-cover dark:border-zinc-700" />
+            <div key={i} className="relative h-20 w-20 group">
+              <Image src={foto} alt={`Foto ${i+1}`} fill unoptimized className="rounded-xl border border-slate-200 object-cover dark:border-zinc-700" />
               <button
                 type="button"
                 aria-label={`Remover foto ${i + 1}`}

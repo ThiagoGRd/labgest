@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/modal'
 import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagem } from '@/actions/mensagens'
 import { createClient } from '@/lib/supabase/client'
+import Image from 'next/image'
 
 interface Mensagem {
   id: string
@@ -123,7 +124,14 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
           mobileFullscreen
         >
           <div className="flex min-h-[50dvh] items-center justify-center">
-            <img src={lightbox} alt="Foto ampliada da conversa" className="max-h-[72dvh] max-w-full rounded-xl object-contain shadow-2xl" />
+            <Image
+              src={lightbox}
+              alt="Foto ampliada da conversa"
+              width={1200}
+              height={900}
+              unoptimized
+              className="max-h-[72dvh] w-auto max-w-full rounded-xl object-contain shadow-2xl"
+            />
           </div>
         </Modal>
       )}
@@ -166,11 +174,13 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
                         onClick={() => setLightbox(msg.fotoUrl!)}
                         className="block w-full relative group"
                       >
-                        <img
+                        <Image
                           src={msg.fotoUrl}
                           alt="Foto do caso"
-                          className="w-full max-w-[240px] object-cover rounded-t-2xl"
-                          style={{ maxHeight: 180 }}
+                          width={240}
+                          height={180}
+                          unoptimized
+                          className="max-h-[180px] w-full max-w-[240px] rounded-t-2xl object-cover"
                         />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                           <ZoomIn className="h-6 w-6 text-white drop-shadow-lg" />
@@ -194,7 +204,7 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
           <div className="px-3 py-2 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50">
             <div className="flex items-center gap-3">
               <div className="relative h-14 w-14 rounded-lg overflow-hidden bg-slate-200 dark:bg-zinc-700 shrink-0">
-                <img src={fotoPreview} alt="Preview" className="object-cover h-full w-full" />
+                <Image src={fotoPreview} alt="Preview" fill unoptimized className="object-cover" />
                 {fotoUploading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                     <Loader2 className="h-4 w-4 text-white animate-spin" />

@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@labgest/database'
+import { Prisma, prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { parseDateLocal } from '@/lib/date-utils'
@@ -30,10 +30,10 @@ export async function sincronizarFinanceiroRetroativo() {
         dataFinalizacao: true,
         updatedAt: true,
       }
-    } as any)
+    })
 
     let criadas = 0
-    for (const ordem of (ordensSemCobranca as any[])) {
+    for (const ordem of ordensSemCobranca) {
       // CORREÇÃO: usa data de finalização para determinar o mês correto
       // Vencimento: dia 15 do mês SEGUINTE ao da finalização
       const base = ordem.dataFinalizacao ? new Date(ordem.dataFinalizacao) : new Date(ordem.updatedAt || Date.now())
@@ -82,8 +82,8 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 
     // CORREÇÃO: usa a data de finalização da ordem (não "hoje") para calcular o mês correto
     // Isso evita o bug onde uma ordem finalizada em março gera vencimento em abril
-    const dataBase = (ordem as any).dataFinalizacao
-      ? new Date((ordem as any).dataFinalizacao)
+    const dataBase = ordem.dataFinalizacao
+      ? new Date(ordem.dataFinalizacao)
       : new Date()
 
     // Vencimento: dia 15 do mês SEGUINTE ao da finalização (padrão boleto laboratorial)
@@ -121,8 +121,8 @@ export async function getContas(filtroMes?: string) {
 
     // Se filtroMes for passado no formato "YYYY-MM", filtra por aquele mês
     // Caso contrário, retorna todos os registros
-    let whereReceber: any = {}
-    let wherePagar: any = {}
+    let whereReceber: Prisma.ContaReceberWhereInput = {}
+    let wherePagar: Prisma.ContaPagarWhereInput = {}
     if (filtroMes) {
       const [ano, mes] = filtroMes.split('-').map(Number)
       const inicio = new Date(ano, mes - 1, 1)
@@ -339,7 +339,7 @@ export async function baixarConta(id: number, tipo: 'receber' | 'pagar') {
     }
     revalidatePath('/financeiro')
     return { success: true }
-  } catch (error) {
+  } catch {
     return { success: false, error: 'Erro ao dar baixa' }
   }
 }

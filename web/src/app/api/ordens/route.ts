@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(novaOrdem, { status: 201 })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Erro ao criar ordem' },
       { status: 500 }

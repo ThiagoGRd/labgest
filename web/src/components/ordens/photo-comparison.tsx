@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { uploadFotoProva } from '@/actions/ordens'
 import { toast } from 'sonner'
+import Image from 'next/image'
 
 interface PhotoComparisonProps {
   ordemId: number
@@ -134,9 +135,12 @@ export function PhotoComparison({ ordemId, numeroProva, fotosExistentes = [], on
             }`}
           >
             {foto1 ? (
-              <img
+              <Image
                 src={foto1}
                 alt="Prova anterior"
+                width={800}
+                height={800}
+                unoptimized
                 className="w-full h-full object-cover rounded-2xl"
                 style={{ transform: `scale(${zoom / 100}) rotate(${rotation}deg)`, transformOrigin: 'center' }}
               />
@@ -178,9 +182,12 @@ export function PhotoComparison({ ordemId, numeroProva, fotosExistentes = [], on
             }`}
           >
             {foto2 ? (
-              <img
+              <Image
                 src={foto2}
                 alt="Prova atual"
+                width={800}
+                height={800}
+                unoptimized
                 className="w-full h-full object-cover rounded-2xl"
                 style={{ transform: `scale(${zoom / 100}) rotate(${rotation}deg)`, transformOrigin: 'center' }}
               />

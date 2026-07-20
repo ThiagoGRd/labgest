@@ -15,15 +15,26 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { getProgresso } from '@/lib/workflow-config'
+import type { PortalUser } from '@/components/layout/portal-layout'
+
+interface PedidoRecente {
+  id: number
+  paciente: string
+  servico: string
+  status: string
+  dataEntrega: string
+  etapa: string
+  etapaId?: string
+}
 
 interface DashboardViewProps {
-  user: any
+  user: PortalUser
   stats: {
     total: number
     emAndamento: number
     finalizados: number
   }
-  pedidosRecentes: any[]
+  pedidosRecentes: PedidoRecente[]
 }
 
 function getStatusColor(status: string) {

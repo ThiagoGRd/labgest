@@ -10,12 +10,7 @@ import { gerarRelatorioIA } from '@/actions/relatorios'
 import {
   Sparkles,
   Send,
-  BarChart3,
-  TrendingUp,
-  Users,
-  DollarSign,
   Loader2,
-  AlertTriangle,
   Lightbulb,
 } from 'lucide-react'
 import { 
@@ -26,8 +21,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  LineChart,
-  Line
 } from 'recharts'
 
 interface RelatorioData {
@@ -48,6 +41,18 @@ interface Message {
   data?: RelatorioData
 }
 
+interface TooltipPayloadEntry {
+  color?: string
+  name?: string
+  value?: number | string
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: ReadonlyArray<TooltipPayloadEntry>
+  label?: string
+}
+
 export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -65,7 +70,7 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
     try {
       const data = await gerarRelatorioIA(messageText)
       setMessages(prev => [...prev, { role: 'assistant', data: data }])
-    } catch (error) {
+    } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Erro ao gerar análise.' }])
     } finally {
       setLoading(false)
@@ -75,12 +80,12 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
     if (active && payload && payload.length) {
       return (
         <div className="glass p-4 border border-black/5 dark:border-white/10 rounded-xl shadow-xl">
           <p className="font-bold text-slate-900 dark:text-white mb-2">{label}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <div key={index} className="flex items-center gap-2 text-sm">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
               <span className="text-slate-500 dark:text-slate-400 font-medium">{entry.name}:</span>

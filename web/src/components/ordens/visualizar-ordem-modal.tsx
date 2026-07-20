@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
-import { Badge } from '@/components/ui/badge'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { STLViewer } from '@/components/ui/stl-viewer'
 import {
   User,
   Calendar,
-  Clock,
   Palette,
   FileText,
   Package,
@@ -18,16 +17,38 @@ import {
   Download,
   Eye,
   X,
-  RotateCcw,
   CheckCircle2,
-  Circle,
-  Truck,
-  AlertCircle,
   MapPin,
   Camera
 } from 'lucide-react'
-import { etapaLabel, getEtapaNome, getEtapas, getEtapaIndex, getWorkflowLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
-import { ChatOrdem } from '@/components/ordens/chat-ordem'
+import { etapaLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
+import { ChatOrdem, type Mensagem } from '@/components/ordens/chat-ordem'
+import Image from 'next/image'
+
+interface HistoricoEtapa {
+  acao?: string
+  para?: string
+  status?: string
+  data?: string
+  motivo?: string
+  observacao?: string
+}
+
+interface ChecklistEsteticoDetalhes {
+  [chave: string]: string | boolean | number | null | undefined
+  dvo?: boolean
+  registroMordida?: boolean
+  linhaMedia?: boolean
+  oclusao?: boolean
+  corredorBucal?: boolean
+  moldeiraIndividual?: boolean
+  planoCera?: boolean
+  montagemDente?: boolean
+  barraProtocolo?: boolean
+  acrilizacao?: boolean
+  conserto?: boolean
+  corGengiva?: string
+}
 
 interface Ordem {
   id: number
@@ -47,9 +68,9 @@ interface Ordem {
   arquivos?: string[]
   tipoWorkflow?: string | null
   tentativaAtual?: number
-  historicoEtapas?: any[]
-  checklistEstetico?: any
-  mensagens?: any[]
+  historicoEtapas?: unknown[]
+  checklistEstetico?: unknown
+  mensagens?: unknown[]
   fotosCaso?: string[]
 }
 
@@ -60,7 +81,7 @@ interface VisualizarOrdemModalProps {
 }
 
 function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
+  const map: Record<string, BadgeProps['variant']> = {
     'Aguardando': 'aguardando',
     'Em Produção': 'emProducao',
     'Finalizado': 'finalizado',
@@ -75,7 +96,8 @@ function formatDate(dateStr: string) {
   return date.toLocaleDateString('pt-BR')
 }
 
-function formatDateTime(dateStr: string) {
+function formatDateTime(dateStr?: string) {
+  if (!dateStr) return 'Data não registrada'
   const date = new Date(dateStr)
   return date.toLocaleDateString('pt-BR', { 
     day: '2-digit', 
@@ -92,6 +114,31 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function isRegistro(valor: unknown): valor is Record<string, unknown> {
+  return Boolean(valor && typeof valor === 'object' && !Array.isArray(valor))
+}
+
+function isHistoricoEtapa(valor: unknown): valor is HistoricoEtapa {
+  if (!isRegistro(valor)) return false
+  return valor.acao === undefined || typeof valor.acao === 'string'
+}
+
+function isMensagem(valor: unknown): valor is Mensagem {
+  if (!isRegistro(valor)) return false
+  return typeof valor.id === 'string'
+    && typeof valor.role === 'string'
+    && typeof valor.nome === 'string'
+    && typeof valor.texto === 'string'
+    && typeof valor.createdAt === 'string'
+}
+
+function normalizarChecklist(valor: unknown): ChecklistEsteticoDetalhes {
+  if (!isRegistro(valor)) return {}
+  return Object.fromEntries(
+    Object.entries(valor).filter(([, item]) => item === null || ['string', 'number', 'boolean', 'undefined'].includes(typeof item))
+  ) as ChecklistEsteticoDetalhes
+}
+
 export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdemModalProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
@@ -103,14 +150,15 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
   }
 
   // Ordenar histórico do mais recente para o mais antigo
-  const historico = [...(ordem.historicoEtapas || [])].reverse()
+  const historico = (ordem.historicoEtapas || []).filter(isHistoricoEtapa).reverse()
   
   // Calcular progresso para a barra
   const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
   const progresso = getProgresso(tipoWorkflow, ordem.etapaAtual)
 
   // Extrair Ficha Clínica
-  const chk = ordem.checklistEstetico || {}
+  const chk = normalizarChecklist(ordem.checklistEstetico)
+  const mensagens = (ordem.mensagens || []).filter(isMensagem)
   const hasFichaClinica = Object.values(chk).some(val => val === true || (typeof val === 'string' && val.trim() !== ''))
 
   return (
@@ -191,7 +239,7 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                       )}
 
                       {h.observacao && (
-                        <p className="text-xs text-slate-500 mt-1 italic">"{h.observacao}"</p>
+                        <p className="text-xs text-slate-500 mt-1 italic">“{h.observacao}”</p>
                       )}
                     </div>
                   </div>
@@ -330,9 +378,12 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                           rel="noreferrer"
                           className="relative h-24 w-24 rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden group shadow-sm hover:shadow-md transition-all"
                         >
-                          <img 
+                          <Image
                             src={fullUrl} 
-                            alt={`Foto do Caso ${idx+1}`} 
+                            alt={`Foto do Caso ${idx+1}`}
+                            width={96}
+                            height={96}
+                            unoptimized
                             className="object-cover h-full w-full group-hover:scale-110 transition-transform duration-300"
                           />
                         </a>
@@ -347,7 +398,7 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
             <div className="pt-2 pb-4">
               <ChatOrdem 
                 ordemId={ordem.id} 
-                mensagensIniciais={ordem.mensagens || []} 
+                mensagensIniciais={mensagens}
               />
             </div>
 

@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { confirmarRetorno } from '@/actions/ciclos'
 import { PackageCheck, Clock, MessageSquare, CheckCircle2, RotateCcw } from 'lucide-react'
+import Image from 'next/image'
 
 interface ConfirmarRetornoModalProps {
   isOpen: boolean
@@ -105,7 +106,7 @@ export function ConfirmarRetornoModal({
             <div className="flex gap-2 overflow-x-auto">
               {fotosProva.map((foto, i) => (
                 <a key={i} href={foto} target="_blank" rel="noreferrer">
-                  <img src={foto} alt={`Prova ${i + 1}`} className="h-20 w-20 object-cover rounded-lg border border-slate-200 dark:border-zinc-700 hover:opacity-80 transition-opacity flex-shrink-0" />
+                  <Image src={foto} alt={`Prova ${i + 1}`} width={80} height={80} unoptimized className="h-20 w-20 flex-shrink-0 rounded-lg border border-slate-200 object-cover transition-opacity hover:opacity-80 dark:border-zinc-700" />
                 </a>
               ))}
             </div>

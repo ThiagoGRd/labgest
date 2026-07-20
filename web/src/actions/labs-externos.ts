@@ -33,11 +33,38 @@ export interface LabExterno {
   ativo: boolean
 }
 
+interface LabExternoPedidoRow {
+  id: number | bigint
+  lab_id: number | bigint | null
+  lab_nome: string
+  paciente: string
+  dentista: string | null
+  data_envio: Date | null
+  prazo: Date | null
+  data_retorno: Date | null
+  situacao: SituacaoPedido
+  servico: string | null
+  is_retrabalho: boolean
+  motivo_retrabalho: string | null
+  created_at: Date
+  updated_at: Date
+  dias_atraso?: number | bigint | null
+}
+
+interface DashboardLabsExternosRow {
+  total_enviados: number
+  total_provando: number
+  total_prontos: number
+  total_entregues: number
+  total_atrasados: number
+  total_retrabalhos: number
+}
+
 export async function getPedidosLabExterno(labId?: number) {
   await requireUser()
 
   if (labId) {
-    const pedidos = await prisma.$queryRaw<any[]>`
+    const pedidos = await prisma.$queryRaw<LabExternoPedidoRow[]>`
       SELECT
         p.*,
         CASE
@@ -60,7 +87,7 @@ export async function getPedidosLabExterno(labId?: number) {
     return pedidos.map(normalizar)
   }
 
-  const pedidos = await prisma.$queryRaw<any[]>`
+  const pedidos = await prisma.$queryRaw<LabExternoPedidoRow[]>`
     SELECT
       p.*,
       CASE
@@ -84,7 +111,7 @@ export async function getPedidosLabExterno(labId?: number) {
 
 export async function getAtrasados() {
   await requireUser()
-  const rows = await prisma.$queryRaw<any[]>`
+  const rows = await prisma.$queryRaw<LabExternoPedidoRow[]>`
     SELECT
       *,
       (CURRENT_DATE - prazo)::int AS dias_atraso
@@ -97,7 +124,7 @@ export async function getAtrasados() {
 
 export async function getRetrabalhos() {
   await requireUser()
-  const rows = await prisma.$queryRaw<any[]>`
+  const rows = await prisma.$queryRaw<LabExternoPedidoRow[]>`
     SELECT * FROM labs_externos_pedidos
     WHERE is_retrabalho = true AND situacao != 'Entregue'
     ORDER BY created_at DESC
@@ -108,7 +135,7 @@ export async function getRetrabalhos() {
 export async function getDashboardLabsExternos() {
   await requireUser()
   // Cast bigint to int to avoid JSON serialization issues
-  const rows = await prisma.$queryRaw<any[]>`
+  const rows = await prisma.$queryRaw<DashboardLabsExternosRow[]>`
     SELECT
       COUNT(*) FILTER (WHERE situacao = 'Enviado')::int   AS total_enviados,
       COUNT(*) FILTER (WHERE situacao = 'Provando')::int   AS total_provando,
@@ -211,7 +238,7 @@ export async function excluirPedido(id: number) {
   revalidatePath('/labs-externos')
 }
 
-function normalizar(row: any): LabExternoPedido {
+function normalizar(row: LabExternoPedidoRow): LabExternoPedido {
   return {
     id:               Number(row.id),
     labId:            row.lab_id ? Number(row.lab_id) : null,

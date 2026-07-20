@@ -1,6 +1,7 @@
 'use client'
 
-import { CheckCircle2, Clock, RotateCcw, FlaskConical, Image as ImageIcon } from 'lucide-react'
+import { Clock, FlaskConical, Image as ImageIcon } from 'lucide-react'
+import Image from 'next/image'
 
 export interface Ciclo {
   id: number
@@ -49,7 +50,6 @@ export function TimelineCiclos({ ciclos }: TimelineCiclosProps) {
       {ciclos.map((ciclo) => {
         const daysLeft = getDaysLeft(ciclo.dataComprometida, ciclo.status)
         const isAtrasado = daysLeft !== null && daysLeft < 0
-        const isConcluido = ciclo.status === 'concluido'
         const isEmProva = ciclo.status === 'em_prova'
         const isNoLab = ciclo.status === 'no_lab'
 
@@ -149,8 +149,8 @@ export function TimelineCiclos({ ciclos }: TimelineCiclosProps) {
                 </p>
                 <div className="flex gap-2">
                   {ciclo.fotosProva.slice(0, 4).map((foto, i) => (
-                    <a key={i} href={foto} target="_blank" rel="noreferrer">
-                      <img src={foto} alt={`Prova`} className="h-14 w-14 object-cover rounded-lg border border-zinc-700 hover:opacity-80 transition-opacity" />
+                    <a key={i} href={foto} target="_blank" rel="noreferrer" className="relative h-14 w-14">
+                      <Image src={foto} alt="Prova" fill unoptimized className="rounded-lg border border-zinc-700 object-cover transition-opacity hover:opacity-80" />
                     </a>
                   ))}
                   {ciclo.fotosProva.length > 4 && (

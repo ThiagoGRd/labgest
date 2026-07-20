@@ -16,7 +16,7 @@
     "build": "npm run build --workspaces",
     "build:web": "npm run build --workspace=web",
     "build:portal": "npm run build --workspace=portal",
-    "lint": "npm run lint --workspaces",
+    "lint": "npm run lint --workspace=web && npm run lint --workspace=portal",
     "db:generate": "npm run generate --workspace=@labgest/database",
     "db:push": "npm run push --workspace=@labgest/database",
     "db:migrate": "npm run migrate --workspace=@labgest/database",

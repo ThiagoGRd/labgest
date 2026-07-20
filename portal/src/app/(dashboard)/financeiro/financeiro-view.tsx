@@ -5,7 +5,8 @@ import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
-import { DollarSign, CheckCircle2, Clock, Calendar, Download } from 'lucide-react'
+import { CheckCircle2, Clock, Calendar } from 'lucide-react'
+import type { PortalUser } from '@/components/layout/portal-layout'
 
 interface Conta {
   id: number
@@ -20,7 +21,7 @@ interface Conta {
 }
 
 interface FinanceiroViewProps {
-  user: any
+  user: PortalUser
   pendentes: Conta[]
   pagas: Conta[]
 }

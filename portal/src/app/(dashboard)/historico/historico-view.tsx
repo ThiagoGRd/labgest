@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { PortalLayout } from '@/components/layout/portal-layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Search, Calendar, FileText } from 'lucide-react'
+import { Search, Calendar } from 'lucide-react'
+import type { PortalUser } from '@/components/layout/portal-layout'
+import type { BadgeProps } from '@/components/ui/badge'
 
 interface PedidoHistorico {
   id: number
@@ -18,12 +20,12 @@ interface PedidoHistorico {
 }
 
 interface HistoricoViewProps {
-  user: any
+  user: PortalUser
   pedidos: PedidoHistorico[]
 }
 
 function getStatusVariant(status: string) {
-  const map: Record<string, any> = {
+  const map: Record<string, BadgeProps['variant']> = {
     'Finalizado': 'finalizado',
     'Entregue': 'finalizado',
     'Cancelado': 'destructive',

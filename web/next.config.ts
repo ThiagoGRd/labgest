@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   transpilePackages: ['@labgest/shared'],
+  images: {
+    remotePatterns: [{ protocol: 'https', hostname: '**.supabase.co' }],
+  },
   typescript: { ignoreBuildErrors: true },
   async redirects() {
     return [

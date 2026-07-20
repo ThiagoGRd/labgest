@@ -39,6 +39,7 @@ model Servico {
   preco          Decimal   @db.Decimal(10, 2)
   tempoProducao  Int?      @default(0) @map("tempo_producao")
   categoria      String?   @default("Geral") @db.VarChar(100)
+  tipoWorkflow   String?   @map("tipo_workflow") @db.VarChar(80)
   materiais      Json?     @default("[]")
   custoMateriais Decimal?  @default(0.00) @map("custo_materiais") @db.Decimal(10, 2)
   margemLucro    Decimal?  @default(0.00) @map("margem_lucro") @db.Decimal(5, 2)
