@@ -49,7 +49,7 @@ function serializarOrdem(
 }
 
 function ordemEstaEmProva(ordem: OrdemComRelacionamentos) {
-  return [ordem.status, ordem.etapaAtual, ordem.passoFluxoAtual]
+  return [ordem.status, ordem.etapaAtual]
     .some((valor) => valor?.toLocaleLowerCase('pt-BR').includes('prova'))
 }
 
