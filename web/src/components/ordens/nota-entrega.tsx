@@ -7,6 +7,9 @@ interface NotaEntregaDados {
   servico: string
   valor: number
   dataEntrega: string | Date
+  vencimento: string | Date
+  contaId: number
+  status: string
 }
 
 interface NotaEntregaProps {
@@ -18,7 +21,8 @@ function formatCurrency(value: number) {
 }
 
 export const NotaEntrega = forwardRef<HTMLDivElement, NotaEntregaProps>(({ ordem }, ref) => {
-  const dataEntrega = new Date()
+  const dataEntrega = new Date(ordem.dataEntrega)
+  const vencimento = new Date(ordem.vencimento)
 
   return (
     <div
@@ -29,7 +33,7 @@ export const NotaEntrega = forwardRef<HTMLDivElement, NotaEntregaProps>(({ ordem
       {/* Cabeçalho */}
       <div style={{ textAlign: 'center', borderBottom: '1px dashed #555', paddingBottom: '6px', marginBottom: '8px' }}>
         <div style={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: '2px' }}>LABGEST</div>
-        <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>COMPROVANTE DE ENTREGA</div>
+        <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>NOTA DA ORDEM DE SERVIÇO</div>
       </div>
 
       {/* Número da OS */}
@@ -49,6 +53,9 @@ export const NotaEntrega = forwardRef<HTMLDivElement, NotaEntregaProps>(({ ordem
         <Row label="DENTISTA" value={ordem.cliente.nome} />
         <Row label="SERVIÇO" value={ordem.servico} />
         <Row label="DATA ENTREGA" value={dataEntrega.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} />
+        <Row label="COBRANÇA" value={`#${ordem.contaId.toString().padStart(6, '0')}`} />
+        <Row label="VENCIMENTO" value={vencimento.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} />
+        <Row label="SITUAÇÃO" value={ordem.status === 'Recebido' ? 'PAGO' : 'A PAGAR'} />
       </div>
 
       {/* Linha divisória */}
@@ -62,7 +69,7 @@ export const NotaEntrega = forwardRef<HTMLDivElement, NotaEntregaProps>(({ ordem
 
       {/* Rodapé */}
       <div style={{ borderTop: '1px dashed #aaa', marginTop: '8px', paddingTop: '6px', textAlign: 'center', fontSize: '9px', color: '#888' }}>
-        <div>Obrigado pela preferência!</div>
+        <div>Documento sincronizado com o financeiro do LabGest.</div>
         <div style={{ marginTop: '2px' }}>
           {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
         </div>

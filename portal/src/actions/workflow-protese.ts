@@ -24,7 +24,10 @@ export async function concluirEtapaClinica(ordemId: number) {
     const cliente = await tx.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }, select: { id: true } })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
-    const ordem = await tx.ordem.findFirst({ where: { id: ordemId, clienteId: cliente.id } })
+    const ordem = await tx.ordem.findFirst({
+      where: { id: ordemId, clienteId: cliente.id },
+      include: { contasReceber: { where: { status: { not: 'Cancelado' } }, take: 1 } },
+    })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Fluxo da prótese não identificado' }
 
     const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
@@ -32,12 +35,29 @@ export async function concluirEtapaClinica(ordemId: number) {
     if (passoAtual.prova) return { success: false, error: 'Registre o resultado da prova usando Aprovar ou Solicitar ajuste' }
 
     if (passoAtual.entregaFinal) {
+      const agora = new Date()
+      if (ordem.contasReceber.length === 0) {
+        await tx.contaReceber.create({
+          data: {
+            ordemId,
+            descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
+            clienteId: ordem.clienteId,
+            clienteNome: ordem.clienteNome,
+            valor: ordem.valorFinal,
+            dataCompetencia: agora,
+            dataVencimento: new Date(agora.getFullYear(), agora.getMonth() + 1, 15),
+            status: 'Pendente',
+            observacoes: `Gerado automaticamente na entrega clínica da OS #${ordemId}`,
+          },
+        })
+      }
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
-          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: new Date(), prazoEtapaAtual: null,
+          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: agora, dataEntregaReal: agora,
+          cobrancaGeradaEm: agora, prazoEtapaAtual: null,
           historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
-            acao: 'entrega_clinica_concluida', etapa: passoAtual.nome, data: new Date().toISOString(), por: user.email,
+            acao: 'entrega_clinica_concluida', etapa: passoAtual.nome, data: agora.toISOString(), por: user.email,
           }),
         },
       })
@@ -66,6 +86,7 @@ export async function concluirEtapaClinica(ordemId: number) {
   if (resultado.success) {
     revalidatePath('/pedidos')
     revalidatePath('/dashboard')
+    revalidatePath('/financeiro')
   }
   return resultado
 }

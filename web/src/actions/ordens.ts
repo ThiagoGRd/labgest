@@ -118,6 +118,19 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
         updatedAt: true,
         cliente: { select: { nome: true } },
         servico: { select: { nome: true } },
+        contasReceber: {
+          where: { status: { not: 'Cancelado' } },
+          select: {
+            id: true,
+            valor: true,
+            valorRecebido: true,
+            dataVencimento: true,
+            status: true,
+            observacoes: true,
+          },
+          orderBy: { id: 'desc' },
+          take: 1,
+        },
       },
     }),
     prisma.ordem.count({ where }),
@@ -151,6 +164,14 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
       motivoPausa: o.motivoPausa,
       pausadoEm: o.pausadoEm?.toISOString() || null,
       updatedAt: o.updatedAt?.toISOString() || null,
+      cobranca: o.contasReceber[0] ? {
+        id: o.contasReceber[0].id,
+        valor: Number(o.contasReceber[0].valor),
+        valorRecebido: Number(o.contasReceber[0].valorRecebido),
+        vencimento: o.contasReceber[0].dataVencimento.toISOString(),
+        status: o.contasReceber[0].status || 'Pendente',
+        observacoes: o.contasReceber[0].observacoes || '',
+      } : null,
     })),
     total,
     totalGeral,
@@ -560,39 +581,111 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
   }
 }
 
-export async function marcarEntregue(ordemId: number) {
+export async function marcarEntregue(ordemId: number, dadosCobranca: {
+  valor: number
+  vencimento: string
+  observacoes?: string
+}) {
   try {
     const usuario = await requireUser()
-    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
-    if (ordem.status !== 'Finalizado') {
-      return { success: false, error: 'Finalize o fluxo de produção antes de registrar a entrega' }
+    if (!Number.isFinite(dadosCobranca.valor) || dadosCobranca.valor <= 0) {
+      return { success: false, error: 'Informe um valor válido para a cobrança' }
+    }
+    const dataVencimento = validarDataEntrega(dadosCobranca.vencimento)
+    if (!dataVencimento) {
+      return { success: false, error: 'Informe um vencimento válido a partir de hoje' }
     }
 
-    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
-    historico.push({
-      etapa: ordem.etapaAtual || 'pronto',
-      acao: 'avancou',
-      para: 'entregue',
-      data: new Date().toISOString(),
-      por: usuario.email,
-    })
+    const resultado = await prisma.$transaction(async (tx) => {
+      const ordem = await tx.ordem.findUnique({
+        where: { id: ordemId },
+        include: {
+          contasReceber: {
+            where: { status: { not: 'Cancelado' } },
+            orderBy: { id: 'desc' },
+            take: 1,
+          },
+        },
+      })
+      if (!ordem) throw new Error('Ordem não encontrada')
+      if (ordem.status !== 'Finalizado') {
+        throw new Error('Finalize o fluxo de produção antes de registrar a entrega')
+      }
 
-    await prisma.ordem.update({
-      where: { id: ordemId },
-      data: {
-        etapaAtual: 'entregue',
-        status: 'Entregue',
-        historicoEtapas: historico,
-        progresso: 100,
-        dataEntregaReal: new Date(),
+      const agora = new Date()
+      const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
+      historico.push({
+        etapa: ordem.etapaAtual || 'pronto',
+        acao: 'entrega_com_cobranca_confirmada',
+        para: 'entregue',
+        data: agora.toISOString(),
+        por: usuario.email,
+        valor: dadosCobranca.valor,
+        vencimento: dadosCobranca.vencimento,
+      })
+
+      const contaExistente = ordem.contasReceber[0]
+      let conta
+      if (contaExistente) {
+        const valorRecebido = Number(contaExistente.valorRecebido)
+        if (dadosCobranca.valor < valorRecebido) {
+          throw new Error('O valor da nota não pode ser menor que o valor já recebido')
+        }
+        conta = await tx.contaReceber.update({
+          where: { id: contaExistente.id },
+          data: {
+            descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
+            clienteId: ordem.clienteId,
+            clienteNome: ordem.clienteNome,
+            valor: dadosCobranca.valor,
+            dataVencimento,
+            status: valorRecebido >= dadosCobranca.valor ? 'Recebido' : valorRecebido > 0 ? 'Parcial' : 'Pendente',
+            observacoes: dadosCobranca.observacoes?.trim() || contaExistente.observacoes,
+          },
+        })
+      } else {
+        conta = await tx.contaReceber.create({
+          data: {
+            ordemId,
+            descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
+            clienteId: ordem.clienteId,
+            clienteNome: ordem.clienteNome,
+            valor: dadosCobranca.valor,
+            dataCompetencia: ordem.dataFinalizacao || agora,
+            dataVencimento,
+            status: 'Pendente',
+            observacoes: dadosCobranca.observacoes?.trim() || `Nota confirmada na entrega da OS #${ordemId}`,
+            usuarioId: usuario.id,
+          },
+        })
+      }
+
+      await tx.ordem.update({
+        where: { id: ordemId },
+        data: {
+          etapaAtual: 'entregue',
+          status: 'Entregue',
+          historicoEtapas: historico,
+          progresso: 100,
+          dataEntregaReal: agora,
+          valorFinal: dadosCobranca.valor,
+          cobrancaGeradaEm: agora,
+        },
+      })
+
+      return {
+        contaId: conta.id,
+        valor: Number(conta.valor),
+        vencimento: conta.dataVencimento.toISOString(),
+        status: conta.status || 'Pendente',
       }
     })
 
     revalidatePath('/ordens')
     revalidatePath('/producao')
     revalidatePath('/prioridades')
-    return { success: true }
+    revalidatePath('/financeiro')
+    return { success: true, cobranca: resultado }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[marcarEntregue] Erro:', msg)
