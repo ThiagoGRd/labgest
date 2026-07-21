@@ -35,8 +35,7 @@ function dataInput(data: Date) {
 }
 
 function vencimentoPadrao() {
-  const hoje = new Date()
-  return dataInput(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 15))
+  return dataInput(new Date())
 }
 
 export function ConfirmarEntregaCobrancaModal({ ordem, onClose, onSuccess }: ConfirmarEntregaCobrancaModalProps) {

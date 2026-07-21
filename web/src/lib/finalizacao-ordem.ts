@@ -34,7 +34,7 @@ export async function garantirEfeitosFinalizacao(
   }
 
   if (ordem.contasReceber.length === 0) {
-    const vencimento = new Date(finalizadaEm.getFullYear(), finalizadaEm.getMonth() + 1, 15)
+    const vencimento = new Date(finalizadaEm.getFullYear(), finalizadaEm.getMonth(), finalizadaEm.getDate())
     await tx.contaReceber.create({
       data: {
         ordemId,
