@@ -45,7 +45,7 @@ export async function concluirEtapaClinica(ordemId: number) {
             clienteNome: ordem.clienteNome,
             valor: ordem.valorFinal,
             dataCompetencia: agora,
-            dataVencimento: new Date(agora.getFullYear(), agora.getMonth() + 1, 15),
+            dataVencimento: new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()),
             status: 'Pendente',
             observacoes: `Gerado automaticamente na entrega clínica da OS #${ordemId}`,
           },
