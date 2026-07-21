@@ -17,13 +17,13 @@ import { EditarOrdemModal } from '@/components/ordens/editar-ordem-modal'
 import { formatDate, formatCurrency } from '@/lib/date-utils'
 import { etapaLabel, FLUXOS_PROTESE, getWorkflowLabel, isTipoProtese } from '@/lib/workflow-config'
 import { WorkflowModal } from '@/components/ordens/workflow-modal'
-import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
 import { ReasonModal } from '@/components/ui/reason-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { NotaEntrega } from '@/components/ordens/nota-entrega'
+import { ConfirmarEntregaCobrancaModal } from '@/components/ordens/confirmar-entrega-cobranca-modal'
 import { gerarNotificacaoWhatsApp } from '@/actions/notificacoes'
-import { cancelarOrdem, getOrdemById, marcarEntregue, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
+import { cancelarOrdem, getOrdemById, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
 import {
   Search,
   Eye,
@@ -269,35 +269,24 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     setOrdemParaEntregar(ordem)
   }
 
-  const confirmarEntrega = async () => {
+  const concluirEntrega = (cobranca: { contaId: number; valor: number; vencimento: string; status: string }) => {
     if (!ordemParaEntregar) return
-    setActionLoading(true)
-    try {
-      const result = await marcarEntregue(ordemParaEntregar.id)
-      if (!result.success) {
-        toast.error(result.error || 'Não foi possível marcar a ordem como entregue.')
-        return
-      }
-      const ordem = ordemParaEntregar
-      setOrdemParaEntregar(null)
-      toast.success('Entrega confirmada.')
-      setNotaEntregaDados({
-        id: ordem.id,
-        paciente: ordem.paciente,
-        cliente: { nome: ordem.cliente.nome },
-        servico: ordem.servico,
-        valor: ordem.valor,
-        dataEntrega: new Date().toISOString(),
-      })
-      setTimeout(() => {
-        handlePrintNotaEntrega()
-      }, 100)
-      router.refresh()
-    } catch {
-      toast.error('Não foi possível marcar a ordem como entregue.')
-    } finally {
-      setActionLoading(false)
-    }
+    const ordem = ordemParaEntregar
+    setOrdemParaEntregar(null)
+    toast.success('Entrega confirmada e cobrança sincronizada com o financeiro.')
+    setNotaEntregaDados({
+      id: ordem.id,
+      paciente: ordem.paciente,
+      cliente: { nome: ordem.cliente.nome },
+      servico: ordem.servico,
+      valor: cobranca.valor,
+      dataEntrega: new Date().toISOString(),
+      vencimento: cobranca.vencimento,
+      contaId: cobranca.contaId,
+      status: cobranca.status,
+    })
+    setTimeout(() => handlePrintNotaEntrega(), 100)
+    router.refresh()
   }
 
   return (
@@ -313,15 +302,14 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
         confirmLabel="Cancelar ordem"
         loading={actionLoading}
       />
-      <ConfirmActionModal
-        isOpen={ordemParaEntregar !== null}
-        onClose={() => setOrdemParaEntregar(null)}
-        onConfirm={confirmarEntrega}
-        title="Confirmar entrega"
-        description={ordemParaEntregar ? `Confirma a entrega da OS #${ordemParaEntregar.id} para ${ordemParaEntregar.paciente}?` : ''}
-        confirmLabel="Confirmar entrega"
-        loading={actionLoading}
-      />
+      {ordemParaEntregar && (
+        <ConfirmarEntregaCobrancaModal
+          key={ordemParaEntregar.id}
+          ordem={ordemParaEntregar}
+          onClose={() => setOrdemParaEntregar(null)}
+          onSuccess={concluirEntrega}
+        />
+      )}
       {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
