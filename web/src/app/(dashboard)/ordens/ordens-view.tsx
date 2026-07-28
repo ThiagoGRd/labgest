@@ -20,8 +20,8 @@ import { WorkflowModal } from '@/components/ordens/workflow-modal'
 import { ReasonModal } from '@/components/ui/reason-modal'
 import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
-import { NotaEntrega } from '@/components/ordens/nota-entrega'
 import { ConfirmarEntregaCobrancaModal } from '@/components/ordens/confirmar-entrega-cobranca-modal'
+import { ComprovanteEntregaModal, type ComprovanteEntregaModalProps } from '@/components/ordens/comprovante-entrega-modal'
 import { gerarNotificacaoWhatsApp } from '@/actions/notificacoes'
 import { cancelarOrdem, getOrdemById, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
 import {
@@ -60,7 +60,7 @@ type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
 type BadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
 type DadosFicha = ComponentProps<typeof FichaImpressao>['ordem']
 type DadosEtiqueta = ComponentProps<typeof EtiquetaImpressao>['ordem']
-type DadosNotaEntrega = ComponentProps<typeof NotaEntrega>['ordem']
+type DadosNotaEntrega = ComprovanteEntregaModalProps['ordem']
 type DadosWorkflow = ComponentProps<typeof WorkflowModal>['ordem']
 
 interface OrdensViewProps {
@@ -153,7 +153,6 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
-  const notaEntregaRef = useRef<HTMLDivElement>(null)
   const [notaEntregaDados, setNotaEntregaDados] = useState<DadosNotaEntrega | null>(null)
 
   useEffect(() => {
@@ -166,10 +165,6 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
 
   const handlePrintEtiqueta = useReactToPrint({
     contentRef: etiquetaRef,
-  })
-
-  const handlePrintNotaEntrega = useReactToPrint({
-    contentRef: notaEntregaRef,
   })
 
   const onPrintEtiquetaClick = (ordem: Ordem) => {
@@ -269,7 +264,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     setOrdemParaEntregar(ordem)
   }
 
-  const concluirEntrega = (cobranca: { contaId: number; valor: number; vencimento: string; status: string }) => {
+  const concluirEntrega = (cobranca: { contaId: number; valor: number; vencimento: string; status: string; entregueEm: string }) => {
     if (!ordemParaEntregar) return
     const ordem = ordemParaEntregar
     setOrdemParaEntregar(null)
@@ -280,12 +275,11 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
       cliente: { nome: ordem.cliente.nome },
       servico: ordem.servico,
       valor: cobranca.valor,
-      dataEntrega: new Date().toISOString(),
+      dataEntrega: cobranca.entregueEm,
       vencimento: cobranca.vencimento,
       contaId: cobranca.contaId,
       status: cobranca.status,
     })
-    setTimeout(() => handlePrintNotaEntrega(), 100)
     router.refresh()
   }
 
@@ -310,11 +304,16 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
           onSuccess={concluirEntrega}
         />
       )}
+      {notaEntregaDados && (
+        <ComprovanteEntregaModal
+          ordem={notaEntregaDados}
+          onClose={() => setNotaEntregaDados(null)}
+        />
+      )}
       {/* Hidden Print Components */}
       <div style={{ display: 'none' }}>
         {printOrdem && <FichaImpressao ref={componentRef} ordem={printOrdem} />}
         {printEtiqueta && <EtiquetaImpressao ref={etiquetaRef} ordem={printEtiqueta} />}
-        {notaEntregaDados && <NotaEntrega ref={notaEntregaRef} ordem={notaEntregaDados} />}
       </div>
 
       <NovaOrdemModal 

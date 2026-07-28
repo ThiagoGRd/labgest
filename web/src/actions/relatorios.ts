@@ -81,6 +81,98 @@ export async function getRelatorioFinanceiro() {
   }
 }
 
+export async function getRelatorioOrdensEntregues(mesInformado?: string) {
+  await requireUser()
+
+  const hoje = new Date()
+  const mesPadrao = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+  const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(mesInformado || '') ? mesInformado! : mesPadrao
+  const [ano, numeroMes] = mes.split('-').map(Number)
+  const proximoMes = numeroMes === 12
+    ? { ano: ano + 1, mes: 1 }
+    : { ano, mes: numeroMes + 1 }
+
+  // Entregas atuais são timestamps; datas legadas são campos DATE sem horário.
+  const inicioReal = new Date(`${mes}-01T00:00:00-03:00`)
+  const fimReal = new Date(`${proximoMes.ano}-${String(proximoMes.mes).padStart(2, '0')}-01T00:00:00-03:00`)
+  const inicioLegado = new Date(Date.UTC(ano, numeroMes - 1, 1))
+  const fimLegado = new Date(Date.UTC(proximoMes.ano, proximoMes.mes - 1, 1))
+  const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(inicioLegado)
+
+  try {
+    const ordens = await prisma.ordem.findMany({
+      where: {
+        status: 'Entregue',
+        canceladoEm: null,
+        OR: [
+          { dataEntregaReal: { gte: inicioReal, lt: fimReal } },
+          {
+            dataEntregaReal: null,
+            dataFinalizacao: { gte: inicioLegado, lt: fimLegado },
+          },
+          {
+            dataEntregaReal: null,
+            dataFinalizacao: null,
+            dataEntrega: { gte: inicioLegado, lt: fimLegado },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        nomePaciente: true,
+        clienteNome: true,
+        servicoNome: true,
+        valorFinal: true,
+        dataEntregaReal: true,
+        dataFinalizacao: true,
+        dataEntrega: true,
+        contasReceber: {
+          where: { canceladoEm: null },
+          orderBy: { id: 'desc' },
+          take: 1,
+          select: { id: true, status: true },
+        },
+      },
+    })
+
+    const itens = ordens.map((ordem) => {
+      const origemData = ordem.dataEntregaReal
+        ? 'Entrega confirmada'
+        : ordem.dataFinalizacao
+          ? 'Finalização legada'
+          : 'Previsão legada'
+      const dataEntrega = ordem.dataEntregaReal || ordem.dataFinalizacao || ordem.dataEntrega
+      const cobranca = ordem.contasReceber[0]
+
+      return {
+        id: ordem.id,
+        paciente: ordem.nomePaciente,
+        cliente: ordem.clienteNome,
+        servico: ordem.servicoNome,
+        valor: Number(ordem.valorFinal),
+        dataEntrega: dataEntrega.toISOString(),
+        origemData,
+        contaId: cobranca?.id || null,
+        statusFinanceiro: cobranca?.status || 'Sem lançamento',
+      }
+    }).sort((a, b) => a.dataEntrega.localeCompare(b.dataEntrega) || a.id - b.id)
+
+    return {
+      mes,
+      mesLabel,
+      itens,
+      totalOrdens: itens.length,
+      valorTotal: itens.reduce((total, item) => total + item.valor, 0),
+      comCobranca: itens.filter(item => item.contaId !== null).length,
+      semCobranca: itens.filter(item => item.contaId === null).length,
+    }
+  } catch (error) {
+    console.error('Erro no relatório de ordens entregues:', error)
+    return { mes, mesLabel, itens: [], totalOrdens: 0, valorTotal: 0, comCobranca: 0, semCobranca: 0 }
+  }
+}
+
 export async function gerarRelatorioIA(userQuery?: string) {
   await requireUser()
 
