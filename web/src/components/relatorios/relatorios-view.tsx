@@ -1,17 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState, useTransition } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { gerarRelatorioIA } from '@/actions/relatorios'
+import { RelatorioOrdensEntregues, type RelatorioOrdensEntreguesData } from '@/components/relatorios/relatorio-ordens-entregues'
 import {
+  CalendarDays,
+  FileText,
   Sparkles,
   Send,
   Loader2,
   Lightbulb,
+  Printer,
 } from 'lucide-react'
 import { 
   BarChart, 
@@ -53,10 +59,32 @@ interface CustomTooltipProps {
   label?: string
 }
 
-export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
+interface RelatoriosViewProps {
+  financeiro: FinancialData
+  ordensEntregues: RelatorioOrdensEntreguesData
+}
+
+export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const relatorioRef = useRef<HTMLDivElement>(null)
+  const [isChangingMonth, startMonthTransition] = useTransition()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const imprimirOrdensEntregues = useReactToPrint({
+    contentRef: relatorioRef,
+    documentTitle: `ordens-entregues-${ordensEntregues.mes}`,
+  })
+
+  const selecionarMes = (mes: string) => {
+    if (!mes) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('mes', mes)
+    startMonthTransition(() => router.push(`${pathname}?${params.toString()}`))
+  }
 
   const handleSend = async (query?: string) => {
     const messageText = query || input
@@ -108,6 +136,52 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
         
         {/* Coluna 1 e 2: Dashboards Visuais */}
         <div className="lg:col-span-2 space-y-8 overflow-y-auto pr-2 custom-scrollbar">
+          <Card className="overflow-hidden border-indigo-200/70 dark:border-indigo-500/20">
+            <CardHeader className="border-b border-black/5 pb-5 dark:border-white/5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <FileText className="h-5 w-5 text-indigo-600" />
+                    Ordens entregues por mês
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-slate-500">Relatório operacional com conferência do lançamento financeiro.</p>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <label className="relative">
+                    <span className="sr-only">Mês das entregas</span>
+                    <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="month"
+                      value={ordensEntregues.mes}
+                      onChange={(event) => selecionarMes(event.target.value)}
+                      className="w-full pl-9 sm:w-44"
+                    />
+                  </label>
+                  <Button
+                    onClick={() => imprimirOrdensEntregues()}
+                    disabled={isChangingMonth}
+                  >
+                    {isChangingMonth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                    {isChangingMonth ? 'Carregando...' : 'Gerar relatório'}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 pt-5 sm:grid-cols-3">
+              <div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-500/10">
+                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Entregas</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.totalOrdens}</p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Valor das ordens</p>
+                <p className="mt-1 text-2xl font-bold">{formatCurrency(ordensEntregues.valorTotal)}</p>
+              </div>
+              <div className={`rounded-xl p-4 ${ordensEntregues.semCobranca > 0 ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-slate-50 dark:bg-white/5'}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Sem financeiro</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.semCobranca}</p>
+              </div>
+            </CardContent>
+          </Card>
           
           {/* Gráfico Principal */}
           <Card className="overflow-hidden">
@@ -251,6 +325,10 @@ export function RelatoriosView({ financeiro }: { financeiro: FinancialData }) {
           </div>
         </div>
 
+      </div>
+
+      <div className="fixed left-[-10000px] top-0 bg-white">
+        <RelatorioOrdensEntregues ref={relatorioRef} dados={ordensEntregues} />
       </div>
     </DashboardLayout>
   )

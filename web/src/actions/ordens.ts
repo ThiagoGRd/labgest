@@ -678,6 +678,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
         valor: Number(conta.valor),
         vencimento: conta.dataVencimento.toISOString(),
         status: conta.status || 'Pendente',
+        entregueEm: agora.toISOString(),
       }
     })
 
