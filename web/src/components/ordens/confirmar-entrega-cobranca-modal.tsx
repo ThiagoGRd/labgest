@@ -27,7 +27,7 @@ interface OrdemEntrega {
 interface ConfirmarEntregaCobrancaModalProps {
   ordem: OrdemEntrega
   onClose: () => void
-  onSuccess: (cobranca: { contaId: number; valor: number; vencimento: string; status: string }) => void
+  onSuccess: (cobranca: { contaId: number; valor: number; vencimento: string; status: string; entregueEm: string }) => void
 }
 
 function dataInput(data: Date) {
