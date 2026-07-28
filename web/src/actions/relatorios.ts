@@ -99,6 +99,14 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
   const fimLegado = new Date(Date.UTC(proximoMes.ano, proximoMes.mes - 1, 1))
   const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(inicioLegado)
+  const partesHoje = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Maceio',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(hoje)
+  const valorParte = (tipo: Intl.DateTimeFormatPartTypes) => partesHoje.find(parte => parte.type === tipo)?.value || ''
+  const hojeMaceio = `${valorParte('year')}-${valorParte('month')}-${valorParte('day')}`
 
   try {
     const ordens = await prisma.ordem.findMany({
@@ -131,7 +139,13 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
           where: { canceladoEm: null },
           orderBy: { id: 'desc' },
           take: 1,
-          select: { id: true, status: true },
+          select: {
+            id: true,
+            status: true,
+            valor: true,
+            valorRecebido: true,
+            dataVencimento: true,
+          },
         },
       },
     })
@@ -144,6 +158,16 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
           : 'Previsão legada'
       const dataEntrega = ordem.dataEntregaReal || ordem.dataFinalizacao || ordem.dataEntrega
       const cobranca = ordem.contasReceber[0]
+      const cobrancaQuitada = Boolean(cobranca) && (
+        cobranca.status === 'Recebido' || Number(cobranca.valorRecebido) >= Number(cobranca.valor)
+      )
+      const cobrancaVencida = Boolean(cobranca?.dataVencimento) &&
+        cobranca!.dataVencimento.toISOString().slice(0, 10) < hojeMaceio
+      const situacaoFinanceira: 'Recebida' | 'Pendente' | 'Vencida' = cobrancaQuitada
+        ? 'Recebida'
+        : cobrancaVencida
+          ? 'Vencida'
+          : 'Pendente'
 
       return {
         id: ordem.id,
@@ -155,8 +179,26 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
         origemData,
         contaId: cobranca?.id || null,
         statusFinanceiro: cobranca?.status || 'Sem lançamento',
+        situacaoFinanceira,
+        dataVencimento: cobranca?.dataVencimento.toISOString() || null,
+        valorRecebido: Number(cobranca?.valorRecebido || 0),
       }
     }).sort((a, b) => a.dataEntrega.localeCompare(b.dataEntrega) || a.id - b.id)
+
+    const resumoFinanceiro = itens.reduce((resumo, item) => {
+      const grupo = item.situacaoFinanceira === 'Recebida'
+        ? resumo.recebidas
+        : item.situacaoFinanceira === 'Vencida'
+          ? resumo.vencidas
+          : resumo.pendentes
+      grupo.quantidade += 1
+      grupo.valor += item.valor
+      return resumo
+    }, {
+      recebidas: { quantidade: 0, valor: 0 },
+      pendentes: { quantidade: 0, valor: 0 },
+      vencidas: { quantidade: 0, valor: 0 },
+    })
 
     return {
       mes,
@@ -166,10 +208,24 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
       valorTotal: itens.reduce((total, item) => total + item.valor, 0),
       comCobranca: itens.filter(item => item.contaId !== null).length,
       semCobranca: itens.filter(item => item.contaId === null).length,
+      resumoFinanceiro,
     }
   } catch (error) {
     console.error('Erro no relatório de ordens entregues:', error)
-    return { mes, mesLabel, itens: [], totalOrdens: 0, valorTotal: 0, comCobranca: 0, semCobranca: 0 }
+    return {
+      mes,
+      mesLabel,
+      itens: [],
+      totalOrdens: 0,
+      valorTotal: 0,
+      comCobranca: 0,
+      semCobranca: 0,
+      resumoFinanceiro: {
+        recebidas: { quantidade: 0, valor: 0 },
+        pendentes: { quantidade: 0, valor: 0 },
+        vencidas: { quantidade: 0, valor: 0 },
+      },
+    }
   }
 }
 

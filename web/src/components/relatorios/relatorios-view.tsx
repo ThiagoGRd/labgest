@@ -167,18 +167,22 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="grid gap-3 pt-5 sm:grid-cols-3">
+            <CardContent className="grid gap-3 pt-5 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-500/10">
                 <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Entregas</p>
-                <p className="mt-1 text-2xl font-bold">{ordensEntregues.totalOrdens}</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.totalOrdens}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.valorTotal)}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Valor das ordens</p>
-                <p className="mt-1 text-2xl font-bold">{formatCurrency(ordensEntregues.valorTotal)}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Recebidas</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.resumoFinanceiro.recebidas.quantidade}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.resumoFinanceiro.recebidas.valor)}</p>
               </div>
-              <div className={`rounded-xl p-4 ${ordensEntregues.semCobranca > 0 ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-slate-50 dark:bg-white/5'}`}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Sem financeiro</p>
-                <p className="mt-1 text-2xl font-bold">{ordensEntregues.semCobranca}</p>
+              <div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-500/10">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Pendentes</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.resumoFinanceiro.pendentes.quantidade}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.resumoFinanceiro.pendentes.valor)}</p>
+              </div>
+              <div className="rounded-xl bg-red-50 p-4 dark:bg-red-500/10">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Vencidas</p>
+                <p className="mt-1 text-2xl font-bold">{ordensEntregues.resumoFinanceiro.vencidas.quantidade}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.resumoFinanceiro.vencidas.valor)}</p>
               </div>
             </CardContent>
           </Card>
