@@ -10,6 +10,9 @@ export interface OrdemEntregueRelatorio {
   origemData: string
   contaId: number | null
   statusFinanceiro: string
+  situacaoFinanceira: 'Recebida' | 'Pendente' | 'Vencida'
+  dataVencimento: string | null
+  valorRecebido: number
 }
 
 export interface RelatorioOrdensEntreguesData {
@@ -20,6 +23,16 @@ export interface RelatorioOrdensEntreguesData {
   valorTotal: number
   comCobranca: number
   semCobranca: number
+  resumoFinanceiro: {
+    recebidas: ResumoSituacao
+    pendentes: ResumoSituacao
+    vencidas: ResumoSituacao
+  }
+}
+
+interface ResumoSituacao {
+  quantidade: number
+  valor: number
 }
 
 function moeda(valor: number) {
@@ -48,47 +61,24 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       </header>
 
       <section className="my-5 grid grid-cols-3 gap-3">
-        <Resumo label="Ordens entregues" valor={String(dados.totalOrdens)} />
-        <Resumo label="Valor total" valor={moeda(dados.valorTotal)} />
-        <Resumo label="Sem lançamento financeiro" valor={String(dados.semCobranca)} destaque={dados.semCobranca > 0} />
+        <Resumo label="Recebidas" dados={dados.resumoFinanceiro.recebidas} tom="recebida" />
+        <Resumo label="Pendentes" dados={dados.resumoFinanceiro.pendentes} tom="pendente" />
+        <Resumo label="Vencidas" dados={dados.resumoFinanceiro.vencidas} tom="vencida" />
       </section>
 
-      <table className="w-full border-collapse text-[10px]">
-        <thead>
-          <tr className="bg-slate-900 text-left text-white">
-            <th className="p-2">OS</th>
-            <th className="p-2">Entrega</th>
-            <th className="p-2">Paciente</th>
-            <th className="p-2">Dentista / clínica</th>
-            <th className="p-2">Serviço</th>
-            <th className="p-2 text-right">Valor</th>
-            <th className="p-2">Financeiro</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dados.itens.map((item) => (
-            <tr key={item.id} className="border-b border-slate-200 align-top">
-              <td className="p-2 font-bold">#{item.id}</td>
-              <td className="p-2">
-                {dataRelatorio(item.dataEntrega, item.origemData)}
-                {item.origemData !== 'Entrega confirmada' && <span className="ml-0.5">*</span>}
-              </td>
-              <td className="p-2 font-semibold">{item.paciente}</td>
-              <td className="p-2">{item.cliente}</td>
-              <td className="p-2">{item.servico}</td>
-              <td className="p-2 text-right font-semibold">{moeda(item.valor)}</td>
-              <td className="p-2">{item.contaId ? `#${item.contaId} · ${item.statusFinanceiro}` : 'Sem lançamento'}</td>
-            </tr>
-          ))}
-          {dados.itens.length === 0 && (
-            <tr><td colSpan={7} className="p-10 text-center text-sm text-slate-500">Nenhuma ordem entregue neste mês.</td></tr>
-          )}
-        </tbody>
-      </table>
+      {dados.itens.length === 0 ? (
+        <p className="p-10 text-center text-sm text-slate-500">Nenhuma ordem entregue neste mês.</p>
+      ) : (
+        <div className="space-y-6">
+          <GrupoOrdens titulo="Recebidas" situacao="Recebida" itens={dados.itens} />
+          <GrupoOrdens titulo="Pendentes" situacao="Pendente" itens={dados.itens} />
+          <GrupoOrdens titulo="Vencidas" situacao="Vencida" itens={dados.itens} />
+        </div>
+      )}
 
       <footer className="mt-6 border-t border-slate-300 pt-3 text-[9px] leading-relaxed text-slate-500">
         <p>* Registro histórico sem data de entrega confirmada; foi utilizada a data de finalização ou, quando indisponível, a previsão de entrega.</p>
-        <p className="mt-1">O total representa o valor final das ordens e não confirma recebimento. A situação de cobrança está indicada na coluna Financeiro.</p>
+        <p className="mt-1">Ordens sem lançamento financeiro são exibidas em Pendentes. Cobranças parciais são pendentes ou vencidas conforme a data de vencimento.</p>
       </footer>
     </div>
   )
@@ -96,11 +86,53 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
 
 RelatorioOrdensEntregues.displayName = 'RelatorioOrdensEntregues'
 
-function Resumo({ label, valor, destaque = false }: { label: string; valor: string; destaque?: boolean }) {
+function Resumo({ label, dados, tom }: { label: string; dados: ResumoSituacao; tom: 'recebida' | 'pendente' | 'vencida' }) {
+  const estilos = {
+    recebida: 'border-emerald-300 bg-emerald-50',
+    pendente: 'border-amber-300 bg-amber-50',
+    vencida: 'border-red-300 bg-red-50',
+  }
   return (
-    <div className={`rounded border p-3 ${destaque ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+    <div className={`rounded border p-3 ${estilos[tom]}`}>
       <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-bold">{valor}</p>
+      <p className="mt-1 text-lg font-bold">{dados.quantidade}</p>
+      <p className="text-[10px] font-semibold text-slate-600">{moeda(dados.valor)}</p>
     </div>
+  )
+}
+
+function GrupoOrdens({ titulo, situacao, itens }: { titulo: string; situacao: OrdemEntregueRelatorio['situacaoFinanceira']; itens: OrdemEntregueRelatorio[] }) {
+  const ordens = itens.filter(item => item.situacaoFinanceira === situacao)
+  if (ordens.length === 0) return null
+
+  return (
+    <section className="break-inside-avoid">
+      <div className="mb-2 flex items-center justify-between border-b border-slate-400 pb-1">
+        <h2 className="text-sm font-bold uppercase tracking-wide">{titulo}</h2>
+        <p className="text-[10px] font-semibold">{ordens.length} ordem(ns) · {moeda(ordens.reduce((total, item) => total + item.valor, 0))}</p>
+      </div>
+      <table className="w-full border-collapse text-[9px]">
+        <thead>
+          <tr className="bg-slate-900 text-left text-white">
+            <th className="p-1.5">OS</th><th className="p-1.5">Entrega</th><th className="p-1.5">Paciente</th>
+            <th className="p-1.5">Dentista / clínica</th><th className="p-1.5">Serviço</th>
+            <th className="p-1.5">Vencimento</th><th className="p-1.5 text-right">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordens.map(item => (
+            <tr key={item.id} className="border-b border-slate-200 align-top">
+              <td className="p-1.5 font-bold">#{item.id}</td>
+              <td className="p-1.5">{dataRelatorio(item.dataEntrega, item.origemData)}{item.origemData !== 'Entrega confirmada' && '*'}</td>
+              <td className="p-1.5 font-semibold">{item.paciente}</td>
+              <td className="p-1.5">{item.cliente}</td>
+              <td className="p-1.5">{item.servico}</td>
+              <td className="p-1.5">{item.dataVencimento ? new Date(item.dataVencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem lançamento'}</td>
+              <td className="p-1.5 text-right font-semibold">{moeda(item.valor)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
