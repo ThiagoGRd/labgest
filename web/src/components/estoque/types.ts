@@ -35,4 +35,5 @@ export interface MovimentacaoEstoque {
 export interface GestaoEstoqueData {
   itens: ItemEstoque[]
   movimentacoes: MovimentacaoEstoque[]
+  emitidoEm: string
 }
