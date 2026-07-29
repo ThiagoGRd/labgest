@@ -142,9 +142,9 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl">
                     <FileText className="h-5 w-5 text-indigo-600" />
-                    Ordens entregues por mês
+                    Ordens finalizadas ou entregues por mês
                   </CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">Relatório operacional com conferência do lançamento financeiro.</p>
+                  <p className="mt-1 text-sm text-slate-500">Competência do trabalho separada da movimentação de caixa.</p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   <label className="relative">
@@ -169,7 +169,7 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
             </CardHeader>
             <CardContent className="grid gap-3 pt-5 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-500/10">
-                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Entregas</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Finalizadas / entregues</p>
                 <p className="mt-1 text-2xl font-bold">{ordensEntregues.totalOrdens}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.valorTotal)}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10">

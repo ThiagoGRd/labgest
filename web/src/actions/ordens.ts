@@ -2,6 +2,7 @@
 
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
+import { calcularPrecoServico } from '@labgest/shared'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin, requireUser } from '@/lib/auth-utils'
 import { gerarCobrancaAutomatica } from './financeiro'
@@ -217,7 +218,7 @@ export async function createBatchOrdens(data: {
 
     const operacoes = data.itens.map((item) => {
       const servico = servicosPorId.get(Number(item.servicoId))!
-      const valor = Number(servico.preco)
+      const valor = calcularPrecoServico(servico.nome, Number(servico.preco), item.elementos).valorTotal
       const tipoProtese = isTipoProtese(item.tipoProtese)
         ? item.tipoProtese
         : isTipoProtese(servico.tipoWorkflow)

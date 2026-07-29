@@ -142,9 +142,9 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const inicio = new Date(ano, mes - 1, 1)
   const fim = new Date(ano, mes, 0, 23, 59, 59)
 
-  const [receber, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, vencidasGlobais] = await Promise.all([
+  const [receber, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar] = await Promise.all([
     prisma.contaReceber.findMany({
-      where: { dataVencimento: { gte: inicio, lte: fim } },
+      where: { dataCompetencia: { gte: inicio, lte: fim } },
       include: { cliente: { select: { nome: true } }, ordem: { select: { nomePaciente: true, servicoNome: true } } },
       orderBy: [{ status: 'asc' }, { dataVencimento: 'asc' }],
     }),
@@ -163,12 +163,8 @@ export async function getFinanceiroPageData(filtroMes?: string) {
     }),
     prisma.contaFinanceira.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' } }),
     prisma.cliente.findMany({ where: { ativo: true }, select: { id: true, nome: true }, orderBy: { nome: 'asc' } }),
-    prisma.contaReceber.findMany({ select: { dataVencimento: true } }),
+    prisma.contaReceber.findMany({ select: { dataCompetencia: true, dataVencimento: true } }),
     prisma.contaPagar.findMany({ select: { dataVencimento: true } }),
-    prisma.contaReceber.findMany({
-      where: { dataVencimento: { lt: inicioDoDia() }, status: { notIn: ['Recebido', 'Cancelado'] } },
-      select: { valor: true, valorRecebido: true },
-    }),
   ])
 
   const contasReceber = receber.map((conta) => {
@@ -217,13 +213,21 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const entradas = movimentacoes.filter((m) => m.tipo === 'Entrada').reduce((s, m) => s + Number(m.valor), 0)
   const saidas = movimentacoes.filter((m) => m.tipo === 'Saida').reduce((s, m) => s + Number(m.valor), 0)
   const previstoReceber = contasReceber.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
+  const totalReceberCompetencia = contasReceber.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.valor, 0)
+  const recebidoCompetencia = contasReceber.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.liquidado, 0)
   const previstoPagar = contasPagar.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
-  const vencidoReceber = vencidasGlobais.reduce((s, c) => s + Math.max(0, Number(c.valor) - Number(c.valorRecebido)), 0)
+  const contasVencidasCompetencia = contasReceber.filter((c) => c.status.includes('Vencido') || c.status.includes('atrasado'))
+  const vencidoReceber = contasVencidasCompetencia.reduce((s, c) => s + c.restante, 0)
   const resultadoProjetado = entradas - saidas + previstoReceber - previstoPagar
 
   const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
-  for (const conta of [...mesesReceber, ...mesesPagar]) {
-    meses.add(`${conta.dataVencimento.getFullYear()}-${String(conta.dataVencimento.getMonth() + 1).padStart(2, '0')}`)
+  for (const conta of mesesReceber) {
+    const dataPeriodo = conta.dataCompetencia || conta.dataVencimento
+    meses.add(`${dataPeriodo.getFullYear()}-${String(dataPeriodo.getMonth() + 1).padStart(2, '0')}`)
+  }
+  for (const conta of mesesPagar) {
+    const dataPeriodo = conta.dataVencimento
+    meses.add(`${dataPeriodo.getFullYear()}-${String(dataPeriodo.getMonth() + 1).padStart(2, '0')}`)
   }
 
   return {
@@ -246,11 +250,13 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       entradas,
       saidas,
       resultadoRealizado: entradas - saidas,
+      totalReceberCompetencia,
+      recebidoCompetencia,
       previstoReceber,
       previstoPagar,
       resultadoProjetado,
       vencidoReceber,
-      quantidadeVencidas: vencidasGlobais.length,
+      quantidadeVencidas: contasVencidasCompetencia.length,
     },
     mesesDisponiveis: Array.from(meses).sort().reverse(),
   }

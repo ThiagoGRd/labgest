@@ -10,6 +10,7 @@ import { createBatchOrdens } from '@/actions/ordens'
 import { addDaysSkippingSundays, toDateInputValue } from '@/lib/date-utils'
 import { formatarCpf } from '@/lib/cpf'
 import { FLUXOS_PROTESE, TIPOS_PROTESE, inferirTipoProtese } from '@/lib/workflow-config'
+import { calcularPrecoServico } from '@labgest/shared'
 
 interface NovaOrdemModalProps {
   isOpen: boolean
@@ -63,19 +64,21 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
   const handleAddItem = () => {
     if (!currentItem.servicoId) return
     const servico = servicos.find(s => s.id.toString() === currentItem.servicoId)
+    if (!servico) return
+    const preco = calcularPrecoServico(servico.nome, servico.preco, currentItem.elementos).valorTotal
     
     setItens(prev => [
       ...prev,
       {
         id: Math.random().toString(36).substr(2, 9),
         servicoId: currentItem.servicoId,
-        servicoNome: servico?.nome || '',
+        servicoNome: servico.nome,
         elementos: currentItem.elementos,
         corDentes: currentItem.corDentes,
         material: currentItem.material,
         arcadas: currentItem.arcadas,
         tipoProtese: currentItem.tipoProtese,
-        preco: servico?.preco || 0
+        preco
       }
     ])
 

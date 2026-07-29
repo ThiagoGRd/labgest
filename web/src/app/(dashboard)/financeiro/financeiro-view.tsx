@@ -52,6 +52,7 @@ interface FinanceiroData {
   movimentacoes: Array<{ id: number; tipo: string; valor: number; data: string; descricao: string; pessoa: string; conta: string; formaPagamento: string }>
   resumo: {
     entradas: number; saidas: number; resultadoRealizado: number
+    totalReceberCompetencia: number; recebidoCompetencia: number
     previstoReceber: number; previstoPagar: number; resultadoProjetado: number
     vencidoReceber: number; quantidadeVencidas: number
   }
@@ -103,7 +104,6 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
   const receberFiltrado = filtrar(dados.receber)
   const pagarFiltrado = filtrar(dados.pagar)
   const taxaInadimplencia = dados.resumo.previstoReceber > 0 ? (dados.resumo.vencidoReceber / dados.resumo.previstoReceber) * 100 : 0
-  const recebimentoPeriodo = dados.receber.reduce((s, c) => s + c.liquidado, 0)
   const ticketMedio = dados.receber.length ? dados.receber.reduce((s, c) => s + c.valor, 0) / dados.receber.length : 0
 
   async function confirmarCancelamento(motivo: string) {
@@ -149,15 +149,16 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
           <div className="overflow-x-auto pb-1"><TabsList className="min-w-max">{tabItems.map((item) => <TabsTrigger key={item.value} value={item.value} className="px-4"><span className="hidden sm:inline">{item.label}</span><span className="sm:hidden">{item.short}</span></TabsTrigger>)}</TabsList></div>
 
           <TabsContent value="visao" className="space-y-6">
-            <section aria-label="Indicadores financeiros" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <MetricCard title="Resultado do mês" value={dados.resumo.resultadoRealizado} detail={`${formatCurrency(dados.resumo.entradas)} entradas • ${formatCurrency(dados.resumo.saidas)} saídas`} icon={TrendingUp} tone={dados.resumo.resultadoRealizado >= 0 ? 'green' : 'red'} />
-              <MetricCard title="Resultado projetado" value={dados.resumo.resultadoProjetado} detail="Resultado do período considerando os valores em aberto" icon={FileBarChart} tone={dados.resumo.resultadoProjetado >= 0 ? 'indigo' : 'red'} />
+            <section aria-label="Indicadores financeiros" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard title="A receber da competência" value={dados.resumo.previstoReceber} detail={`De ${formatCurrency(dados.resumo.totalReceberCompetencia)} gerados no período`} icon={CircleDollarSign} tone="indigo" />
+              <MetricCard title="Recebido da competência" value={dados.resumo.recebidoCompetencia} detail="Baixas vinculadas aos trabalhos deste período" icon={CheckCircle2} tone="green" />
+              <MetricCard title="Movimento de caixa" value={dados.resumo.resultadoRealizado} detail={`${formatCurrency(dados.resumo.entradas)} entradas • ${formatCurrency(dados.resumo.saidas)} saídas, independentemente da competência`} icon={TrendingUp} tone={dados.resumo.resultadoRealizado >= 0 ? 'green' : 'red'} />
               <MetricCard title="Recebimentos vencidos" value={dados.resumo.vencidoReceber} detail={`${dados.resumo.quantidadeVencidas} cobrança(s) exigem atenção`} icon={AlertTriangle} tone="red" />
             </section>
 
             <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
               <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Previsto × realizado</h2><p className="text-sm text-slate-500">Leitura do período selecionado</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
-                <FlowBlock title="Entradas" icon={ArrowUpRight} previsto={dados.resumo.previstoReceber + recebimentoPeriodo} realizado={dados.resumo.entradas} tone="emerald" />
+                <FlowBlock title="Recebíveis da competência" icon={ArrowUpRight} previsto={dados.resumo.totalReceberCompetencia} realizado={dados.resumo.recebidoCompetencia} tone="emerald" />
                 <FlowBlock title="Saídas" icon={ArrowDownRight} previsto={dados.resumo.previstoPagar + dados.resumo.saidas} realizado={dados.resumo.saidas} tone="red" />
               </CardContent></Card>
               <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Agenda financeira</h2><p className="text-sm text-slate-500">Prioridades por vencimento</p></div></CardHeader><CardContent className="space-y-3">
@@ -179,7 +180,7 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
 
           <TabsContent value="relatorios" className="space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><ReportCard title="Inadimplência" value={`${taxaInadimplencia.toFixed(1)}%`} description="Do saldo a receber está vencido" icon={AlertTriangle} /><ReportCard title="Ticket médio" value={formatCurrency(ticketMedio)} description="Por cobrança no período" icon={CircleDollarSign} /><ReportCard title="Resultado caixa" value={formatCurrency(dados.resumo.resultadoRealizado)} description="Entradas menos saídas realizadas" icon={FileBarChart} /><ReportCard title="Compromissos" value={formatCurrency(dados.resumo.previstoPagar)} description="Ainda a pagar no período" icon={CalendarDays} /></section>
-            <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Indicadores prontos para decisão</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita prevista" value={dados.resumo.previstoReceber + recebimentoPeriodo} /><SummaryLine label="Receita realizada" value={dados.resumo.entradas} /><SummaryLine label="Despesa prevista" value={dados.resumo.previstoPagar + dados.resumo.saidas} /><SummaryLine label="Despesa realizada" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Resultado projetado do período" value={dados.resumo.resultadoProjetado} /></CardContent></Card>
+            <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Competência e caixa apresentados separadamente</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita da competência" value={dados.resumo.totalReceberCompetencia} /><SummaryLine label="Recebido da competência" value={dados.resumo.recebidoCompetencia} /><SummaryLine label="Entradas de caixa no mês" value={dados.resumo.entradas} /><SummaryLine label="Saídas de caixa no mês" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Resultado projetado do período" value={dados.resumo.resultadoProjetado} /></CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>

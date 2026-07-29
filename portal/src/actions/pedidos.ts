@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
+import { calcularPrecoServico } from '@labgest/shared'
 import { revalidatePath } from 'next/cache'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
 import { calcularPrazoPasso, etapaLabel, getFluxoProtese, getWorkflowForServico, inferirTipoProtese, isTipoProtese, normalizarEtapa } from '@/lib/workflow-config'
@@ -107,6 +108,7 @@ export async function criarPedidoBatch(data: {
       })
 
       if (!servico) throw new Error(`Serviço ID ${item.servicoId} inválido`)
+      const valor = calcularPrecoServico(servico.nome, Number(servico.preco), item.elementos).valorTotal
 
       // Detectar workflow
       const tipoProtese = isTipoProtese(item.tipoProtese)
@@ -128,8 +130,8 @@ export async function criarPedidoBatch(data: {
           nomePaciente: data.paciente,
           cpfPaciente,
           dataEntrega: parseDateLocal(data.dataEntrega),
-          valor: servico.preco,
-          valorFinal: servico.preco,
+          valor,
+          valorFinal: valor,
           prioridade: 'Normal',
           corDentes: item.corDentes,
           elementos: item.elementos,

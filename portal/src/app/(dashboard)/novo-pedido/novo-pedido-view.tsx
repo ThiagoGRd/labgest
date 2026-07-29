@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { calcularPrecoServico } from '@labgest/shared'
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -146,6 +147,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     if (!currentItem.servicoId) return
     const servico = servicos.find((item) => item.id.toString() === currentItem.servicoId)
     if (!servico) return
+    const preco = calcularPrecoServico(servico.nome, servico.preco, currentItem.elementos).valorTotal
 
     setItens((prev) => [...prev, {
       id: crypto.randomUUID(),
@@ -155,7 +157,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
       corDentes: currentItem.corDentes,
       arcadas: currentItem.arcadas,
       tipoProtese: currentItem.tipoProtese,
-      preco: servico.preco,
+      preco,
     }])
 
     if (servico.tempoProducao) {

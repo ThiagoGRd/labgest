@@ -51,7 +51,7 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       <header className="flex items-end justify-between border-b-2 border-slate-900 pb-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-indigo-700">LabGest</p>
-          <h1 className="mt-1 text-2xl font-bold">Ordens entregues</h1>
+          <h1 className="mt-1 text-2xl font-bold">Ordens finalizadas ou entregues</h1>
           <p className="mt-1 text-sm capitalize text-slate-600">Competência: {dados.mesLabel}</p>
         </div>
         <p className="text-right text-xs text-slate-500">
@@ -77,7 +77,7 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       )}
 
       <footer className="mt-6 border-t border-slate-300 pt-3 text-[9px] leading-relaxed text-slate-500">
-        <p>* Registro histórico sem data de entrega confirmada; foi utilizada a data de finalização ou, quando indisponível, a previsão de entrega.</p>
+        <p>* Quando não existe data operacional histórica, é utilizada a competência financeira confirmada; a previsão de entrega nunca é tratada como entrega realizada.</p>
         <p className="mt-1">Ordens sem lançamento financeiro são exibidas em Pendentes. Cobranças parciais são pendentes ou vencidas conforme a data de vencimento.</p>
       </footer>
     </div>

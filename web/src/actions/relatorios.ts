@@ -92,9 +92,6 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
     ? { ano: ano + 1, mes: 1 }
     : { ano, mes: numeroMes + 1 }
 
-  // Entregas atuais são timestamps; datas legadas são campos DATE sem horário.
-  const inicioReal = new Date(`${mes}-01T00:00:00-03:00`)
-  const fimReal = new Date(`${proximoMes.ano}-${String(proximoMes.mes).padStart(2, '0')}-01T00:00:00-03:00`)
   const inicioLegado = new Date(Date.UTC(ano, numeroMes - 1, 1))
   const fimLegado = new Date(Date.UTC(proximoMes.ano, proximoMes.mes - 1, 1))
   const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -109,81 +106,79 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
   const hojeMaceio = `${valorParte('year')}-${valorParte('month')}-${valorParte('day')}`
 
   try {
-    const ordens = await prisma.ordem.findMany({
-      where: {
-        status: 'Entregue',
-        canceladoEm: null,
-        OR: [
-          { dataEntregaReal: { gte: inicioReal, lt: fimReal } },
-          {
-            dataEntregaReal: null,
-            dataFinalizacao: { gte: inicioLegado, lt: fimLegado },
-          },
-          {
-            dataEntregaReal: null,
-            dataFinalizacao: null,
-            dataEntrega: { gte: inicioLegado, lt: fimLegado },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        nomePaciente: true,
-        clienteNome: true,
-        servicoNome: true,
-        valorFinal: true,
-        dataEntregaReal: true,
-        dataFinalizacao: true,
-        dataEntrega: true,
-        contasReceber: {
-          where: { canceladoEm: null },
-          orderBy: { id: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            status: true,
-            valor: true,
-            valorRecebido: true,
-            dataVencimento: true,
-          },
+    const [contasCompetencia, ordensSemCobranca] = await Promise.all([
+      prisma.contaReceber.findMany({
+        where: {
+          dataCompetencia: { gte: inicioLegado, lt: fimLegado },
+          status: { not: 'Cancelado' },
+          ordem: { is: { status: { in: ['Finalizado', 'Entregue'] }, canceladoEm: null } },
         },
-      },
-    })
+        include: { ordem: true },
+        orderBy: [{ dataCompetencia: 'asc' }, { ordemId: 'asc' }],
+      }),
+      prisma.ordem.findMany({
+        where: {
+          status: { in: ['Finalizado', 'Entregue'] },
+          canceladoEm: null,
+          OR: [
+            { dataFinalizacao: { gte: inicioLegado, lt: fimLegado } },
+            { dataEntregaReal: { gte: inicioLegado, lt: fimLegado } },
+          ],
+          contasReceber: { none: { status: { not: 'Cancelado' } } },
+        },
+      }),
+    ])
 
-    const itens = ordens.map((ordem) => {
+    const itensComCobranca = contasCompetencia.flatMap((cobranca) => {
+      const ordem = cobranca.ordem
+      if (!ordem) return []
       const origemData = ordem.dataEntregaReal
         ? 'Entrega confirmada'
         : ordem.dataFinalizacao
-          ? 'Finalização legada'
-          : 'Previsão legada'
-      const dataEntrega = ordem.dataEntregaReal || ordem.dataFinalizacao || ordem.dataEntrega
-      const cobranca = ordem.contasReceber[0]
-      const cobrancaQuitada = Boolean(cobranca) && (
-        cobranca.status === 'Recebido' || Number(cobranca.valorRecebido) >= Number(cobranca.valor)
-      )
-      const cobrancaVencida = Boolean(cobranca?.dataVencimento) &&
-        cobranca!.dataVencimento.toISOString().slice(0, 10) < hojeMaceio
+          ? 'Finalização registrada'
+          : 'Competência financeira'
+      const dataEntrega = ordem.dataEntregaReal || ordem.dataFinalizacao || cobranca.dataCompetencia!
+      const cobrancaQuitada = cobranca.status === 'Recebido' || Number(cobranca.valorRecebido) >= Number(cobranca.valor)
+      const cobrancaVencida = cobranca.dataVencimento.toISOString().slice(0, 10) < hojeMaceio
       const situacaoFinanceira: 'Recebida' | 'Pendente' | 'Vencida' = cobrancaQuitada
         ? 'Recebida'
         : cobrancaVencida
           ? 'Vencida'
           : 'Pendente'
 
-      return {
+      return [{
         id: ordem.id,
         paciente: ordem.nomePaciente,
         cliente: ordem.clienteNome,
         servico: ordem.servicoNome,
-        valor: Number(ordem.valorFinal),
+        valor: Number(cobranca.valor),
         dataEntrega: dataEntrega.toISOString(),
         origemData,
-        contaId: cobranca?.id || null,
-        statusFinanceiro: cobranca?.status || 'Sem lançamento',
+        contaId: cobranca.id,
+        statusFinanceiro: cobranca.status || 'Pendente',
         situacaoFinanceira,
-        dataVencimento: cobranca?.dataVencimento.toISOString() || null,
-        valorRecebido: Number(cobranca?.valorRecebido || 0),
-      }
-    }).sort((a, b) => a.dataEntrega.localeCompare(b.dataEntrega) || a.id - b.id)
+        dataVencimento: cobranca.dataVencimento.toISOString(),
+        valorRecebido: Number(cobranca.valorRecebido),
+      }]
+    })
+
+    const itensSemCobranca = ordensSemCobranca.map((ordem) => ({
+      id: ordem.id,
+      paciente: ordem.nomePaciente,
+      cliente: ordem.clienteNome,
+      servico: ordem.servicoNome,
+      valor: Number(ordem.valorFinal),
+      dataEntrega: (ordem.dataEntregaReal || ordem.dataFinalizacao)!.toISOString(),
+      origemData: ordem.dataEntregaReal ? 'Entrega confirmada' : 'Finalização registrada',
+      contaId: null,
+      statusFinanceiro: 'Sem lançamento',
+      situacaoFinanceira: 'Pendente' as const,
+      dataVencimento: null,
+      valorRecebido: 0,
+    }))
+
+    const itens = [...itensComCobranca, ...itensSemCobranca]
+      .sort((a, b) => a.dataEntrega.localeCompare(b.dataEntrega) || a.id - b.id)
 
     const resumoFinanceiro = itens.reduce((resumo, item) => {
       const grupo = item.situacaoFinanceira === 'Recebida'
