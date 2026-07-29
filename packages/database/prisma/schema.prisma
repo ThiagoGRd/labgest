@@ -166,25 +166,49 @@ model ItemOrdem {
 }
 
 model Estoque {
-  id               Int       @id @default(autoincrement())
-  nome             String    @db.VarChar(255)
-  categoria        String    @db.VarChar(100)
-  quantidade       Decimal   @default(0) @db.Decimal(10, 3)
-  quantidadeMinima Decimal   @default(0) @map("quantidade_minima") @db.Decimal(10, 3)
-  unidade          String    @default("un") @db.VarChar(10)
-  precoUnitario    Decimal   @default(0.00) @map("preco_unitario") @db.Decimal(10, 2)
-  fornecedor       String?   @db.VarChar(255)
-  localizacao      String?   @db.VarChar(255)
-  dataValidade     DateTime? @map("data_validade") @db.Date
-  codigoBarras     String?   @map("codigo_barras") @db.VarChar(100)
-  dataCadastro     DateTime? @default(dbgenerated("CURRENT_DATE")) @map("data_cadastro") @db.Date
-  ativo            Boolean?  @default(true)
-  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  id               Int                   @id @default(autoincrement())
+  nome             String                @db.VarChar(255)
+  marca            String?               @db.VarChar(120)
+  categoria        String                @db.VarChar(100)
+  quantidade       Decimal               @default(0) @db.Decimal(10, 3)
+  quantidadeMinima Decimal               @default(0) @map("quantidade_minima") @db.Decimal(10, 3)
+  unidade          String                @default("un") @db.VarChar(10)
+  precoUnitario    Decimal               @default(0.00) @map("preco_unitario") @db.Decimal(10, 2)
+  fornecedor       String?               @db.VarChar(255)
+  localizacao      String?               @db.VarChar(255)
+  dataValidade     DateTime?             @map("data_validade") @db.Date
+  codigoBarras     String?               @map("codigo_barras") @db.VarChar(100)
+  dataCadastro     DateTime?             @default(dbgenerated("CURRENT_DATE")) @map("data_cadastro") @db.Date
+  ativo            Boolean?              @default(true)
+  createdAt        DateTime?             @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime?             @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  movimentacoes    MovimentacaoEstoque[]
 
   @@index([ativo], map: "idx_estoque_ativo")
   @@index([categoria], map: "idx_estoque_categoria")
   @@map("estoque")
+}
+
+model MovimentacaoEstoque {
+  id             Int      @id @default(autoincrement())
+  estoqueId      Int      @map("estoque_id")
+  tipo           String   @db.VarChar(20)
+  quantidade     Decimal  @db.Decimal(10, 3)
+  saldoAnterior  Decimal  @map("saldo_anterior") @db.Decimal(10, 3)
+  saldoPosterior Decimal  @map("saldo_posterior") @db.Decimal(10, 3)
+  valorUnitario  Decimal? @map("valor_unitario") @db.Decimal(10, 2)
+  motivo         String   @db.VarChar(255)
+  documento      String?  @db.VarChar(100)
+  ordemId        Int?     @map("ordem_id")
+  usuarioId      Int?     @map("usuario_id")
+  usuarioNome    String?  @map("usuario_nome") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  estoque        Estoque  @relation(fields: [estoqueId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([estoqueId, createdAt], map: "idx_movimentacoes_estoque_item_data")
+  @@index([tipo], map: "idx_movimentacoes_estoque_tipo")
+  @@index([createdAt], map: "idx_movimentacoes_estoque_data")
+  @@map("movimentacoes_estoque")
 }
 
 model Usuario {
