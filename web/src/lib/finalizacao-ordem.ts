@@ -25,9 +25,26 @@ export async function garantirEfeitosFinalizacao(
       : []
     for (const material of materiais) {
       if (material.id && material.quantidade) {
+        const item = await tx.estoque.findUnique({ where: { id: material.id } })
+        if (!item) continue
+        const saldoAnterior = Number(item.quantidade)
+        const saldoPosterior = saldoAnterior - material.quantidade
         await tx.estoque.update({
           where: { id: material.id },
-          data: { quantidade: { decrement: material.quantidade } },
+          data: { quantidade: saldoPosterior },
+        })
+        await tx.movimentacaoEstoque.create({
+          data: {
+            estoqueId: material.id,
+            tipo: 'Saída',
+            quantidade: material.quantidade,
+            saldoAnterior,
+            saldoPosterior,
+            valorUnitario: item.precoUnitario,
+            motivo: `Consumo automático da OS #${ordemId}`,
+            ordemId,
+            usuarioNome: 'Sistema',
+          },
         })
       }
     }
