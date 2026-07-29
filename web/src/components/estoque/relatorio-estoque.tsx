@@ -8,6 +8,7 @@ interface RelatorioEstoqueProps {
   itens: ItemEstoque[]
   movimentacoes: MovimentacaoEstoque[]
   periodo: string
+  emitidoEm: string
 }
 
 const moeda = (valor: number) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -15,16 +16,21 @@ const numero = (valor: number) => valor.toLocaleString('pt-BR', { maximumFractio
 const data = (valor: string) => new Date(valor).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 const dataHora = (valor: string) => new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Maceio' })
 
-function emAlerta(item: ItemEstoque) {
-  if (item.quantidade <= item.quantidadeMinima) return true
-  if (!item.dataValidade) return false
-  const limite = new Date()
-  limite.setDate(limite.getDate() + 30)
-  return new Date(item.dataValidade) <= limite
+function diaMaceio(valor: string) {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(valor))
+  return `${partes.find(parte => parte.type === 'year')?.value}-${partes.find(parte => parte.type === 'month')?.value}-${partes.find(parte => parte.type === 'day')?.value}`
 }
 
-export const RelatorioEstoque = forwardRef<HTMLDivElement, RelatorioEstoqueProps>(({ tipo, itens, movimentacoes, periodo }, ref) => {
-  const itensRelatorio = tipo === 'alertas' ? itens.filter(emAlerta) : itens
+function emAlerta(item: ItemEstoque, emitidoEm: string) {
+  if (item.quantidade <= item.quantidadeMinima) return true
+  if (!item.dataValidade) return false
+  const limite = new Date(`${diaMaceio(emitidoEm)}T00:00:00Z`)
+  limite.setUTCDate(limite.getUTCDate() + 30)
+  return new Date(`${item.dataValidade.slice(0, 10)}T00:00:00Z`) <= limite
+}
+
+export const RelatorioEstoque = forwardRef<HTMLDivElement, RelatorioEstoqueProps>(({ tipo, itens, movimentacoes, periodo, emitidoEm }, ref) => {
+  const itensRelatorio = tipo === 'alertas' ? itens.filter(item => emAlerta(item, emitidoEm)) : itens
   const titulo = tipo === 'posicao' ? 'Posição atual do estoque' : tipo === 'alertas' ? 'Alertas de estoque e validade' : 'Movimentações de estoque'
   const valorTotal = itensRelatorio.reduce((total, item) => total + item.quantidade * item.precoUnitario, 0)
 
@@ -32,7 +38,7 @@ export const RelatorioEstoque = forwardRef<HTMLDivElement, RelatorioEstoqueProps
     <div ref={ref} className="mx-auto min-h-[297mm] w-[210mm] bg-white p-[14mm] text-slate-950">
       <header className="flex items-end justify-between border-b-2 border-slate-900 pb-4">
         <div><p className="text-xs font-bold uppercase tracking-[0.25em] text-indigo-700">LabGest</p><h1 className="mt-1 text-2xl font-bold">{titulo}</h1>{tipo === 'movimentacoes' ? <p className="mt-1 text-sm text-slate-600">Período: {periodo}</p> : null}</div>
-        <p className="text-right text-xs text-slate-500">Emitido em<br />{new Date().toLocaleString('pt-BR', { timeZone: 'America/Maceio' })}</p>
+        <p className="text-right text-xs text-slate-500">Emitido em<br />{dataHora(emitidoEm)}</p>
       </header>
 
       {tipo === 'movimentacoes' ? (

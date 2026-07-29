@@ -27,14 +27,18 @@ const numero = (valor: number) => valor.toLocaleString('pt-BR', { maximumFractio
 const data = (valor: string | null) => valor ? new Date(valor).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'
 const dataHora = (valor: string) => new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Maceio' })
 
-function mesAtual() {
-  const agora = new Date()
-  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
+function mesAtual(emitidoEm: string) {
+  return mesMaceio(emitidoEm)
 }
 
 function mesMaceio(valor: string) {
   const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit' }).formatToParts(new Date(valor))
   return `${partes.find(parte => parte.type === 'year')?.value}-${partes.find(parte => parte.type === 'month')?.value}`
+}
+
+function diaMaceio(valor: string) {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(valor))
+  return `${partes.find(parte => parte.type === 'year')?.value}-${partes.find(parte => parte.type === 'month')?.value}-${partes.find(parte => parte.type === 'day')?.value}`
 }
 
 function statusEstoque(item: ItemEstoque) {
@@ -45,10 +49,10 @@ function statusEstoque(item: ItemEstoque) {
   return { label: 'Normal', variant: 'success' as const }
 }
 
-function statusValidade(item: ItemEstoque) {
+function statusValidade(item: ItemEstoque, emitidoEm: string) {
   if (!item.dataValidade) return null
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-  const validade = new Date(`${item.dataValidade.slice(0, 10)}T00:00:00`)
+  const hoje = new Date(`${diaMaceio(emitidoEm)}T00:00:00Z`)
+  const validade = new Date(`${item.dataValidade.slice(0, 10)}T00:00:00Z`)
   const dias = Math.ceil((validade.getTime() - hoje.getTime()) / 86_400_000)
   if (dias < 0) return { label: `Vencido há ${Math.abs(dias)}d`, className: 'text-red-700' }
   if (dias === 0) return { label: 'Vence hoje', className: 'text-red-700' }
@@ -75,7 +79,7 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
   const [itemModal, setItemModal] = useState<ItemEstoque | 'novo' | null>(null)
   const [itemMovimentacao, setItemMovimentacao] = useState<ItemEstoque | null>(null)
-  const [mesMovimentacoes, setMesMovimentacoes] = useState(mesAtual)
+  const [mesMovimentacoes, setMesMovimentacoes] = useState(() => mesAtual(initialData.emitidoEm))
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorioEstoque>('posicao')
 
   const itens = initialData.itens || []
@@ -85,11 +89,11 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
   const busca = search.trim().toLocaleLowerCase('pt-BR')
   const itensFiltrados = itens.filter(item => {
     const correspondeBusca = !busca || [item.nome, item.marca, item.fornecedor, item.codigoBarras, item.localizacao].some(valor => valor.toLocaleLowerCase('pt-BR').includes(busca))
-    return correspondeBusca && (categoria === 'Todos' || item.categoria === categoria) && (!somenteAlertas || item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item))) && (mostrarArquivados || item.ativo)
+    return correspondeBusca && (categoria === 'Todos' || item.categoria === categoria) && (!somenteAlertas || item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))) && (mostrarArquivados || item.ativo)
   })
   const movimentacoesFiltradas = movimentacoes.filter(item => mesMaceio(item.createdAt) === mesMovimentacoes && (!busca || item.itemNome.toLocaleLowerCase('pt-BR').includes(busca)))
   const itensCriticos = itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima).length
-  const itensValidade = itensAtivos.filter(item => Boolean(statusValidade(item))).length
+  const itensValidade = itensAtivos.filter(item => Boolean(statusValidade(item, initialData.emitidoEm))).length
   const valorTotal = itensAtivos.reduce((total, item) => total + item.quantidade * item.precoUnitario, 0)
   const periodoLabel = new Date(`${mesMovimentacoes}-01T00:00:00Z`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
@@ -121,7 +125,7 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
 
           <TabsContent value="itens" className="space-y-4">
             <Card><CardContent className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center"><Busca value={search} onChange={setSearch} /><div className="flex flex-wrap gap-2">{categorias.map(opcao => <button key={opcao} type="button" onClick={() => setCategoria(opcao)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${categoria === opcao ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300'}`}>{opcao}</button>)}</div><label className="flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"><input type="checkbox" checked={somenteAlertas} onChange={event => setSomenteAlertas(event.target.checked)} /> Alertas</label><label className="flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={mostrarArquivados} onChange={event => setMostrarArquivados(event.target.checked)} /> Arquivados</label></CardContent></Card>
-            <Card>{itensFiltrados.length === 0 ? <EmptyState title="Nenhum item encontrado" description="Ajuste os filtros ou cadastre um novo material." /> : <div className="overflow-x-auto"><table className="w-full min-w-[1050px]"><thead><tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="px-5 py-4">Material</th><th className="px-5 py-4">Categoria</th><th className="px-5 py-4 text-center">Saldo</th><th className="px-5 py-4">Situação</th><th className="px-5 py-4 text-right">Custo unit.</th><th className="px-5 py-4">Fornecedor</th><th className="px-5 py-4">Validade</th><th className="px-5 py-4 text-right">Ações</th></tr></thead><tbody className="divide-y">{itensFiltrados.map(item => <LinhaItem key={item.id} item={item} onEditar={() => setItemModal(item)} onMovimentar={() => setItemMovimentacao(item)} />)}</tbody></table></div>}</Card>
+            <Card>{itensFiltrados.length === 0 ? <EmptyState title="Nenhum item encontrado" description="Ajuste os filtros ou cadastre um novo material." /> : <div className="overflow-x-auto"><table className="w-full min-w-[1050px]"><thead><tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="px-5 py-4">Material</th><th className="px-5 py-4">Categoria</th><th className="px-5 py-4 text-center">Saldo</th><th className="px-5 py-4">Situação</th><th className="px-5 py-4 text-right">Custo unit.</th><th className="px-5 py-4">Fornecedor</th><th className="px-5 py-4">Validade</th><th className="px-5 py-4 text-right">Ações</th></tr></thead><tbody className="divide-y">{itensFiltrados.map(item => <LinhaItem key={item.id} item={item} emitidoEm={initialData.emitidoEm} onEditar={() => setItemModal(item)} onMovimentar={() => setItemMovimentacao(item)} />)}</tbody></table></div>}</Card>
           </TabsContent>
 
           <TabsContent value="movimentacoes" className="space-y-4">
@@ -130,13 +134,13 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
           </TabsContent>
 
           <TabsContent value="relatorios" className="space-y-4">
-            <Card><CardHeader><CardTitle>Relatórios gerenciais</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-3"><RelatorioCard icon={Package} titulo="Posição atual" descricao="Saldos, mínimos, validade, localização e valor total." onPrint={() => gerarRelatorio('posicao')} onCsv={() => exportarPosicao(itensAtivos)} /><RelatorioCard icon={AlertTriangle} titulo="Alertas" descricao="Itens críticos, esgotados, vencidos ou próximos da validade." onPrint={() => gerarRelatorio('alertas')} onCsv={() => exportarPosicao(itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item))), 'alertas-estoque.csv')} /><RelatorioCard icon={ArrowLeftRight} titulo="Movimentações" descricao={`Entradas, saídas e ajustes de ${periodoLabel}.`} onPrint={() => gerarRelatorio('movimentacoes')} onCsv={() => exportarMovimentacoes(movimentacoesFiltradas, mesMovimentacoes)} extra={<Input type="month" value={mesMovimentacoes} onChange={event => setMesMovimentacoes(event.target.value)} />} /></CardContent></Card>
+            <Card><CardHeader><CardTitle>Relatórios gerenciais</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-3"><RelatorioCard icon={Package} titulo="Posição atual" descricao="Saldos, mínimos, validade, localização e valor total." onPrint={() => gerarRelatorio('posicao')} onCsv={() => exportarPosicao(itensAtivos)} /><RelatorioCard icon={AlertTriangle} titulo="Alertas" descricao="Itens críticos, esgotados, vencidos ou próximos da validade." onPrint={() => gerarRelatorio('alertas')} onCsv={() => exportarPosicao(itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))), 'alertas-estoque.csv')} /><RelatorioCard icon={ArrowLeftRight} titulo="Movimentações" descricao={`Entradas, saídas e ajustes de ${periodoLabel}.`} onPrint={() => gerarRelatorio('movimentacoes')} onCsv={() => exportarMovimentacoes(movimentacoesFiltradas, mesMovimentacoes)} extra={<Input type="month" value={mesMovimentacoes} onChange={event => setMesMovimentacoes(event.target.value)} />} /></CardContent></Card>
             <Card><CardHeader><CardTitle>Leitura gerencial</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-3"><ResumoGestao titulo="Reposição imediata" valor={`${itensCriticos} itens`} texto="Priorize os materiais no estoque mínimo ou abaixo." /><ResumoGestao titulo="Risco de perda" valor={`${itensValidade} itens`} texto="Consuma primeiro os lotes vencidos ou com até 30 dias." /><ResumoGestao titulo="Capital imobilizado" valor={moeda(valorTotal)} texto="Custo estimado de todo o saldo ativo cadastrado." /></CardContent></Card>
           </TabsContent>
         </Tabs>
       </div>
 
-      <div className="fixed left-[-10000px] top-0 bg-white"><RelatorioEstoque ref={relatorioRef} tipo={tipoRelatorio} itens={tipoRelatorio === 'alertas' ? itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item))) : itensAtivos} movimentacoes={movimentacoesFiltradas} periodo={periodoLabel} /></div>
+      <div className="fixed left-[-10000px] top-0 bg-white"><RelatorioEstoque ref={relatorioRef} tipo={tipoRelatorio} itens={tipoRelatorio === 'alertas' ? itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))) : itensAtivos} movimentacoes={movimentacoesFiltradas} periodo={periodoLabel} emitidoEm={initialData.emitidoEm} /></div>
     </DashboardLayout>
   )
 }
@@ -145,7 +149,7 @@ function Busca({ value, onChange, placeholder = 'Buscar por nome, marca, fornece
 
 function Indicador({ icon: Icon, label, valor, detalhe, cor }: { icon: typeof Package; label: string; valor: string; detalhe: string; cor: 'indigo' | 'red' | 'amber' | 'emerald' }) { const cores = { indigo: 'bg-indigo-100 text-indigo-600', red: 'bg-red-100 text-red-600', amber: 'bg-amber-100 text-amber-700', emerald: 'bg-emerald-100 text-emerald-700' }; return <Card><CardContent className="flex items-center gap-4 p-4"><div className={`rounded-xl p-3 ${cores[cor]}`}><Icon className="h-6 w-6" /></div><div className="min-w-0"><p className="text-sm text-slate-500">{label}</p><p className="truncate text-2xl font-bold">{valor}</p><p className="text-xs text-slate-400">{detalhe}</p></div></CardContent></Card> }
 
-function LinhaItem({ item, onEditar, onMovimentar }: { item: ItemEstoque; onEditar: () => void; onMovimentar: () => void }) { const status = statusEstoque(item); const validade = statusValidade(item); return <tr className={`transition-colors hover:bg-muted/40 ${!item.ativo ? 'opacity-60' : ''}`}><td className="px-5 py-4"><p className="font-bold">{item.nome}</p><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{item.marca ? `${item.marca} · ` : ''}{item.localizacao || 'Sem localização'}{item.codigoBarras ? ` · ${item.codigoBarras}` : ''}</p></td><td className="px-5 py-4"><Badge variant="secondary">{item.categoria}</Badge></td><td className="px-5 py-4 text-center"><p className={`text-lg font-bold ${item.quantidade <= item.quantidadeMinima ? 'text-red-600' : ''}`}>{numero(item.quantidade)} <span className="text-sm font-normal text-muted-foreground">{item.unidade}</span></p><p className="text-xs text-muted-foreground">mín. {numero(item.quantidadeMinima)}</p></td><td className="px-5 py-4"><Badge variant={status.variant}>{status.label}</Badge></td><td className="px-5 py-4 text-right font-semibold">{moeda(item.precoUnitario)}</td><td className="px-5 py-4 text-sm text-muted-foreground">{item.fornecedor || '—'}</td><td className="px-5 py-4"><p className="text-sm">{data(item.dataValidade)}</p>{validade ? <p className={`text-xs font-semibold ${validade.className}`}>{validade.label}</p> : null}</td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={onMovimentar} disabled={!item.ativo}><ArrowLeftRight className="h-4 w-4" />Movimentar</Button><Button size="icon" variant="ghost" onClick={onEditar} aria-label={`Editar ${item.nome}`}><Edit className="h-4 w-4" /></Button></div></td></tr> }
+function LinhaItem({ item, emitidoEm, onEditar, onMovimentar }: { item: ItemEstoque; emitidoEm: string; onEditar: () => void; onMovimentar: () => void }) { const status = statusEstoque(item); const validade = statusValidade(item, emitidoEm); return <tr className={`transition-colors hover:bg-muted/40 ${!item.ativo ? 'opacity-60' : ''}`}><td className="px-5 py-4"><p className="font-bold">{item.nome}</p><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{item.marca ? `${item.marca} · ` : ''}{item.localizacao || 'Sem localização'}{item.codigoBarras ? ` · ${item.codigoBarras}` : ''}</p></td><td className="px-5 py-4"><Badge variant="secondary">{item.categoria}</Badge></td><td className="px-5 py-4 text-center"><p className={`text-lg font-bold ${item.quantidade <= item.quantidadeMinima ? 'text-red-600' : ''}`}>{numero(item.quantidade)} <span className="text-sm font-normal text-muted-foreground">{item.unidade}</span></p><p className="text-xs text-muted-foreground">mín. {numero(item.quantidadeMinima)}</p></td><td className="px-5 py-4"><Badge variant={status.variant}>{status.label}</Badge></td><td className="px-5 py-4 text-right font-semibold">{moeda(item.precoUnitario)}</td><td className="px-5 py-4 text-sm text-muted-foreground">{item.fornecedor || '—'}</td><td className="px-5 py-4"><p className="text-sm">{data(item.dataValidade)}</p>{validade ? <p className={`text-xs font-semibold ${validade.className}`}>{validade.label}</p> : null}</td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={onMovimentar} disabled={!item.ativo}><ArrowLeftRight className="h-4 w-4" />Movimentar</Button><Button size="icon" variant="ghost" onClick={onEditar} aria-label={`Editar ${item.nome}`}><Edit className="h-4 w-4" /></Button></div></td></tr> }
 
 function LinhaMovimentacao({ item }: { item: MovimentacaoEstoque }) { const Icon = item.tipo === 'Entrada' ? ArrowDownToLine : item.tipo === 'Saída' ? ArrowUpFromLine : SlidersHorizontal; const variant = item.tipo === 'Entrada' ? 'success' : item.tipo === 'Saída' ? 'warning' : 'secondary'; return <tr className="hover:bg-muted/40"><td className="px-5 py-4 text-sm">{dataHora(item.createdAt)}</td><td className="px-5 py-4 font-semibold">{item.itemNome}</td><td className="px-5 py-4"><Badge variant={variant}><Icon className="mr-1 h-3 w-3" />{item.tipo}</Badge></td><td className="px-5 py-4">{numero(item.quantidade)} {item.unidade}</td><td className="px-5 py-4 text-sm">{numero(item.saldoAnterior)} → <strong>{numero(item.saldoPosterior)}</strong></td><td className="px-5 py-4 text-sm text-muted-foreground">{item.motivo}{item.ordemId ? <span className="block font-semibold text-indigo-600">OS #{item.ordemId}</span> : null}{item.documento ? <span className="block text-xs">Ref.: {item.documento}</span> : null}</td><td className="px-5 py-4 text-sm">{item.usuarioNome}</td></tr> }
 

@@ -67,6 +67,7 @@ export async function getEstoque() {
     ])
 
     return {
+      emitidoEm: new Date().toISOString(),
       itens: estoque.map(item => ({
         id: item.id,
         nome: item.nome,
@@ -102,7 +103,7 @@ export async function getEstoque() {
     }
   } catch (error) {
     console.error('Erro ao buscar estoque:', error)
-    return { itens: [], movimentacoes: [] }
+    return { itens: [], movimentacoes: [], emitidoEm: new Date().toISOString() }
   }
 }
 
