@@ -51,6 +51,10 @@ export async function getProducao() {
         prazoFornecedor: o.prazoFornecedor?.toISOString() ?? null,
         dataRecebimentoFornecedor: o.dataRecebimentoFornecedor?.toISOString() ?? null,
         justificativaAtrasoFornecedor: o.justificativaAtrasoFornecedor,
+        localizacaoAtual: o.localizacaoAtual,
+        situacaoLogistica: o.situacaoLogistica,
+        dentistaResponsavel: o.dentistaResponsavel,
+        agendamentoClinico: o.agendamentoClinico?.toISOString() ?? null,
         cicloAtivoId: cicloAtivo?.id ?? null,
         cicloStatus: cicloAtivo?.status ?? null,
         cicloNumero: cicloAtivo?.numeroCiclo ?? null,
@@ -122,7 +126,20 @@ export async function moverOrdem(id: number, novaEtapa: string) {
 
         await tx.ordem.update({
           where: { id },
-          data: { etapaAtual: novaEtapa, status: novoStatus, dataFinalizacao: null, historicoEtapas: proximoHistorico },
+          data: {
+            etapaAtual: novaEtapa,
+            status: novoStatus,
+            dataFinalizacao: null,
+            localizacaoAtual: 'em_transito_recepcao',
+            situacaoLogistica: 'aguardando_recepcao',
+            finalidadeClinica: 'prova',
+            dentistaResponsavel: null,
+            agendamentoClinico: null,
+            movimentacaoLogisticaEm: agora,
+            historicoEtapas: [...proximoHistorico, {
+              acao: 'enviou_recepcao', finalidade: 'prova', data: agora.toISOString(),
+            }],
+          },
         })
         return { success: true }
       }
@@ -155,6 +172,7 @@ export async function moverOrdem(id: number, novaEtapa: string) {
     revalidatePath('/prioridades')
     revalidatePath('/financeiro')
     revalidatePath('/estoque')
+    revalidatePath('/recepcao')
     return resultado
   } catch (error) {
     console.error('Erro ao mover ordem:', error)

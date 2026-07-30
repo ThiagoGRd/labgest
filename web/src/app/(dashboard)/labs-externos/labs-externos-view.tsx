@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
+import { useReactToPrint } from 'react-to-print'
 import {
   Building2, AlertTriangle, RefreshCw, CheckCircle2,
   PackageCheck, Send, Plus, ChevronRight, Search, X, Loader2,
-  Calendar, User, Stethoscope, Undo2, Pencil
+  Calendar, User, Stethoscope, Undo2, Pencil, FileText
 } from 'lucide-react'
 import {
   criarPedido, atualizarSituacao, marcarRetrabalho, atualizarPedido,
@@ -12,6 +13,7 @@ import {
 } from '@/actions/labs-externos'
 import { Modal } from '@/components/ui/modal'
 import { ReasonModal } from '@/components/ui/reason-modal'
+import { RelatorioLabsExternos } from '@/components/labs-externos/relatorio-labs-externos'
 import { toast } from 'sonner'
 
 interface Stats {
@@ -337,6 +339,7 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
 }
 
 export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs }: Props) {
+  const relatorioRef = useRef<HTMLDivElement>(null)
   const [aba, setAba]               = useState<Aba>('todos')
   const [busca, setBusca]           = useState('')
   const [showModal, setShowModal]   = useState(false)
@@ -359,6 +362,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
     const q = busca.toLowerCase()
     return lista.filter(p =>
       p.paciente.toLowerCase().includes(q) ||
+      p.labNome.toLowerCase().includes(q) ||
       p.dentista?.toLowerCase().includes(q) ||
       p.servico?.toLowerCase().includes(q)
     )
@@ -420,6 +424,11 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
 
   const filtrados = getPedidosFiltrados()
 
+  const imprimirRelatorio = useReactToPrint({
+    contentRef: relatorioRef,
+    documentTitle: `laboratorios-externos-${aba}-${new Date().toISOString().slice(0, 10)}`,
+  })
+
   const abas: { id: Aba; label: string; count: number; icon: React.ReactNode; alert?: boolean }[] = [
     { id: 'todos',       label: 'Ativos',    count: pedidos.filter(p => p.situacao !== 'Entregue').length, icon: <Building2 className="w-4 h-4" /> },
     { id: 'enviados',    label: 'Enviados',  count: stats.total_enviados,    icon: <Send className="w-4 h-4" /> },
@@ -429,6 +438,8 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
     { id: 'atrasados',   label: 'Atrasados', count: stats.total_atrasados,   icon: <AlertTriangle className="w-4 h-4" />, alert: stats.total_atrasados > 0 },
     { id: 'retrabalhos', label: 'Retrab.',   count: stats.total_retrabalhos, icon: <RefreshCw className="w-4 h-4" />,    alert: stats.total_retrabalhos > 0 },
   ]
+  const abaAtual = abas.find((item) => item.id === aba)?.label || 'Ativos'
+  const filtroRelatorio = busca.trim() ? `${abaAtual} · busca: ${busca.trim()}` : abaAtual
 
   return (
     <div className="space-y-6">
@@ -442,13 +453,24 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
             Controle de peças enviadas para labs terceirizados
           </p>
         </div>
-        <button
-          onClick={() => { setPedidoEditando(undefined); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Pedido
-        </button>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => imprimirRelatorio()}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/15 sm:flex-none"
+          >
+            <FileText className="w-4 h-4" />
+            Gerar relatório
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPedidoEditando(undefined); setShowModal(true) }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-500 sm:flex-none"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Pedido
+          </button>
+        </div>
       </div>
 
       {(stats.total_atrasados > 0 || stats.total_retrabalhos > 0) && (
@@ -501,7 +523,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
         <input
           value={busca}
           onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar por paciente, dentista ou serviço..."
+          placeholder="Buscar por laboratório, paciente, dentista ou serviço..."
           className="w-full bg-white dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-xl pl-10 pr-4 py-2.5 text-slate-900 dark:text-white text-sm placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500 shadow-sm"
         />
         {busca && (
@@ -552,6 +574,9 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
         confirmLabel="Registrar retrabalho"
         loading={isPending}
       />
+      <div className="fixed left-[-10000px] top-0 bg-white">
+        <RelatorioLabsExternos ref={relatorioRef} pedidos={filtrados} filtro={filtroRelatorio} />
+      </div>
     </div>
   )
 }

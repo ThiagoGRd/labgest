@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Building2, CheckCircle2, Clock3, PauseCircle, PencilLine, Stethoscope } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, Clock3, MapPin, PauseCircle, PencilLine, Stethoscope } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { confirmarRecebimentoFornecedor, concluirEtapaLaboratorial, registrarEnvioFornecedor } from '@/actions/workflow-protese'
 import { getFluxoProtese, type TipoProteseId } from '@/lib/workflow-config'
 import { timestampValido } from '@/lib/producao-utils'
+import { rotuloLocalizacaoTrabalho } from '@/lib/recepcao-utils'
 import { toast } from 'sonner'
 
 export interface OrdemFluxoProtese {
@@ -25,6 +26,9 @@ export interface OrdemFluxoProtese {
   prazoFornecedor?: string | null
   cicloDentistaDeci?: string | null
   cicloStatus?: string | null
+  localizacaoAtual?: string | null
+  situacaoLogistica?: string | null
+  dentistaResponsavel?: string | null
 }
 
 interface FluxoProteseBoardProps {
@@ -138,7 +142,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     </div>
                     {ordem.arcadas === 2 && <p className="mt-1 text-[11px] font-medium text-indigo-600">Duas arcadas</p>}
 
-                    {!pausada && passo.responsavel === 'clinica' && <p className="mt-4 rounded-lg bg-sky-50 p-2 text-center text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p>}
+                    {!pausada && passo.responsavel === 'clinica' ? <div className="mt-4 space-y-2 rounded-lg bg-sky-50 p-2 text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300"><p className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 shrink-0" />{rotuloLocalizacaoTrabalho(ordem.situacaoLogistica, ordem.dentistaResponsavel, ordem.localizacaoAtual)}</p><p className="text-center">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p></div> : null}
 
                     {!pausada && passo.responsavel === 'laboratorio' && (
                       <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id))}>

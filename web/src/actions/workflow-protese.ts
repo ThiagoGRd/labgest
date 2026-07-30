@@ -22,6 +22,7 @@ function revalidarFluxo() {
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
+  revalidatePath('/recepcao')
 }
 
 export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string) {
@@ -83,6 +84,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
     const progresso = Math.round((fluxo.passos.indexOf(passo) / Math.max(1, fluxo.passos.length - 1)) * 100)
     const statusCalculado = statusParaPassoProtese(passo)
     const status = ordem.status === 'Pausado' ? 'Pausado' : statusCalculado
+    const vaiParaClinica = passo.responsavel === 'clinica' && status !== 'Pausado'
 
     await tx.ordem.update({
       where: { id: ordemId },
@@ -95,6 +97,14 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
         progresso,
         prazoEtapaAtual: calcularPrazoPasso(agora, passo, ordem.arcadas),
         dataFinalizacao: statusCalculado === 'Finalizado' && status !== 'Pausado' ? agora : null,
+        ...(vaiParaClinica ? {
+          localizacaoAtual: 'em_transito_recepcao',
+          situacaoLogistica: 'aguardando_recepcao',
+          finalidadeClinica: passo.entregaFinal ? 'entrega' : passo.prova ? 'prova' : 'instalacao',
+          dentistaResponsavel: null,
+          agendamentoClinico: null,
+          movimentacaoLogisticaEm: agora,
+        } : {}),
         historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
           acao: 'definiu_fluxo_manualmente',
           tipo: fluxo.nome,
@@ -153,6 +163,14 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
 
     const agora = new Date()
     const novoStatus = statusParaPassoProtese(proximo)
+    const vaiParaClinica = proximo.responsavel === 'clinica'
+    const historicoTecnico = historicoComEvento(ordem.historicoEtapas, {
+      acao: 'concluiu_etapa_laboratorial',
+      de: passoAtual.nome,
+      para: proximo.nome,
+      data: agora.toISOString(),
+      por: usuario.email || 'laboratorio',
+    })
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
@@ -162,13 +180,22 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
         status: novoStatus,
         dataFinalizacao: novoStatus === 'Finalizado' ? agora : null,
         prazoEtapaAtual: calcularPrazoPasso(agora, proximo, ordem.arcadas),
-        historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
-          acao: 'concluiu_etapa_laboratorial',
-          de: passoAtual.nome,
-          para: proximo.nome,
-          data: agora.toISOString(),
-          por: usuario.email || 'laboratorio',
-        }),
+        ...(vaiParaClinica ? {
+          localizacaoAtual: 'em_transito_recepcao',
+          situacaoLogistica: 'aguardando_recepcao',
+          finalidadeClinica: proximo.entregaFinal ? 'entrega' : proximo.prova ? 'prova' : 'instalacao',
+          dentistaResponsavel: null,
+          agendamentoClinico: null,
+          movimentacaoLogisticaEm: agora,
+        } : {}),
+        historicoEtapas: vaiParaClinica
+          ? historicoComEvento(historicoTecnico, {
+              acao: 'enviou_recepcao',
+              finalidade: proximo.entregaFinal ? 'entrega' : proximo.prova ? 'prova' : 'instalacao',
+              data: agora.toISOString(),
+              por: usuario.email || 'laboratorio',
+            })
+          : historicoTecnico,
       },
     })
 

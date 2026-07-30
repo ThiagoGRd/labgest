@@ -24,6 +24,7 @@ import {
 import { etapaLabel, getProgresso, type TipoWorkflow } from '@/lib/workflow-config'
 import { ChatOrdem, type Mensagem } from '@/components/ordens/chat-ordem'
 import Image from 'next/image'
+import { rotuloLocalizacaoTrabalho } from '@/lib/recepcao-utils'
 
 interface HistoricoEtapa {
   acao?: string
@@ -32,6 +33,8 @@ interface HistoricoEtapa {
   data?: string
   motivo?: string
   observacao?: string
+  dentista?: string
+  responsavel?: string
 }
 
 interface ChecklistEsteticoDetalhes {
@@ -72,6 +75,11 @@ interface Ordem {
   checklistEstetico?: unknown
   mensagens?: unknown[]
   fotosCaso?: string[]
+  localizacaoAtual?: string
+  situacaoLogistica?: string
+  dentistaResponsavel?: string | null
+  finalidadeClinica?: string | null
+  agendamentoClinico?: string | null
 }
 
 interface VisualizarOrdemModalProps {
@@ -139,6 +147,23 @@ function normalizarChecklist(valor: unknown): ChecklistEsteticoDetalhes {
   ) as ChecklistEsteticoDetalhes
 }
 
+const ROTULOS_HISTORICO: Record<string, string> = {
+  criou: 'Pedido recebido',
+  enviou_recepcao: 'Enviado para a recepção',
+  recebeu_recepcao: 'Recebido pela recepção',
+  entregou_dentista: 'Entregue ao dentista',
+  corrigiu_distribuicao: 'Distribuição corrigida',
+  recebeu_do_dentista: 'Recebido de volta do dentista',
+  enviou_retorno_laboratorio: 'Enviado de volta ao laboratório',
+  recebeu_laboratorio: 'Recebido pelo laboratório',
+}
+
+function descricaoHistorico(item: HistoricoEtapa) {
+  if (item.acao === 'avancou') return `Avançou para ${item.para}`
+  if (item.acao === 'devolveu') return `Devolvido para ${item.para}`
+  return ROTULOS_HISTORICO[item.acao || ''] || item.acao?.replaceAll('_', ' ') || 'Movimentação registrada'
+}
+
 export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdemModalProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
@@ -204,6 +229,10 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                   <p className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400 mb-1">Status Atual</p>
                   <p className="font-bold text-slate-900 dark:text-white leading-tight">{etapaLabel(ordem.etapaAtual)}</p>
                   <p className="text-xs text-slate-500 mt-1">{ordem.status}</p>
+                  <p className="mt-2 border-t border-indigo-100 pt-2 text-xs font-semibold text-indigo-700 dark:border-indigo-500/20 dark:text-indigo-300">
+                    Localização: {rotuloLocalizacaoTrabalho(ordem.situacaoLogistica, ordem.dentistaResponsavel, ordem.localizacaoAtual)}
+                  </p>
+                  {ordem.agendamentoClinico ? <p className="mt-1 text-xs text-slate-500">Agendamento: {formatDateTime(ordem.agendamentoClinico)}</p> : null}
                 </div>
               </div>
 
@@ -226,10 +255,11 @@ export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdem
                       </span>
                       
                       <p className={`text-sm font-bold ${isDevolucao ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>
-                        {h.acao === 'avancou' && `Avançou para ${h.para}`}
-                        {h.acao === 'devolveu' && `Devolvido para ${h.para}`}
-                        {h.acao === 'criou' && 'Pedido Recebido'}
+                        {descricaoHistorico(h)}
                       </p>
+
+                      {h.dentista ? <p className="mt-1 text-xs text-slate-500">Dentista: {h.dentista}</p> : null}
+                      {h.responsavel ? <p className="mt-1 text-[10px] text-slate-400">Registrado por {h.responsavel}</p> : null}
 
                       {h.motivo && (
                         <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-xs text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/30">

@@ -59,12 +59,13 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
 
   revalidatePath('/producao')
   revalidatePath('/ordens')
+  revalidatePath('/recepcao')
   return { success: true, ciclo }
 }
 
 // Auxiliar registra que o trabalho saiu do lab para prova
 export async function enviarParaProva(cicloId: number) {
-  await requireUser()
+  const usuario = await requireUser()
 
   const ciclo = await prisma.cicloProducao.update({
     where: { id: cicloId },
@@ -82,11 +83,22 @@ export async function enviarParaProva(cicloId: number) {
       status: 'Em Prova',
       etapaAtual: 'em_prova',
       subetapaAtual: ciclo.etapa,
+      localizacaoAtual: 'em_transito_recepcao',
+      situacaoLogistica: 'aguardando_recepcao',
+      finalidadeClinica: 'prova',
+      dentistaResponsavel: null,
+      agendamentoClinico: null,
+      movimentacaoLogisticaEm: new Date(),
+      historicoEtapas: [
+        ...(Array.isArray(ciclo.ordem.historicoEtapas) ? ciclo.ordem.historicoEtapas : []),
+        { acao: 'enviou_recepcao', finalidade: 'prova', data: new Date().toISOString(), por: usuario.email },
+      ],
     }
   })
 
   revalidatePath('/producao')
   revalidatePath('/ordens')
+  revalidatePath('/recepcao')
   return { success: true, ciclo }
 }
 
@@ -152,6 +164,9 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
             subetapaAtual: cicloAtual.decisao === 'ajustes' ? `Ajuste: ${destino.nome}` : destino.nome,
             status: statusParaPassoProtese(destino),
             prazoEtapaAtual: calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas),
+            localizacaoAtual: 'laboratorio',
+            situacaoLogistica: 'no_laboratorio',
+            movimentacaoLogisticaEm: new Date(),
           },
         }),
       ])
@@ -159,6 +174,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
       revalidatePath('/producao')
       revalidatePath('/ordens')
       revalidatePath('/prioridades')
+      revalidatePath('/recepcao')
       return { success: true, finalizar: cicloAtual.decisao === 'aprovado', fluxoEspecifico: true }
     }
   }
@@ -176,12 +192,16 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
           status: 'Em Produção',
           etapaAtual: 'acabamento',
           subetapaAtual: 'Acabamento e polimento',
+          localizacaoAtual: 'laboratorio',
+          situacaoLogistica: 'no_laboratorio',
+          movimentacaoLogisticaEm: new Date(),
         },
       }),
     ])
     revalidatePath('/producao')
     revalidatePath('/ordens')
     revalidatePath('/prioridades')
+    revalidatePath('/recepcao')
     return { success: true, finalizar: true }
   }
 
@@ -213,6 +233,9 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
         etapaAtual: 'ajuste',
         subetapaAtual: subetapa,
         status: 'Em Produção',
+        localizacaoAtual: 'laboratorio',
+        situacaoLogistica: 'no_laboratorio',
+        movimentacaoLogisticaEm: new Date(),
       },
     }),
   ])
@@ -220,6 +243,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
+  revalidatePath('/recepcao')
   return { success: true, novoCiclo }
 }
 

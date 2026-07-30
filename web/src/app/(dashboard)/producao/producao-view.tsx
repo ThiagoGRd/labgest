@@ -23,6 +23,7 @@ import { ListaProducao } from '@/components/producao/lista-producao'
 import { ResumoProducao } from '@/components/producao/resumo-producao'
 import type { FilaProducao, OrdemProducao, VisualizacaoProducao } from '@/components/producao/types'
 import { diasRestantes, filaDaOrdem, ordenarOrdensOperacionais } from '@/lib/producao-utils'
+import { rotuloLocalizacaoTrabalho } from '@/lib/recepcao-utils'
 import {
   Calendar,
   GripVertical,
@@ -37,6 +38,7 @@ import {
   PauseCircle,
   PencilLine,
   Route,
+  MapPin,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -141,6 +143,12 @@ function KanbanCard({
         {ordem.subetapa && (
           <p className="mt-1.5 text-[11px] text-slate-500 dark:text-zinc-500">{ordem.subetapa}</p>
         )}
+        {isEmProva ? (
+          <p className="mt-2 flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            {rotuloLocalizacaoTrabalho(ordem.situacaoLogistica, ordem.dentistaResponsavel, ordem.localizacaoAtual)}
+          </p>
+        ) : null}
         {isPausada && <p className="mt-2 flex items-center gap-1 text-[11px] font-bold text-amber-600"><PauseCircle className="h-3.5 w-3.5" /> Ordem pausada</p>}
       </div>
 

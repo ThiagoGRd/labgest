@@ -19,6 +19,7 @@ import {
   Sparkles,
   Clock,
   Building2,
+  Route,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -42,6 +43,7 @@ const navigation: NavigationItem[] = [
   { name: 'Prioridades', href: '/prioridades', icon: Clock },
   { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
   { name: 'Produção', href: '/producao', icon: Kanban, hasBadge: true },
+  { name: 'Recepção', href: '/recepcao', icon: Route },
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },
@@ -116,7 +118,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-        {navigation.map((item) => {
+        {navigation.filter((item) => user.tipo !== 'recepcao' || item.href === '/recepcao').map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
           return (
             <Link

@@ -391,6 +391,11 @@ export async function getOrdemById(id: number) {
       tokenRastreamento: ordem.tokenRastreamento,
       motivoPausa: ordem.motivoPausa,
       pausadoEm: ordem.pausadoEm?.toISOString() || null,
+      localizacaoAtual: ordem.localizacaoAtual,
+      situacaoLogistica: ordem.situacaoLogistica,
+      dentistaResponsavel: ordem.dentistaResponsavel,
+      finalidadeClinica: ordem.finalidadeClinica,
+      agendamentoClinico: ordem.agendamentoClinico?.toISOString() || null,
     }
   } catch (error) {
     console.error('[getOrdemById] Erro ao buscar ordem:', error)
