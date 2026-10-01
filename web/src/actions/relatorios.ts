@@ -81,7 +81,16 @@ export async function getRelatorioFinanceiro() {
   }
 }
 
-export async function getRelatorioOrdensEntregues(mesInformado?: string) {
+export async function getClientesRelatorio() {
+  await requireUser()
+
+  return prisma.cliente.findMany({
+    orderBy: { nome: 'asc' },
+    select: { id: true, nome: true },
+  })
+}
+
+export async function getRelatorioOrdensEntregues(mesInformado?: string, clienteIdInformado?: number) {
   await requireUser()
 
   const hoje = new Date()
@@ -109,11 +118,25 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
   const hojeMaceio = `${valorParte('year')}-${valorParte('month')}-${valorParte('day')}`
 
   try {
+    const clienteSelecionado = clienteIdInformado && Number.isInteger(clienteIdInformado) && clienteIdInformado > 0
+      ? await prisma.cliente.findUnique({
+          where: { id: clienteIdInformado },
+          select: { id: true, nome: true, telefone: true, email: true, endereco: true, cro: true },
+        })
+      : null
     const ordens = await prisma.ordem.findMany({
       where: {
         status: 'Entregue',
         canceladoEm: null,
-        OR: [
+        ...(clienteSelecionado
+          ? {
+              OR: [
+                { clienteId: clienteSelecionado.id },
+                { clienteNome: { equals: clienteSelecionado.nome, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+        AND: [{ OR: [
           { dataEntregaReal: { gte: inicioReal, lt: fimReal } },
           {
             dataEntregaReal: null,
@@ -124,7 +147,7 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
             dataFinalizacao: null,
             dataEntrega: { gte: inicioLegado, lt: fimLegado },
           },
-        ],
+        ] }],
       },
       select: {
         id: true,
@@ -203,6 +226,7 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
     return {
       mes,
       mesLabel,
+      clienteSelecionado,
       itens,
       totalOrdens: itens.length,
       valorTotal: itens.reduce((total, item) => total + item.valor, 0),
@@ -215,6 +239,7 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string) {
     return {
       mes,
       mesLabel,
+      clienteSelecionado: null,
       itens: [],
       totalOrdens: 0,
       valorTotal: 0,

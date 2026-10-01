@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useReactToPrint } from 'react-to-print'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
@@ -62,13 +62,15 @@ interface CustomTooltipProps {
 interface RelatoriosViewProps {
   financeiro: FinancialData
   ordensEntregues: RelatorioOrdensEntreguesData
+  clientes: { id: number; nome: string }[]
 }
 
-export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewProps) {
+export function RelatoriosView({ financeiro, ordensEntregues, clientes }: RelatoriosViewProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const relatorioRef = useRef<HTMLDivElement>(null)
+  const autoPrintExecutado = useRef(false)
   const [isChangingMonth, startMonthTransition] = useTransition()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -79,10 +81,32 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
     documentTitle: `ordens-entregues-${ordensEntregues.mes}`,
   })
 
+  useEffect(() => {
+    if (searchParams.get('imprimir') !== '1' || autoPrintExecutado.current) return
+
+    autoPrintExecutado.current = true
+    const timer = window.setTimeout(() => {
+      imprimirOrdensEntregues()
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('imprimir')
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`)
+    }, 250)
+
+    return () => window.clearTimeout(timer)
+  }, [imprimirOrdensEntregues, pathname, searchParams])
+
   const selecionarMes = (mes: string) => {
     if (!mes) return
     const params = new URLSearchParams(searchParams.toString())
     params.set('mes', mes)
+    startMonthTransition(() => router.push(`${pathname}?${params.toString()}`))
+  }
+
+  const selecionarCliente = (cliente: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (cliente) params.set('cliente', cliente)
+    else params.delete('cliente')
+    params.delete('imprimir')
     startMonthTransition(() => router.push(`${pathname}?${params.toString()}`))
   }
 
@@ -142,9 +166,9 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl">
                     <FileText className="h-5 w-5 text-indigo-600" />
-                    Ordens entregues por mês
+                    Demonstrativo mensal para a clínica
                   </CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">Relatório operacional com conferência do lançamento financeiro.</p>
+                  <p className="mt-1 text-sm text-slate-500">Relação de serviços entregues para conferência e pagamento.</p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   <label className="relative">
@@ -157,6 +181,15 @@ export function RelatoriosView({ financeiro, ordensEntregues }: RelatoriosViewPr
                       className="w-full pl-9 sm:w-44"
                     />
                   </label>
+                  <select
+                    aria-label="Clínica do demonstrativo"
+                    value={ordensEntregues.clienteSelecionado?.id || ''}
+                    onChange={(event) => selecionarCliente(event.target.value)}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-56 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <option value="">Todas as clínicas</option>
+                    {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                  </select>
                   <Button
                     onClick={() => imprimirOrdensEntregues()}
                     disabled={isChangingMonth}

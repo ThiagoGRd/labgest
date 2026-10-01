@@ -22,8 +22,9 @@ import { FichaImpressao } from '@/components/ordens/ficha-impressao'
 import { EtiquetaImpressao } from '@/components/ordens/etiqueta-impressao'
 import { ConfirmarEntregaCobrancaModal } from '@/components/ordens/confirmar-entrega-cobranca-modal'
 import { ComprovanteEntregaModal, type ComprovanteEntregaModalProps } from '@/components/ordens/comprovante-entrega-modal'
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
 import { gerarNotificacaoWhatsApp } from '@/actions/notificacoes'
-import { cancelarOrdem, getOrdemById, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
+import { cancelarOrdem, deleteOrdem, getOrdemById, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
 import {
   Search,
   Eye,
@@ -40,8 +41,10 @@ import {
   RotateCcw,
   MoreHorizontal,
   Ban,
+  Trash2,
   Loader2,
   CheckCircle2,
+  CalendarDays,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -148,8 +151,15 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   const [printEtiqueta, setPrintEtiqueta] = useState<DadosEtiqueta | null>(null)
   const [openingOrdemId, setOpeningOrdemId] = useState<number | null>(null)
   const [ordemParaCancelar, setOrdemParaCancelar] = useState<Ordem | null>(null)
+  const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null)
   const [ordemParaEntregar, setOrdemParaEntregar] = useState<Ordem | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [mesRelatorio, setMesRelatorio] = useState(() => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Maceio',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(new Date()))
+  const [clienteRelatorio, setClienteRelatorio] = useState('')
   
   const componentRef = useRef<HTMLDivElement>(null)
   const etiquetaRef = useRef<HTMLDivElement>(null)
@@ -260,6 +270,25 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     }
   }
 
+  const confirmarExclusao = async () => {
+    if (!ordemParaExcluir) return
+    setActionLoading(true)
+    try {
+      const result = await deleteOrdem(ordemParaExcluir.id)
+      if (!result.success) {
+        toast.error(result.error || 'Não foi possível excluir a ordem.')
+        return
+      }
+      toast.success('Ordem duplicada excluída.')
+      setOrdemParaExcluir(null)
+      router.refresh()
+    } catch {
+      toast.error('Não foi possível excluir a ordem.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleMarcarEntregue = (ordem: Ordem) => {
     setOrdemParaEntregar(ordem)
   }
@@ -295,6 +324,16 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
         placeholder="Explique por que esta ordem está sendo cancelada."
         confirmLabel="Cancelar ordem"
         loading={actionLoading}
+      />
+      <ConfirmActionModal
+        isOpen={ordemParaExcluir !== null}
+        onClose={() => setOrdemParaExcluir(null)}
+        onConfirm={confirmarExclusao}
+        title={ordemParaExcluir ? `Excluir OS #${ordemParaExcluir.id}?` : 'Excluir ordem'}
+        description="Use esta opção somente para um lançamento duplicado. A ordem será removida permanentemente e esta ação não poderá ser desfeita."
+        confirmLabel="Excluir duplicata"
+        loading={actionLoading}
+        destructive
       />
       {ordemParaEntregar && (
         <ConfirmarEntregaCobrancaModal
@@ -365,6 +404,50 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
       />
       
       <div className="space-y-5 px-1 pt-5 sm:px-0">
+        <Card className="border-indigo-200/70 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900 dark:text-white">Demonstrativo mensal para a clínica</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Gere a conferência das ordens entregues e do valor a pagar.
+              </p>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <label className="relative">
+                <span className="sr-only">Mês do relatório</span>
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="month"
+                  value={mesRelatorio}
+                  onChange={(event) => setMesRelatorio(event.target.value)}
+                  className="w-full bg-white pl-9 sm:w-44 dark:bg-slate-900"
+                />
+              </label>
+              <select
+                aria-label="Clínica do demonstrativo"
+                value={clienteRelatorio}
+                onChange={(event) => setClienteRelatorio(event.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-64 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="">Todas as clínicas</option>
+                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+              </select>
+              <Button
+                type="button"
+                disabled={!mesRelatorio}
+                onClick={() => {
+                  const params = new URLSearchParams({ mes: mesRelatorio, imprimir: '1' })
+                  if (clienteRelatorio) params.set('cliente', clienteRelatorio)
+                  router.push(`/relatorios?${params.toString()}`)
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir mês
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {[
             { label: 'Ordens ativas', value: resultado.contadores.ativas },
@@ -657,10 +740,18 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                               <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
                               
                               {!['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status) && (
-                                <DropdownMenuItem onClick={() => handleCancelar(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
-                                  <Ban className="mr-2 h-4 w-4" />
-                                  Cancelar Ordem
-                                </DropdownMenuItem>
+                                <>
+                                  {ordem.status === 'Aguardando' && (
+                                    <DropdownMenuItem onClick={() => setOrdemParaExcluir(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Excluir duplicata
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem onClick={() => handleCancelar(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Cancelar Ordem
+                                  </DropdownMenuItem>
+                                </>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

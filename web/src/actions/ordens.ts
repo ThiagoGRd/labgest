@@ -3,8 +3,9 @@
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import { requireAdmin, requireUser } from '@/lib/auth-utils'
-import { gerarCobrancaAutomatica } from './financeiro'
+import { requireUser } from '@/lib/auth-utils'
+import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
+import { validarExclusaoOrdem } from '@/lib/exclusao-ordem'
 import { parseDateLocal } from '@/lib/date-utils'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
 import {
@@ -297,46 +298,57 @@ export async function updateOrdem(id: number, data: {
       ? data.status
       : statusParaEtapa(etapaCanonica)
 
-    const ordemAtual = await prisma.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true } })
-    if (!ordemAtual) return { success: false, error: 'Ordem não encontrada' }
-    if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
-      return { success: false, error: 'Ordens encerradas não podem ser alteradas' }
-    }
-    const historico = (ordemAtual.historicoEtapas as Prisma.InputJsonObject[]) || []
-    if (novoStatus === 'Pausado' && ordemAtual.status !== 'Pausado') {
-      historico.push({ etapa: ordemAtual.etapaAtual || etapaCanonica, acao: 'pausou', motivo: data.motivoStatus?.trim(), data: new Date().toISOString(), por: usuario.email })
-    } else if (ordemAtual.status === 'Pausado' && novoStatus !== 'Pausado') {
-      historico.push({ etapa: etapaCanonica, acao: 'retomou', data: new Date().toISOString(), por: usuario.email })
-    }
-
-    await prisma.ordem.update({
-      where: { id },
-      data: {
-        nomePaciente: data.paciente,
-        cpfPaciente,
-        dataEntrega,
-        prioridade: data.prioridade,
-        status: novoStatus,
-        etapaAtual: etapaCanonica,
-        corDentes: data.corDentes,
-        material: data.material,
-        observacoes: data.observacoes,
-        dataFinalizacao: novoStatus === 'Finalizado' ? new Date() : null,
-        motivoPausa: novoStatus === 'Pausado' ? data.motivoStatus?.trim() : null,
-        pausadoEm: novoStatus === 'Pausado' ? new Date() : null,
-        pausadoPor: novoStatus === 'Pausado' ? usuario.email : null,
-        historicoEtapas: historico,
+    const resultado = await prisma.$transaction(async (tx) => {
+      const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true } })
+      if (!ordemAtual) return { success: false as const, error: 'Ordem não encontrada' }
+      if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
+        return { success: false as const, error: 'Ordens encerradas não podem ser alteradas' }
       }
+
+      const agora = new Date()
+      const historico = (ordemAtual.historicoEtapas as Prisma.InputJsonObject[]) || []
+      if (novoStatus === 'Pausado' && ordemAtual.status !== 'Pausado') {
+        historico.push({ etapa: ordemAtual.etapaAtual || etapaCanonica, acao: 'pausou', motivo: data.motivoStatus?.trim(), data: agora.toISOString(), por: usuario.email })
+      } else if (ordemAtual.status === 'Pausado' && novoStatus !== 'Pausado') {
+        historico.push({ etapa: etapaCanonica, acao: 'retomou', data: agora.toISOString(), por: usuario.email })
+      }
+
+      await tx.ordem.update({
+        where: { id },
+        data: {
+          nomePaciente: data.paciente,
+          cpfPaciente,
+          dataEntrega,
+          prioridade: data.prioridade,
+          status: novoStatus,
+          etapaAtual: etapaCanonica,
+          corDentes: data.corDentes,
+          material: data.material,
+          observacoes: data.observacoes,
+          dataFinalizacao: novoStatus === 'Finalizado' ? agora : null,
+          motivoPausa: novoStatus === 'Pausado' ? data.motivoStatus?.trim() : null,
+          pausadoEm: novoStatus === 'Pausado' ? agora : null,
+          pausadoPor: novoStatus === 'Pausado' ? usuario.email : null,
+          historicoEtapas: historico,
+        },
+      })
+
+      if (novoStatus === 'Finalizado') {
+        await garantirEfeitosFinalizacao(tx, id, agora)
+      }
+
+      return { success: true as const }
     })
 
-    // Se entrou em status Finalizado via edição, gera cobrança
-    if (novoStatus === 'Finalizado') {
-      await gerarCobrancaAutomatica(id).catch(() => {})
-    }
+    if (!resultado.success) return resultado
 
     revalidatePath('/ordens')
     revalidatePath('/producao')
     revalidatePath('/prioridades')
+    if (novoStatus === 'Finalizado') {
+      revalidatePath('/financeiro')
+      revalidatePath('/estoque')
+    }
     return { success: true }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -437,19 +449,44 @@ export async function getOrdemPublic(token: string) {
 }
 
 export async function deleteOrdem(id: number) {
-  await requireAdmin()
+  await requireUser()
   try {
-    const ordem = await prisma.ordem.findUnique({ where: { id }, select: { status: true, historicoEtapas: true } })
-    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
-    if ((ordem.historicoEtapas as unknown[] | null)?.length || ordem.status !== 'Aguardando') {
-      return { success: false, error: 'Ordens que já entraram no fluxo devem ser canceladas, não excluídas' }
-    }
-    await prisma.ordem.delete({ where: { id } })
+    const resultado = await prisma.$transaction(async (tx) => {
+      const ordem = await tx.ordem.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          historicoEtapas: true,
+          dataFinalizacao: true,
+          dataEntregaReal: true,
+          estoqueBaixadoEm: true,
+          cobrancaGeradaEm: true,
+          _count: { select: { ciclos: true, contasReceber: true } },
+        },
+      })
+      if (!ordem) return { success: false as const, error: 'Ordem não encontrada' }
+
+      const totalMovimentacoesEstoque = await tx.movimentacaoEstoque.count({ where: { ordemId: id } })
+      const validacao = validarExclusaoOrdem({
+        ...ordem,
+        totalCiclos: ordem._count.ciclos,
+        totalContasReceber: ordem._count.contasReceber,
+        totalMovimentacoesEstoque,
+      })
+      if (!validacao.permitida) return { success: false as const, error: validacao.erro }
+
+      await tx.ordem.delete({ where: { id } })
+      return { success: true as const }
+    })
+
+    if (!resultado.success) return resultado
     revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/prioridades')
     return { success: true }
   } catch (error) {
     console.error('Erro ao excluir ordem:', error)
-    return { success: false, error: 'Erro ao excluir ordem' }
+    return { success: false, error: 'Não foi possível excluir a ordem.' }
   }
 }
 
@@ -518,62 +555,72 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
   await requireUser()
   try {
     console.log('[avancarEtapa] Iniciando para ordem ID:', ordemId)
-    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem) {
-      console.error('[avancarEtapa] Ordem não encontrada:', ordemId)
-      return { success: false, error: 'Ordem não encontrada' }
-    }
-
-    const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
-    // Normaliza etapa atual para ID canônico (lida com dados legados)
-    const etapaAtualCanonica = normalizarEtapa(ordem.etapaAtual || 'recebimento')
-
-    const proxima = getNextEtapa(tipoWorkflow, etapaAtualCanonica)
-    if (!proxima) return { success: false, error: 'Já está na última etapa' }
-
-    // Se é etapa de prova, verificar checklist
-    if (isEtapaProva(tipoWorkflow, etapaAtualCanonica)) {
-      const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
-      if (!canAdvance(tipoWorkflow, etapaAtualCanonica, checklist)) {
-        return { success: false, error: 'Complete o checklist de registro estético antes de avançar' }
+    const resultado = await prisma.$transaction(async (tx) => {
+      const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+      if (!ordem) {
+        console.error('[avancarEtapa] Ordem não encontrada:', ordemId)
+        return { success: false as const, error: 'Ordem não encontrada' }
       }
-    }
 
-    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
-    historico.push({
-      etapa: etapaAtualCanonica,
-      acao: 'avancou',
-      para: proxima,
-      data: new Date().toISOString(),
-      observacao: observacao || undefined,
+      const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
+      // Normaliza etapa atual para ID canônico (lida com dados legados)
+      const etapaAtualCanonica = normalizarEtapa(ordem.etapaAtual || 'recebimento')
+
+      const proxima = getNextEtapa(tipoWorkflow, etapaAtualCanonica)
+      if (!proxima) return { success: false as const, error: 'Já está na última etapa' }
+
+      // Se é etapa de prova, verificar checklist
+      if (isEtapaProva(tipoWorkflow, etapaAtualCanonica)) {
+        const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
+        if (!canAdvance(tipoWorkflow, etapaAtualCanonica, checklist)) {
+          return { success: false as const, error: 'Complete o checklist de registro estético antes de avançar' }
+        }
+      }
+
+      const agora = new Date()
+      const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
+      historico.push({
+        etapa: etapaAtualCanonica,
+        acao: 'avancou',
+        para: proxima,
+        data: agora.toISOString(),
+        observacao: observacao || undefined,
+      })
+
+      // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
+      const novoStatus = statusParaEtapa(proxima)
+      const progresso = getProgresso(tipoWorkflow, proxima)
+
+      await tx.ordem.update({
+        where: { id: ordemId },
+        data: {
+          etapaAtual: proxima,
+          historicoEtapas: historico,
+          status: novoStatus,
+          progresso,
+          checklistEstetico: {},
+          dataFinalizacao: proxima === ETAPA_FINAL ? agora : null,
+        },
+      })
+
+      if (novoStatus === 'Finalizado') {
+        await garantirEfeitosFinalizacao(tx, ordemId, agora)
+      }
+
+      return { success: true as const, novaEtapa: proxima, finalizado: novoStatus === 'Finalizado' }
     })
 
-    // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
-    const novoStatus = statusParaEtapa(proxima)
-    const progresso = getProgresso(tipoWorkflow, proxima)
-
-    await prisma.ordem.update({
-      where: { id: ordemId },
-      data: {
-        etapaAtual: proxima,
-        historicoEtapas: historico,
-        status: novoStatus,
-        progresso: progresso,
-        checklistEstetico: {},
-        dataFinalizacao: proxima === ETAPA_FINAL ? new Date() : null,
-      }
-    })
-
-    // Se finalizou, gera cobrança automaticamente
-    if (novoStatus === 'Finalizado') {
-      await gerarCobrancaAutomatica(ordemId).catch(() => {})
-    }
+    if (!resultado.success) return resultado
 
     console.log('[avancarEtapa] Sucesso!')
     revalidatePath('/ordens')
     revalidatePath('/producao')
     revalidatePath('/prioridades')
-    return { success: true, novaEtapa: proxima }
+    if (resultado.finalizado) {
+      revalidatePath('/financeiro')
+      revalidatePath('/estoque')
+    }
+    return { success: true, novaEtapa: resultado.novaEtapa }
   } catch (error) {
     console.error('[avancarEtapa] Erro detalhado:', error)
     const errorMsg = error instanceof Error ? error.message : String(error)

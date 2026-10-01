@@ -9,7 +9,11 @@ export async function garantirEfeitosFinalizacao(
     where: { id: ordemId },
     include: {
       servico: { select: { materiais: true } },
-      contasReceber: { select: { id: true }, take: 1 },
+      contasReceber: {
+        where: { status: { not: 'Cancelado' } },
+        select: { id: true },
+        take: 1,
+      },
     },
   })
   if (!ordem) throw new Error('Ordem não encontrada durante a finalização')

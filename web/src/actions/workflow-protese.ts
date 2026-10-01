@@ -22,6 +22,8 @@ function revalidarFluxo() {
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
+  revalidatePath('/financeiro')
+  revalidatePath('/estoque')
 }
 
 export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string) {
