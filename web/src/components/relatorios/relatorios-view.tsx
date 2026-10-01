@@ -218,6 +218,72 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                 <p className="mt-1 text-2xl font-bold">{ordensEntregues.resumoFinanceiro.vencidas.quantidade}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.resumoFinanceiro.vencidas.valor)}</p>
               </div>
             </CardContent>
+            <CardContent className="border-t border-black/5 px-0 pt-0 dark:border-white/5">
+              <div className="flex items-center justify-between gap-4 px-5 py-4">
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-white">Ordens discriminadas</p>
+                  <p className="text-xs text-slate-500">
+                    {ordensEntregues.clienteSelecionado?.nome || 'Todas as clínicas'} · {ordensEntregues.mesLabel}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  {ordensEntregues.totalOrdens} ordem(ns)
+                </p>
+              </div>
+              {ordensEntregues.itens.length === 0 ? (
+                <p className="border-t border-slate-100 px-5 py-8 text-center text-sm text-slate-500 dark:border-slate-800">
+                  Nenhuma ordem entregue para o mês e a clínica selecionados.
+                </p>
+              ) : (
+                <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
+                  <table className="w-full min-w-[820px] text-sm">
+                    <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">OS</th>
+                        <th className="px-4 py-3">Entrega</th>
+                        <th className="px-4 py-3">Paciente</th>
+                        <th className="px-4 py-3">Clínica</th>
+                        <th className="px-4 py-3">Serviço</th>
+                        <th className="px-4 py-3">Situação</th>
+                        <th className="px-4 py-3 text-right">Valor</th>
+                        <th className="px-4 py-3 text-right">Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {ordensEntregues.itens.map((ordem) => (
+                        <tr key={ordem.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-white/5">
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold">#{ordem.id}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
+                            {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR', {
+                              timeZone: ordem.origemData === 'Entrega confirmada' ? 'America/Maceio' : 'UTC',
+                            })}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{ordem.paciente}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{ordem.cliente}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{ordem.servico}</td>
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {ordem.situacaoFinanceira === 'Recebida' ? 'Pago' : ordem.situacaoFinanceira}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatCurrency(ordem.valor)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-bold">
+                            {formatCurrency(Math.max(0, ordem.valor - ordem.valorRecebido))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-bold dark:border-slate-700 dark:bg-slate-900/60">
+                      <tr>
+                        <td colSpan={6} className="px-4 py-3 text-right">Total</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{formatCurrency(ordensEntregues.valorTotal)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          {formatCurrency(ordensEntregues.itens.reduce((total, ordem) => total + Math.max(0, ordem.valor - ordem.valorRecebido), 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
           </Card>
           
           {/* Gráfico Principal */}
