@@ -30,6 +30,7 @@ interface Lancamento {
   liquidado: number
   restante: number
   vencimento: string
+  dataBaixa?: string | null
   status: string
   observacoes: string
   cliente?: string
@@ -201,7 +202,89 @@ function FilterBar({ busca, onBusca, status, onStatus, onAdd, addLabel }: { busc
 }
 
 function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens: Lancamento[]; tipo: 'receber' | 'pagar'; onBaixa: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number }) => void; onEditar: (item: Lancamento) => void; onCancelar: (id: number) => void }) {
-  return <Card><CardContent className="p-0"><div className="hidden overflow-x-auto md:block"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:bg-white/5"><th className="px-5 py-4">Lançamento</th><th className="px-5 py-4">{tipo === 'receber' ? 'Cliente' : 'Fornecedor / categoria'}</th><th className="px-5 py-4">Vencimento</th><th className="px-5 py-4">Situação</th><th className="px-5 py-4 text-right">Em aberto</th><th className="px-5 py-4 text-right">Ações</th></tr></thead><tbody>{itens.map((item) => <tr key={item.id} className="border-b last:border-0"><td className="px-5 py-4"><p className="font-semibold">{item.descricao}</p>{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}{item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}</td><td className="px-5 py-4"><p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p><p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p></td><td className="px-5 py-4">{formatDate(item.vencimento)}</td><td className="px-5 py-4"><Badge variant={badgeVariant(item.status)}>{item.status}</Badge>{item.liquidado > 0 && statusAberto(item.status) && <p className="mt-1 text-xs text-slate-500">{formatCurrency(item.liquidado)} liquidado</p>}</td><td className="px-5 py-4 text-right font-bold">{formatCurrency(item.restante)}</td><td className="px-5 py-4"><div className="flex justify-end gap-1">{statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}</div></td></tr>)}</tbody></table></div><div className="divide-y md:hidden">{itens.map((item) => <article key={item.id} className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p>{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}<p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div><div className="flex items-end justify-between"><div><p className="text-xs text-slate-500">Vence em {formatDate(item.vencimento)}</p><p className="text-lg font-bold">{formatCurrency(item.restante)}</p></div><div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div></article>)}</div>{itens.length === 0 && <EmptyMessage text="Nenhum lançamento encontrado com estes filtros." />}</CardContent></Card>
+  const rotuloLiquidado = tipo === 'receber' ? 'Recebido' : 'Pago'
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:bg-white/5">
+                <th className="px-5 py-4">Lançamento</th>
+                <th className="px-5 py-4">{tipo === 'receber' ? 'Cliente' : 'Fornecedor / categoria'}</th>
+                <th className="px-5 py-4">Vencimento</th>
+                <th className="px-5 py-4">Situação</th>
+                <th className="px-5 py-4 text-right">Valor</th>
+                <th className="px-5 py-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((item) => (
+                <tr key={item.id} className="border-b last:border-0">
+                  <td className="px-5 py-4">
+                    <p className="font-semibold">{item.descricao}</p>
+                    {item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}
+                    {item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}
+                  </td>
+                  <td className="px-5 py-4">
+                    <p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p>
+                    <p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p>
+                  </td>
+                  <td className="px-5 py-4">{formatDate(item.vencimento)}</td>
+                  <td className="px-5 py-4">
+                    <Badge variant={badgeVariant(item.status)}>{item.status}</Badge>
+                    {item.dataBaixa && <p className="mt-1 text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <p className="font-bold">{formatCurrency(item.valor)}</p>
+                    {item.liquidado > 0 && <p className="mt-1 text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}
+                    {item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex justify-end gap-1">
+                      {statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}
+                      {item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}
+                      {item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="divide-y md:hidden">
+          {itens.map((item) => (
+            <article key={item.id} className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{item.descricao}</p>
+                  {item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}
+                  <p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor} • ${item.categoria}`}</p>
+                </div>
+                <Badge variant={badgeVariant(item.status)}>{item.status}</Badge>
+              </div>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs text-slate-500">Vence em {formatDate(item.vencimento)}</p>
+                  <p className="text-lg font-bold">{formatCurrency(item.valor)}</p>
+                  {item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}
+                  {item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}
+                  {item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}
+                </div>
+                <div className="flex gap-1">
+                  <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>
+                  {statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        {itens.length === 0 && <EmptyMessage text="Nenhum lançamento encontrado com estes filtros." />}
+      </CardContent>
+    </Card>
+  )
 }
 
 function EmptyMessage({ text }: { text: string }) { return <div className="p-12 text-center text-sm text-slate-500">{text}</div> }
