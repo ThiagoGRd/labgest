@@ -409,7 +409,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
             <div>
               <p className="font-semibold text-slate-900 dark:text-white">Demonstrativo mensal para a clínica</p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Gere a conferência das ordens entregues e do valor a pagar.
+                Gere a conferência das ordens cobradas e do valor a pagar.
               </p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">

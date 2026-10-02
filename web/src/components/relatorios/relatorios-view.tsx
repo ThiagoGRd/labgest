@@ -168,7 +168,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                     <FileText className="h-5 w-5 text-indigo-600" />
                     Demonstrativo mensal para a clínica
                   </CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">Relação de serviços entregues para conferência e pagamento.</p>
+                  <p className="mt-1 text-sm text-slate-500">Relação das cobranças com vencimento no mês para conferência e pagamento.</p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   <label className="relative">
@@ -202,7 +202,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
             </CardHeader>
             <CardContent className="grid gap-3 pt-5 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-indigo-50 p-4 dark:bg-indigo-500/10">
-                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Entregas</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">Cobranças</p>
                 <p className="mt-1 text-2xl font-bold">{ordensEntregues.totalOrdens}</p><p className="text-xs text-slate-500">{formatCurrency(ordensEntregues.valorTotal)}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10">
@@ -240,7 +240,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                     <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                       <tr>
                         <th className="px-4 py-3">OS</th>
-                        <th className="px-4 py-3">Entrega</th>
+                        <th className="px-4 py-3">Vencimento</th>
                         <th className="px-4 py-3">Paciente</th>
                         <th className="px-4 py-3">Clínica</th>
                         <th className="px-4 py-3">Serviço</th>
@@ -252,11 +252,9 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {ordensEntregues.itens.map((ordem) => (
                         <tr key={ordem.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-white/5">
-                          <td className="whitespace-nowrap px-4 py-3 font-semibold">#{ordem.id}</td>
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold">{ordem.ordemId ? `#${ordem.ordemId}` : 'Avulso'}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
-                            {new Date(ordem.dataEntrega).toLocaleDateString('pt-BR', {
-                              timeZone: ordem.origemData === 'Entrega confirmada' ? 'America/Maceio' : 'UTC',
-                            })}
+                            {ordem.dataVencimento ? new Date(ordem.dataVencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'}
                           </td>
                           <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{ordem.paciente}</td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{ordem.cliente}</td>

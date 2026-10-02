@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 
 export interface OrdemEntregueRelatorio {
   id: number
+  ordemId: number | null
   paciente: string
   cliente: string
   servico: string
@@ -47,12 +48,6 @@ function moeda(valor: number) {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function dataRelatorio(valor: string, origem: string) {
-  const data = new Date(valor)
-  const timeZone = origem === 'Entrega confirmada' ? 'America/Maceio' : 'UTC'
-  return data.toLocaleDateString('pt-BR', { timeZone })
-}
-
 export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: RelatorioOrdensEntreguesData }>(
   ({ dados }, ref) => (
     <div ref={ref} className="mx-auto min-h-[297mm] w-[210mm] bg-white p-[14mm] text-slate-950">
@@ -72,7 +67,7 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       </header>
 
       <section className="my-5 grid grid-cols-3 gap-3">
-        <ResumoSimples label="Ordens entregues" valor={String(dados.totalOrdens)} />
+        <ResumoSimples label="Cobranças do período" valor={String(dados.totalOrdens)} />
         <ResumoSimples label="Valor dos serviços" valor={moeda(dados.valorTotal)} />
         <ResumoSimples
           label="Saldo para pagamento"
@@ -81,7 +76,7 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       </section>
 
       {dados.itens.length === 0 ? (
-        <p className="p-10 text-center text-sm text-slate-500">Nenhuma ordem entregue neste mês.</p>
+        <p className="p-10 text-center text-sm text-slate-500">Nenhuma cobrança encontrada neste mês.</p>
       ) : (
         <div className="space-y-6">
           <GrupoClinicas itens={dados.itens} separarPorClinica={!dados.clienteSelecionado} />
@@ -89,8 +84,8 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
       )}
 
       <footer className="mt-6 border-t border-slate-300 pt-3 text-[9px] leading-relaxed text-slate-500">
-        <p>Documento para conferência dos serviços executados. Em caso de divergência, informe o número da OS ao laboratório.</p>
-        <p className="mt-1">* Em registros históricos sem confirmação de entrega, foi utilizada a data de finalização ou a previsão disponível.</p>
+        <p>Documento para conferência dos serviços cobrados. Em caso de divergência, informe o número da OS ao laboratório.</p>
+        <p className="mt-1">O período considera o vencimento financeiro de cada cobrança.</p>
       </footer>
     </div>
   )
@@ -133,7 +128,7 @@ function TabelaOrdens({ ordens }: { ordens: OrdemEntregueRelatorio[] }) {
     <table className="w-full border-collapse text-[9px]">
       <thead>
         <tr className="bg-slate-900 text-left text-white">
-          <th className="p-1.5">OS</th><th className="p-1.5">Entrega</th><th className="p-1.5">Paciente</th>
+          <th className="p-1.5">OS</th><th className="p-1.5">Vencimento</th><th className="p-1.5">Paciente</th>
           <th className="p-1.5">Serviço</th><th className="p-1.5">Situação</th>
           <th className="p-1.5 text-right">Valor</th><th className="p-1.5 text-right">Saldo</th>
         </tr>
@@ -141,8 +136,8 @@ function TabelaOrdens({ ordens }: { ordens: OrdemEntregueRelatorio[] }) {
       <tbody>
         {ordens.map(item => (
           <tr key={item.id} className="border-b border-slate-200 align-top">
-            <td className="p-1.5 font-bold">#{item.id}</td>
-            <td className="p-1.5">{dataRelatorio(item.dataEntrega, item.origemData)}{item.origemData !== 'Entrega confirmada' && '*'}</td>
+            <td className="p-1.5 font-bold">{item.ordemId ? `#${item.ordemId}` : 'Avulso'}</td>
+            <td className="p-1.5">{item.dataVencimento ? new Date(item.dataVencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'}</td>
             <td className="p-1.5 font-semibold">{item.paciente}</td>
             <td className="p-1.5">{item.servico}</td>
             <td className="p-1.5">{item.situacaoFinanceira === 'Recebida' ? 'Pago' : item.situacaoFinanceira}</td>
