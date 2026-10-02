@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { requireUser } from '@/lib/auth-utils'
 import { parseDateLocal } from '@/lib/date-utils'
 import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
+import { resumirDespesasMensais } from '@/lib/regra-despesa-mensal'
 
 const contaSchema = z.object({
   tipo: z.enum(['receber', 'pagar']),
@@ -218,10 +219,11 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const entradas = movimentacoes.filter((m) => m.tipo === 'Entrada').reduce((s, m) => s + Number(m.valor), 0)
   const saidas = movimentacoes.filter((m) => m.tipo === 'Saida').reduce((s, m) => s + Number(m.valor), 0)
   const resumoReceberMes = resumirCobrancasMensais(receber)
+  const resumoPagarMes = resumirDespesasMensais(pagar)
   const previstoReceber = resumoReceberMes.saldo
-  const previstoPagar = contasPagar.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
+  const previstoPagar = resumoPagarMes.saldo
   const vencidoReceber = vencidasGlobais.reduce((s, c) => s + Math.max(0, Number(c.valor) - Number(c.valorRecebido)), 0)
-  const resultadoProjetado = entradas - saidas + previstoReceber - previstoPagar
+  const resultadoProjetado = resumoReceberMes.valorPrevisto - resumoPagarMes.valorPrevisto
 
   const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
   for (const conta of [...mesesReceber, ...mesesPagar]) {
@@ -248,9 +250,12 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       entradas,
       saidas,
       resultadoRealizado: entradas - saidas,
+      recebidoCompetencia: resumoReceberMes.valorRecebido,
+      pagoCompetencia: resumoPagarMes.valorPago,
       previstoReceber,
       totalPrevistoReceber: resumoReceberMes.valorPrevisto,
       previstoPagar,
+      totalPrevistoPagar: resumoPagarMes.valorPrevisto,
       resultadoProjetado,
       vencidoReceber,
       quantidadeVencidas: vencidasGlobais.length,
@@ -317,6 +322,7 @@ export async function createConta(input: z.input<typeof contaSchema>) {
     revalidarFinanceiro()
     return { success: true, parcelasCriadas: data.tipo === 'pagar' ? data.parcelas : 1 }
   } catch (error) {
+    console.error('Erro ao criar lançamento financeiro:', error)
     const mensagem = error instanceof z.ZodError ? error.issues[0]?.message : 'Não foi possível criar o lançamento.'
     return { success: false, error: mensagem }
   }
