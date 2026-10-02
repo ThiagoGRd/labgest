@@ -274,7 +274,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                         <td colSpan={6} className="px-4 py-3 text-right">Total</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{formatCurrency(ordensEntregues.valorTotal)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          {formatCurrency(ordensEntregues.itens.reduce((total, ordem) => total + Math.max(0, ordem.valor - ordem.valorRecebido), 0))}
+                          {formatCurrency(ordensEntregues.saldoTotal)}
                         </td>
                       </tr>
                     </tfoot>

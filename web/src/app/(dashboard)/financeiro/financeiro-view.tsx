@@ -52,7 +52,7 @@ interface FinanceiroData {
   movimentacoes: Array<{ id: number; tipo: string; valor: number; data: string; descricao: string; pessoa: string; conta: string; formaPagamento: string }>
   resumo: {
     entradas: number; saidas: number; resultadoRealizado: number
-    previstoReceber: number; previstoPagar: number; resultadoProjetado: number
+    previstoReceber: number; totalPrevistoReceber: number; previstoPagar: number; resultadoProjetado: number
     vencidoReceber: number; quantidadeVencidas: number
   }
   mesesDisponiveis: string[]
@@ -103,7 +103,6 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
   const receberFiltrado = filtrar(dados.receber)
   const pagarFiltrado = filtrar(dados.pagar)
   const taxaInadimplencia = dados.resumo.previstoReceber > 0 ? (dados.resumo.vencidoReceber / dados.resumo.previstoReceber) * 100 : 0
-  const recebimentoPeriodo = dados.receber.reduce((s, c) => s + c.liquidado, 0)
   const ticketMedio = dados.receber.length ? dados.receber.reduce((s, c) => s + c.valor, 0) / dados.receber.length : 0
 
   async function confirmarCancelamento(motivo: string) {
@@ -157,7 +156,7 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
 
             <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
               <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Previsto × realizado</h2><p className="text-sm text-slate-500">Leitura do período selecionado</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
-                <FlowBlock title="Entradas" icon={ArrowUpRight} previsto={dados.resumo.previstoReceber + recebimentoPeriodo} realizado={dados.resumo.entradas} tone="emerald" />
+                <FlowBlock title="Entradas" icon={ArrowUpRight} previsto={dados.resumo.totalPrevistoReceber} realizado={dados.resumo.entradas} tone="emerald" />
                 <FlowBlock title="Saídas" icon={ArrowDownRight} previsto={dados.resumo.previstoPagar + dados.resumo.saidas} realizado={dados.resumo.saidas} tone="red" />
               </CardContent></Card>
               <Card><CardHeader><div><h2 className="font-bold text-slate-900 dark:text-white">Agenda financeira</h2><p className="text-sm text-slate-500">Prioridades por vencimento</p></div></CardHeader><CardContent className="space-y-3">
@@ -179,7 +178,7 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
 
           <TabsContent value="relatorios" className="space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><ReportCard title="Inadimplência" value={`${taxaInadimplencia.toFixed(1)}%`} description="Do saldo a receber está vencido" icon={AlertTriangle} /><ReportCard title="Ticket médio" value={formatCurrency(ticketMedio)} description="Por cobrança no período" icon={CircleDollarSign} /><ReportCard title="Resultado caixa" value={formatCurrency(dados.resumo.resultadoRealizado)} description="Entradas menos saídas realizadas" icon={FileBarChart} /><ReportCard title="Compromissos" value={formatCurrency(dados.resumo.previstoPagar)} description="Ainda a pagar no período" icon={CalendarDays} /></section>
-            <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Indicadores prontos para decisão</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita prevista" value={dados.resumo.previstoReceber + recebimentoPeriodo} /><SummaryLine label="Receita realizada" value={dados.resumo.entradas} /><SummaryLine label="Despesa prevista" value={dados.resumo.previstoPagar + dados.resumo.saidas} /><SummaryLine label="Despesa realizada" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Resultado projetado do período" value={dados.resumo.resultadoProjetado} /></CardContent></Card>
+            <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Indicadores prontos para decisão</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita prevista" value={dados.resumo.totalPrevistoReceber} /><SummaryLine label="Receita realizada" value={dados.resumo.entradas} /><SummaryLine label="Despesa prevista" value={dados.resumo.previstoPagar + dados.resumo.saidas} /><SummaryLine label="Despesa realizada" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Resultado projetado do período" value={dados.resumo.resultadoProjetado} /></CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>

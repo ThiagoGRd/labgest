@@ -30,6 +30,8 @@ export interface RelatorioOrdensEntreguesData {
   itens: OrdemEntregueRelatorio[]
   totalOrdens: number
   valorTotal: number
+  valorRecebidoTotal: number
+  saldoTotal: number
   comCobranca: number
   semCobranca: number
   resumoFinanceiro: {
@@ -71,7 +73,7 @@ export const RelatorioOrdensEntregues = forwardRef<HTMLDivElement, { dados: Rela
         <ResumoSimples label="Valor dos serviços" valor={moeda(dados.valorTotal)} />
         <ResumoSimples
           label="Saldo para pagamento"
-          valor={moeda(dados.itens.reduce((total, item) => total + Math.max(0, item.valor - item.valorRecebido), 0))}
+          valor={moeda(dados.saldoTotal)}
         />
       </section>
 

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/lib/auth-utils'
 import { parseDateLocal } from '@/lib/date-utils'
+import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 
 const contaSchema = z.object({
   tipo: z.enum(['receber', 'pagar']),
@@ -216,7 +217,8 @@ export async function getFinanceiroPageData(filtroMes?: string) {
 
   const entradas = movimentacoes.filter((m) => m.tipo === 'Entrada').reduce((s, m) => s + Number(m.valor), 0)
   const saidas = movimentacoes.filter((m) => m.tipo === 'Saida').reduce((s, m) => s + Number(m.valor), 0)
-  const previstoReceber = contasReceber.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
+  const resumoReceberMes = resumirCobrancasMensais(receber)
+  const previstoReceber = resumoReceberMes.saldo
   const previstoPagar = contasPagar.filter((c) => c.status !== 'Cancelado').reduce((s, c) => s + c.restante, 0)
   const vencidoReceber = vencidasGlobais.reduce((s, c) => s + Math.max(0, Number(c.valor) - Number(c.valorRecebido)), 0)
   const resultadoProjetado = entradas - saidas + previstoReceber - previstoPagar
@@ -247,6 +249,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       saidas,
       resultadoRealizado: entradas - saidas,
       previstoReceber,
+      totalPrevistoReceber: resumoReceberMes.valorPrevisto,
       previstoPagar,
       resultadoProjetado,
       vencidoReceber,

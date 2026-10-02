@@ -3,6 +3,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
+import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 
 let genAI: GoogleGenerativeAI | null = null
 if (process.env.GEMINI_API_KEY) {
@@ -209,6 +210,7 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string, cliente
       pendentes: { quantidade: 0, valor: 0 },
       vencidas: { quantidade: 0, valor: 0 },
     })
+    const resumoCobrancas = resumirCobrancasMensais(contas)
 
     return {
       mes,
@@ -216,7 +218,9 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string, cliente
       clienteSelecionado,
       itens,
       totalOrdens: itens.length,
-      valorTotal: itens.reduce((total, item) => total + item.valor, 0),
+      valorTotal: resumoCobrancas.valorPrevisto,
+      valorRecebidoTotal: resumoCobrancas.valorRecebido,
+      saldoTotal: resumoCobrancas.saldo,
       comCobranca: itens.filter(item => item.contaId !== null).length,
       semCobranca: itens.filter(item => item.contaId === null).length,
       resumoFinanceiro,
@@ -230,6 +234,8 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string, cliente
       itens: [],
       totalOrdens: 0,
       valorTotal: 0,
+      valorRecebidoTotal: 0,
+      saldoTotal: 0,
       comCobranca: 0,
       semCobranca: 0,
       resumoFinanceiro: {
