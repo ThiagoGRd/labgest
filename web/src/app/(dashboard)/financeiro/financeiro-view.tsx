@@ -85,6 +85,19 @@ function statusAberto(status: string) {
   return !['Recebido', 'Pago', 'Cancelado'].includes(status)
 }
 
+function resumoDoGrupo(itens: Lancamento[]) {
+  return itens.reduce((total, item) => total + (item.status === 'Cancelado' ? 0 : item.valor), 0)
+}
+
+function rotuloDoDia(data: string) {
+  const dia = new Date(`${data.slice(0, 10)}T12:00:00`)
+  return {
+    dia: dia.toLocaleDateString('pt-BR', { day: '2-digit' }),
+    mes: dia.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(),
+    extenso: dia.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }),
+  }
+}
+
 export function FinanceiroView({ dados }: FinanceiroViewProps) {
   const router = useRouter()
   const [tab, setTab] = useState('visao')
@@ -133,22 +146,38 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
 
       <Header title="Financeiro" subtitle="Caixa, cobranças, despesas e resultado do laboratório" action={{ label: 'Novo lançamento', onClick: () => setNovoTipo(tab === 'pagar' ? 'pagar' : 'receber') }} />
 
-      <main className="space-y-6 p-4 sm:p-6">
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Período de gestão</p><p className="mt-1 text-lg font-bold capitalize text-slate-900 dark:text-white">{mesLabel(dados.periodo)}</p></div>
-          <div className="flex gap-2">
-            <Select value={dados.periodo} onValueChange={(mes) => router.push(`/financeiro?mes=${mes}`)}>
-              <SelectTrigger aria-label="Selecionar período" className="w-full sm:w-52"><SelectValue /></SelectTrigger>
-              <SelectContent>{dados.mesesDisponiveis.map((mes) => <SelectItem key={mes} value={mes}><span className="capitalize">{mesLabel(mes)}</span></SelectItem>)}</SelectContent>
-            </Select>
-            <Button variant="outline" size="icon" onClick={sincronizar} disabled={sincronizando} aria-label="Sincronizar cobranças de ordens finalizadas" title="Sincronizar ordens finalizadas"><RefreshCw className={`h-4 w-4 ${sincronizando ? 'animate-spin' : ''}`} /></Button>
-          </div>
-        </div>
-
+      <main className="space-y-4 p-4 sm:p-6">
         <Tabs value={tab} onValueChange={setTab}>
-          <div className="overflow-x-auto pb-1"><TabsList className="min-w-max">{tabItems.map((item) => <TabsTrigger key={item.value} value={item.value} className="px-4"><span className="hidden sm:inline">{item.label}</span><span className="sm:hidden">{item.short}</span></TabsTrigger>)}</TabsList></div>
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="flex flex-col gap-4 border-b border-slate-200 p-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Competência financeira</p>
+                <p className="mt-1 text-xl font-bold capitalize text-slate-900 dark:text-white">{mesLabel(dados.periodo)}</p>
+              </div>
+              <div className="flex gap-2">
+                <Select value={dados.periodo} onValueChange={(mes) => router.push(`/financeiro?mes=${mes}`)}>
+                  <SelectTrigger aria-label="Selecionar período" className="w-full sm:w-56"><SelectValue /></SelectTrigger>
+                  <SelectContent>{dados.mesesDisponiveis.map((mes) => <SelectItem key={mes} value={mes}><span className="capitalize">{mesLabel(mes)}</span></SelectItem>)}</SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" onClick={sincronizar} disabled={sincronizando} aria-label="Sincronizar cobranças de ordens finalizadas" title="Sincronizar ordens finalizadas"><RefreshCw className={`h-4 w-4 ${sincronizando ? 'animate-spin' : ''}`} /></Button>
+              </div>
+            </div>
 
-          <TabsContent value="visao" className="space-y-6">
+            <div className="overflow-x-auto border-b border-slate-200 dark:border-white/10">
+              <TabsList className="h-12 min-w-max justify-start rounded-none bg-transparent p-0">
+                {tabItems.map((item) => <TabsTrigger key={item.value} value={item.value} className="h-12 rounded-none border-b-2 border-transparent px-5 shadow-none data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent data-[state=active]:text-indigo-600 data-[state=active]:shadow-none dark:data-[state=active]:text-indigo-400"><span className="hidden sm:inline">{item.label}</span><span className="sm:hidden">{item.short}</span></TabsTrigger>)}
+              </TabsList>
+            </div>
+
+            <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 dark:divide-white/10 lg:grid-cols-4 lg:divide-y-0">
+              <TotalStrip label="Entradas realizadas" value={dados.resumo.entradas} tone="green" />
+              <TotalStrip label="A receber" value={dados.resumo.previstoReceber} tone="blue" />
+              <TotalStrip label="Saídas realizadas" value={dados.resumo.saidas} tone="red" />
+              <TotalStrip label="A pagar" value={dados.resumo.previstoPagar} tone="amber" />
+            </div>
+          </section>
+
+          <TabsContent value="visao" className="mt-4 space-y-6">
             <section aria-label="Indicadores financeiros" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <MetricCard title="Resultado do mês" value={dados.resumo.resultadoRealizado} detail={`${formatCurrency(dados.resumo.entradas)} entradas • ${formatCurrency(dados.resumo.saidas)} saídas`} icon={TrendingUp} tone={dados.resumo.resultadoRealizado >= 0 ? 'green' : 'red'} />
               <MetricCard title="Resultado projetado" value={dados.resumo.resultadoProjetado} detail="Resultado do período considerando os valores em aberto" icon={FileBarChart} tone={dados.resumo.resultadoProjetado >= 0 ? 'indigo' : 'red'} />
@@ -169,15 +198,15 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="receber" className="space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('receber')} addLabel="Nova receita" /><LancamentosList itens={receberFiltrado} tipo="receber" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'receber' })} onCancelar={(id) => setCancelamento({ id, tipo: 'receber' })} /></TabsContent>
-          <TabsContent value="pagar" className="space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('pagar')} addLabel="Nova despesa" /><LancamentosList itens={pagarFiltrado} tipo="pagar" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'pagar' })} onCancelar={(id) => setCancelamento({ id, tipo: 'pagar' })} /></TabsContent>
+          <TabsContent value="receber" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('receber')} addLabel="Nova receita" /><LancamentosList itens={receberFiltrado} tipo="receber" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'receber' })} onCancelar={(id) => setCancelamento({ id, tipo: 'receber' })} /></TabsContent>
+          <TabsContent value="pagar" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('pagar')} addLabel="Nova despesa" /><LancamentosList itens={pagarFiltrado} tipo="pagar" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'pagar' })} onCancelar={(id) => setCancelamento({ id, tipo: 'pagar' })} /></TabsContent>
 
-          <TabsContent value="caixa" className="space-y-4">
+          <TabsContent value="caixa" className="mt-4 space-y-4">
             <section className="grid gap-4 sm:grid-cols-3"><MetricCard title="Entradas realizadas" value={dados.resumo.entradas} detail="Dinheiro confirmado" icon={ArrowUpRight} tone="green" /><MetricCard title="Saídas realizadas" value={dados.resumo.saidas} detail="Pagamentos confirmados" icon={ArrowDownRight} tone="red" /><MetricCard title="Resultado realizado" value={dados.resumo.resultadoRealizado} detail="Entradas menos saídas" icon={Banknote} tone="blue" /></section>
             <Card><CardHeader><div><h2 className="font-bold">Movimentações do caixa</h2><p className="text-sm text-slate-500">Somente baixas efetivamente confirmadas</p></div></CardHeader><CardContent className="space-y-2">{dados.movimentacoes.map((item) => <div key={item.id} className="grid gap-2 rounded-xl border p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="font-semibold">{item.descricao}</p><p className="text-xs text-slate-500">{item.pessoa || item.conta} • {item.formaPagamento}</p></div><p className="text-sm text-slate-500">{formatDate(item.data)}</p><p className={`font-bold ${item.tipo === 'Entrada' ? 'text-emerald-600' : 'text-red-600'}`}>{item.tipo === 'Entrada' ? '+' : '-'} {formatCurrency(item.valor)}</p></div>)}{dados.movimentacoes.length === 0 && <EmptyMessage text="Nenhuma movimentação realizada neste período." />}</CardContent></Card>
           </TabsContent>
 
-          <TabsContent value="relatorios" className="space-y-6">
+          <TabsContent value="relatorios" className="mt-4 space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><ReportCard title="Inadimplência" value={`${taxaInadimplencia.toFixed(1)}%`} description="Do saldo a receber está vencido" icon={AlertTriangle} /><ReportCard title="Ticket médio" value={formatCurrency(ticketMedio)} description="Por cobrança no período" icon={CircleDollarSign} /><ReportCard title="Resultado caixa" value={formatCurrency(dados.resumo.resultadoRealizado)} description="Entradas menos saídas realizadas" icon={FileBarChart} /><ReportCard title="Compromissos" value={formatCurrency(dados.resumo.previstoPagar)} description="Ainda a pagar no período" icon={CalendarDays} /></section>
             <Card><CardHeader><div><h2 className="font-bold">Resumo gerencial</h2><p className="text-sm text-slate-500">Indicadores prontos para decisão</p></div></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><SummaryLine label="Receita prevista" value={dados.resumo.totalPrevistoReceber} /><SummaryLine label="Receita realizada" value={dados.resumo.entradas} /><SummaryLine label="Despesa prevista" value={dados.resumo.previstoPagar + dados.resumo.saidas} /><SummaryLine label="Despesa realizada" value={dados.resumo.saidas} /><SummaryLine label="Vencido a receber" value={dados.resumo.vencidoReceber} alert /><SummaryLine label="Resultado projetado do período" value={dados.resumo.resultadoProjetado} /></CardContent></Card>
           </TabsContent>
@@ -197,93 +226,84 @@ function FlowBlock({ title, icon: Icon, previsto, realizado, tone }: { title: st
   return <div className="rounded-2xl border p-4"><div className="flex items-center gap-2"><Icon className={`h-5 w-5 ${tone === 'emerald' ? 'text-emerald-600' : 'text-red-600'}`} /><p className="font-bold">{title}</p></div><div className="mt-5 flex justify-between text-sm"><span className="text-slate-500">Realizado</span><strong>{formatCurrency(realizado)}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800"><div className={`h-full rounded-full ${tone === 'emerald' ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${percentual}%` }} /></div><div className="mt-2 flex justify-between text-xs text-slate-500"><span>{percentual.toFixed(0)}% confirmado</span><span>Previsto {formatCurrency(previsto)}</span></div></div>
 }
 
+function TotalStrip({ label, value, tone }: { label: string; value: number; tone: 'green' | 'blue' | 'red' | 'amber' }) {
+  const tones = { green: 'text-emerald-600 dark:text-emerald-400', blue: 'text-blue-600 dark:text-blue-400', red: 'text-red-600 dark:text-red-400', amber: 'text-amber-600 dark:text-amber-400' }
+  return <div className="px-4 py-3 sm:px-5"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className={`mt-1 text-lg font-bold ${tones[tone]}`}>{formatCurrency(value)}</p></div>
+}
+
 function FilterBar({ busca, onBusca, status, onStatus, onAdd, addLabel }: { busca: string; onBusca: (value: string) => void; status: string; onStatus: (value: string) => void; onAdd: () => void; addLabel: string }) {
   return <div className="flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input aria-label="Buscar lançamentos" value={busca} onChange={(event) => onBusca(event.target.value)} placeholder="Buscar cliente, fornecedor, paciente ou OS" className="pl-9" /></div><Select value={status} onValueChange={onStatus}><SelectTrigger aria-label="Filtrar por situação" className="w-full lg:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todas as situações</SelectItem><SelectItem value="abertos">Somente em aberto</SelectItem><SelectItem value="vencido">Vencidos</SelectItem><SelectItem value="parcial">Parciais</SelectItem><SelectItem value="cancelado">Cancelados</SelectItem></SelectContent></Select><Button onClick={onAdd}><Plus className="h-4 w-4" />{addLabel}</Button></div>
 }
 
 function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens: Lancamento[]; tipo: 'receber' | 'pagar'; onBaixa: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number }) => void; onEditar: (item: Lancamento) => void; onCancelar: (id: number) => void }) {
   const rotuloLiquidado = tipo === 'receber' ? 'Recebido' : 'Pago'
+  const grupos = Object.entries(itens.reduce<Record<string, Lancamento[]>>((resultado, item) => {
+    const data = item.vencimento.slice(0, 10)
+    resultado[data] = [...(resultado[data] || []), item]
+    return resultado
+  }, {})).sort(([dataA], [dataB]) => dataA.localeCompare(dataB))
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:bg-white/5">
-                <th className="px-5 py-4">Lançamento</th>
-                <th className="px-5 py-4">{tipo === 'receber' ? 'Cliente' : 'Fornecedor / categoria'}</th>
-                <th className="px-5 py-4">Vencimento</th>
-                <th className="px-5 py-4">Situação</th>
-                <th className="px-5 py-4 text-right">Valor</th>
-                <th className="px-5 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((item) => (
-                <tr key={item.id} className="border-b last:border-0">
-                  <td className="px-5 py-4">
-                    <p className="font-semibold">{item.descricao}</p>
-                    {item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}
-                    {item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}
-                  </td>
-                  <td className="px-5 py-4">
-                    <p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p>
-                    <p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p>
-                  </td>
-                  <td className="px-5 py-4">{formatDate(item.vencimento)}</td>
-                  <td className="px-5 py-4">
-                    <Badge variant={badgeVariant(item.status)}>{item.status}</Badge>
-                    {item.dataBaixa && <p className="mt-1 text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <p className="font-bold">{formatCurrency(item.valor)}</p>
-                    {item.liquidado > 0 && <p className="mt-1 text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}
-                    {item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end gap-1">
-                      {statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}
-                      {item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}
-                      {item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <div className="space-y-4">
+      {grupos.map(([data, lancamentos]) => {
+        const rotulo = rotuloDoDia(data)
+        return (
+          <Card key={data} className="overflow-hidden rounded-2xl">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                  <strong className="text-lg leading-none">{rotulo.dia}</strong>
+                  <span className="mt-1 text-[9px] font-bold tracking-wider">{rotulo.mes}</span>
+                </div>
+                <div><p className="text-sm font-bold capitalize">{rotulo.extenso}</p><p className="text-xs text-slate-500">{lancamentos.length} lançamento(s)</p></div>
+              </div>
+              <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total do dia</p><p className="font-bold">{formatCurrency(resumoDoGrupo(lancamentos))}</p></div>
+            </div>
 
-        <div className="divide-y md:hidden">
-          {itens.map((item) => (
-            <article key={item.id} className="space-y-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{item.descricao}</p>
-                  {item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}
-                  <p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor} • ${item.categoria}`}</p>
-                </div>
-                <Badge variant={badgeVariant(item.status)}>{item.status}</Badge>
+            <CardContent className="p-0">
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-[10px] uppercase tracking-wider text-slate-400">
+                      <th className="px-5 py-3">Lançamento</th>
+                      <th className="px-5 py-3">{tipo === 'receber' ? 'Cliente / serviço' : 'Fornecedor / categoria'}</th>
+                      <th className="px-5 py-3">Situação</th>
+                      <th className="px-5 py-3 text-right">Valor</th>
+                      <th className="px-5 py-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lancamentos.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-100 last:border-0 dark:border-white/5">
+                        <td className="px-5 py-3">
+                          <p className="font-semibold">{item.descricao}</p>
+                          {item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}
+                          {item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}
+                        </td>
+                        <td className="px-5 py-3"><p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p><p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p></td>
+                        <td className="px-5 py-3"><Badge variant={badgeVariant(item.status)}>{item.status}</Badge>{item.dataBaixa && <p className="mt-1 text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</td>
+                        <td className="px-5 py-3 text-right"><p className="font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="mt-1 text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}</td>
+                        <td className="px-5 py-3"><div className="flex justify-end gap-1">{statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}</div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Vence em {formatDate(item.vencimento)}</p>
-                  <p className="text-lg font-bold">{formatCurrency(item.valor)}</p>
-                  {item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}
-                  {item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}
-                  {item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}
-                </div>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>
-                  {statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}
-                </div>
+
+              <div className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
+                {lancamentos.map((item) => (
+                  <article key={item.id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p>{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}<p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor || 'Não informado'} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div>
+                    <div className="flex items-end justify-between gap-3"><div><p className="text-lg font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}{item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</div><div className="flex gap-1">{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>}{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div>
+                  </article>
+                ))}
               </div>
-            </article>
-          ))}
-        </div>
-        {itens.length === 0 && <EmptyMessage text="Nenhum lançamento encontrado com estes filtros." />}
-      </CardContent>
-    </Card>
+            </CardContent>
+          </Card>
+        )
+      })}
+      {itens.length === 0 && <Card><EmptyMessage text="Nenhum lançamento encontrado com estes filtros." /></Card>}
+    </div>
   )
 }
 
