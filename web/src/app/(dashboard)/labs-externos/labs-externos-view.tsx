@@ -4,12 +4,16 @@ import { useState, useTransition } from 'react'
 import {
   Building2, AlertTriangle, RefreshCw, CheckCircle2,
   PackageCheck, Send, Plus, ChevronRight, Search, X, Loader2,
-  Calendar, User, Stethoscope, Undo2, Pencil
+  Calendar, User, Stethoscope, Undo2, Pencil, Clock3
 } from 'lucide-react'
 import {
-  criarPedido, atualizarSituacao, marcarRetrabalho, atualizarPedido,
-  type LabExternoPedido, type LabExterno, type SituacaoPedido
+  criarPedido, criarLab, atualizarSituacao, marcarRetrabalho, desmarcarRetrabalho, atualizarPedido,
+  type LabExternoPedido, type LabExterno, type ResultadoAcao
 } from '@/actions/labs-externos'
+import { ModalLaboratorio, type LaboratorioFormData } from '@/components/labs-externos/modal-laboratorio'
+import { ResumoLaboratorios } from '@/components/labs-externos/resumo-laboratorios'
+import { formatDate as formatarData } from '@/lib/date-utils'
+import { PRAZO_PADRAO_DIAS, diasEntre, hojeIso, paraIso, prazoSugerido, type SituacaoPedido } from '@/lib/labs-externos-utils'
 import { Modal } from '@/components/ui/modal'
 import { ReasonModal } from '@/components/ui/reason-modal'
 import { toast } from 'sonner'
@@ -35,7 +39,6 @@ type Aba = 'todos' | 'enviados' | 'provando' | 'prontos' | 'entregues' | 'atrasa
 
 interface PedidoFormData {
   labId: number
-  labNome: string
   paciente: string
   dentista: string
   dataEnvio: string
@@ -51,28 +54,42 @@ const SITUACAO_CONFIG: Record<SituacaoPedido, { label: string; color: string; bg
   Entregue: { label: 'Entregue', color: 'text-gray-400',   bg: 'bg-gray-500/20',                     prev: 'Pronto' },
 }
 
+const DESCRICAO_ABA: Record<Aba, string> = {
+  todos:       'Todos os pedidos que ainda não foram entregues.',
+  enviados:    'Peças enviadas ao laboratório.',
+  provando:    'Peças em fase de prova.',
+  prontos:     'Peças prontas, aguardando entrega ao dentista.',
+  entregues:   'Peças já entregues.',
+  atrasados:   'Pedidos não entregues com o prazo vencido, do mais atrasado para o menos.',
+  retrabalhos: 'Peças marcadas como retrabalho que ainda não foram entregues.',
+}
+
+// As datas vêm do banco como "dia" (sem hora); o formatador do projeto evita o recuo de 1 dia causado pelo fuso.
 function formatDate(date: Date | null | undefined): string {
   if (!date) return '—'
-  return new Date(date).toLocaleDateString('pt-BR')
+  return formatarData(date)
 }
 
 function isOverdue(pedido: LabExternoPedido): boolean {
-  if (!pedido.prazo || pedido.situacao === 'Entregue') return false
-  return new Date(pedido.prazo) < new Date()
+  const prazo = paraIso(pedido.prazo)
+  return prazo !== null && pedido.situacao !== 'Entregue' && prazo < hojeIso()
 }
 
 function PedidoCard({
-  pedido, onAvancar, onVoltar, onRetrabalho, onEdit, isPending
+  pedido, onAvancar, onVoltar, onRetrabalho, onDesfazerRetrabalho, onEdit, isPending
 }: {
   pedido: LabExternoPedido
   onAvancar: (id: number, next: SituacaoPedido) => void
   onVoltar: (id: number, prev: SituacaoPedido) => void
   onRetrabalho: (id: number) => void
+  onDesfazerRetrabalho: (id: number) => void
   onEdit: (pedido: LabExternoPedido) => void
   isPending: boolean
 }) {
   const cfg     = SITUACAO_CONFIG[pedido.situacao]
   const overdue = isOverdue(pedido)
+  const comOLaboratorio = pedido.situacao === 'Enviado' || pedido.situacao === 'Provando'
+  const diasDesdeEnvio = comOLaboratorio ? diasEntre(pedido.dataEnvio, hojeIso()) : null
 
   return (
     <div className={`glass-card rounded-xl p-4 border transition-all ${
@@ -122,7 +139,25 @@ function PedidoCard({
                 <span>Prazo: {formatDate(pedido.prazo)}</span>
               </div>
             )}
+            {pedido.dataRetorno && (
+              <div className="flex items-center gap-1">
+                <PackageCheck className="w-3 h-3" />
+                <span>Pronto em: {formatDate(pedido.dataRetorno)}</span>
+              </div>
+            )}
+            {diasDesdeEnvio !== null && diasDesdeEnvio >= 0 && (
+              <div className="flex items-center gap-1">
+                <Clock3 className="w-3 h-3" />
+                <span>Enviado há {diasDesdeEnvio} {diasDesdeEnvio === 1 ? 'dia' : 'dias'}</span>
+              </div>
+            )}
           </div>
+
+          {pedido.isRetrabalho && pedido.motivoRetrabalho && (
+            <p className="mt-2 text-xs leading-relaxed text-orange-600 dark:text-orange-400 line-clamp-2">
+              Retrabalho: {pedido.motivoRetrabalho}
+            </p>
+          )}
 
           {pedido.servico && (
             <p className="mt-2 text-xs text-slate-600 dark:text-gray-300 leading-relaxed line-clamp-2">
@@ -165,6 +200,17 @@ function PedidoCard({
                   Retrab.
                 </button>
               )}
+              {pedido.isRetrabalho && (
+                <button
+                  onClick={() => onDesfazerRetrabalho(pedido.id)}
+                  disabled={isPending}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-white/10 dark:hover:bg-white/20 dark:text-gray-400 transition-colors disabled:opacity-50"
+                  title="Remover a marcação de retrabalho (use se foi marcado por engano)"
+                >
+                  <Undo2 className="w-3 h-3" />
+                  Não é retrab.
+                </button>
+              )}
               {cfg.prev && (
                 <button
                   onClick={() => onVoltar(pedido.id, cfg.prev!)}
@@ -205,18 +251,20 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
     labId:     pedidoEdicao?.labId ? String(pedidoEdicao.labId) : String(labs[0]?.id ?? ''),
     paciente:  pedidoEdicao?.paciente ?? '',
     dentista:  pedidoEdicao?.dentista ?? '',
-    dataEnvio: pedidoEdicao?.dataEnvio ? new Date(pedidoEdicao.dataEnvio).toISOString().split('T')[0] : '',
-    prazo:     pedidoEdicao?.prazo ? new Date(pedidoEdicao.prazo).toISOString().split('T')[0] : '',
+    // Novo pedido: envio hoje e prazo sugerido. Edição: mantém o que foi cadastrado.
+    dataEnvio: pedidoEdicao ? (paraIso(pedidoEdicao.dataEnvio) ?? '') : hojeIso(),
+    prazo:     pedidoEdicao ? (paraIso(pedidoEdicao.prazo) ?? '') : prazoSugerido(hojeIso()),
     servico:   pedidoEdicao?.servico ?? '',
     situacao:  pedidoEdicao?.situacao ?? 'Enviado',
   })
 
-  const lab = labs.find(l => l.id === Number(form.labId))
+  // Enquanto o prazo não for alterado à mão, ele acompanha a data de envio.
+  const [prazoManual, setPrazoManual] = useState(Boolean(pedidoEdicao))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.paciente.trim()) return
-    onSave({ ...form, labId: Number(form.labId), labNome: lab?.nome ?? '' })
+    if (!form.paciente.trim() || !form.labId) return
+    onSave({ ...form, labId: Number(form.labId) })
   }
 
   return (
@@ -239,9 +287,12 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
                 className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
               >
                 {labs.map(l => (
-                  <option key={l.id} value={l.id} className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">{l.nome} — {l.cidade}</option>
+                  <option key={l.id} value={l.id} className="bg-white text-slate-900 dark:bg-gray-900 dark:text-white">{l.nome}{l.cidade ? ` — ${l.cidade}` : ''}</option>
                 ))}
               </select>
+              {labs.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Cadastre um laboratório antes de criar pedidos.</p>
+              )}
             </div>
             
             {pedidoEdicao && (
@@ -288,7 +339,11 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
               <input
                 type="date"
                 value={form.dataEnvio}
-                onChange={e => setForm(f => ({ ...f, dataEnvio: e.target.value }))}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  dataEnvio: e.target.value,
+                  prazo: !prazoManual && e.target.value ? prazoSugerido(e.target.value) : f.prazo,
+                }))}
                 className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
               />
             </div>
@@ -297,9 +352,12 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
               <input
                 type="date"
                 value={form.prazo}
-                onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))}
+                onChange={e => { setPrazoManual(true); setForm(f => ({ ...f, prazo: e.target.value })) }}
                 className="w-full bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-blue-400"
               />
+              {!pedidoEdicao && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">Sugerido: {PRAZO_PADRAO_DIAS} dias após o envio</p>
+              )}
             </div>
           </div>
 
@@ -325,7 +383,7 @@ function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: {
             </button>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || labs.length === 0}
               className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isPending ? 'Salvando...' : pedidoEdicao ? 'Salvar alterações' : 'Cadastrar'}
@@ -340,6 +398,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   const [aba, setAba]               = useState<Aba>('todos')
   const [busca, setBusca]           = useState('')
   const [showModal, setShowModal]   = useState(false)
+  const [showModalLab, setShowModalLab] = useState(false)
   const [pedidoEditando, setPedidoEditando] = useState<LabExternoPedido | undefined>(undefined)
   const [retrabalhoId, setRetrabalhoId] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -364,24 +423,29 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
     )
   }
 
-  function handleAvancar(id: number, next: SituacaoPedido) {
+  // Executa uma ação do servidor e mostra o resultado ao usuário (sucesso ou motivo do erro).
+  function executar(acao: () => Promise<ResultadoAcao>, mensagemSucesso: string, aoConcluir?: () => void) {
     startTransition(async () => {
       try {
-        await atualizarSituacao(id, next)
+        const resultado = await acao()
+        if (!resultado.success) {
+          toast.error(resultado.error)
+          return
+        }
+        aoConcluir?.()
+        toast.success(mensagemSucesso)
       } catch {
-        toast.error('Não foi possível atualizar a situação do pedido.')
+        toast.error('Não foi possível concluir a ação. Tente novamente.')
       }
     })
   }
 
+  function handleAvancar(id: number, next: SituacaoPedido) {
+    executar(() => atualizarSituacao(id, next), `Pedido marcado como ${next}.`)
+  }
+
   function handleVoltar(id: number, prev: SituacaoPedido) {
-    startTransition(async () => {
-      try {
-        await atualizarSituacao(id, prev)
-      } catch {
-        toast.error('Não foi possível voltar a situação do pedido.')
-      }
-    })
+    executar(() => atualizarSituacao(id, prev), `Pedido voltou para ${prev}.`)
   }
 
   function handleRetrabalho(id: number) {
@@ -390,32 +454,23 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
 
   function confirmarRetrabalho(motivo: string) {
     if (retrabalhoId === null) return
-    startTransition(async () => {
-      try {
-        await marcarRetrabalho(retrabalhoId, motivo)
-        setRetrabalhoId(null)
-        toast.success('Retrabalho registrado.')
-      } catch {
-        toast.error('Não foi possível registrar o retrabalho.')
-      }
-    })
+    executar(() => marcarRetrabalho(retrabalhoId, motivo), 'Retrabalho registrado.', () => setRetrabalhoId(null))
+  }
+
+  function handleDesfazerRetrabalho(id: number) {
+    executar(() => desmarcarRetrabalho(id), 'Marcação de retrabalho removida.')
   }
 
   function handleSalvarPedido(data: PedidoFormData) {
-    startTransition(async () => {
-      try {
-        if (pedidoEditando) {
-          await atualizarPedido(pedidoEditando.id, data)
-        } else {
-          await criarPedido(data)
-        }
-        setShowModal(false)
-        setPedidoEditando(undefined)
-        toast.success(pedidoEditando ? 'Pedido atualizado.' : 'Pedido cadastrado.')
-      } catch {
-        toast.error('Não foi possível salvar o pedido.')
-      }
-    })
+    executar(
+      () => (pedidoEditando ? atualizarPedido(pedidoEditando.id, data) : criarPedido(data)),
+      pedidoEditando ? 'Pedido atualizado.' : 'Pedido cadastrado.',
+      () => { setShowModal(false); setPedidoEditando(undefined) },
+    )
+  }
+
+  function handleSalvarLab(dados: LaboratorioFormData) {
+    executar(() => criarLab(dados), 'Laboratório cadastrado.', () => setShowModalLab(false))
   }
 
   const filtrados = getPedidosFiltrados()
@@ -442,13 +497,22 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
             Controle de peças enviadas para labs terceirizados
           </p>
         </div>
-        <button
-          onClick={() => { setPedidoEditando(undefined); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Pedido
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowModalLab(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 dark:border-white/20 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white font-semibold transition-colors text-sm shadow-sm"
+          >
+            <Building2 className="w-4 h-4" />
+            Novo Laboratório
+          </button>
+          <button
+            onClick={() => { setPedidoEditando(undefined); setShowModal(true) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors text-sm shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Pedido
+          </button>
+        </div>
       </div>
 
       {(stats.total_atrasados > 0 || stats.total_retrabalhos > 0) && (
@@ -474,6 +538,8 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
         </div>
       )}
 
+      <ResumoLaboratorios pedidos={pedidos} />
+
       <div className="flex gap-1 flex-wrap">
         {abas.map(a => (
           <button
@@ -495,6 +561,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
           </button>
         ))}
       </div>
+      <p className="-mt-3 text-xs text-slate-500 dark:text-gray-400">{DESCRICAO_ABA[aba]}</p>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -525,6 +592,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
               onAvancar={handleAvancar}
               onVoltar={handleVoltar}
               onRetrabalho={handleRetrabalho}
+              onDesfazerRetrabalho={handleDesfazerRetrabalho}
               onEdit={(p) => { setPedidoEditando(p); setShowModal(true) }}
               isPending={isPending}
             />
@@ -538,6 +606,13 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
           pedidoEdicao={pedidoEditando}
           onClose={() => { setShowModal(false); setPedidoEditando(undefined) }}
           onSave={handleSalvarPedido}
+          isPending={isPending}
+        />
+      )}
+      {showModalLab && (
+        <ModalLaboratorio
+          onClose={() => setShowModalLab(false)}
+          onSave={handleSalvarLab}
           isPending={isPending}
         />
       )}
