@@ -8,12 +8,12 @@ import {
 } from 'lucide-react'
 import {
   criarPedido, criarLab, atualizarSituacao, marcarRetrabalho, desmarcarRetrabalho, atualizarPedido,
-  type LabExternoPedido, type LabExterno, type ResultadoAcao, type SituacaoPedido
+  type LabExternoPedido, type LabExterno, type ResultadoAcao
 } from '@/actions/labs-externos'
 import { ModalLaboratorio, type LaboratorioFormData } from '@/components/labs-externos/modal-laboratorio'
 import { ResumoLaboratorios } from '@/components/labs-externos/resumo-laboratorios'
 import { formatDate as formatarData } from '@/lib/date-utils'
-import { PRAZO_PADRAO_DIAS, diasEntre, hojeIso, paraIso, prazoSugerido } from '@/lib/labs-externos-utils'
+import { PRAZO_PADRAO_DIAS, diasEntre, hojeIso, paraIso, prazoSugerido, type SituacaoPedido } from '@/lib/labs-externos-utils'
 import { Modal } from '@/components/ui/modal'
 import { ReasonModal } from '@/components/ui/reason-modal'
 import { toast } from 'sonner'

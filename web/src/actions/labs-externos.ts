@@ -13,8 +13,6 @@ import {
   type SituacaoPedido,
 } from '@/lib/labs-externos-utils'
 
-export type { SituacaoPedido }
-
 export type ResultadoAcao = { success: true } | { success: false; error: string }
 
 export interface LabExternoPedido {
