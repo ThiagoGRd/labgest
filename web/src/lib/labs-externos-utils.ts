@@ -64,6 +64,18 @@ export function dataRetornoPara(
   return situacao === 'Pronto' || situacao === 'Entregue' ? (retornoAtual ?? hoje) : null
 }
 
+export type TomPrazo = 'atrasado' | 'hoje' | 'proximo' | 'ok' | 'neutro'
+
+/** Descreve o prazo em linguagem simples ("Vence em 5 dias", "3 dias de atraso"). */
+export function descreverPrazo(prazo: DataEntrada, hoje: string): { texto: string; tom: TomPrazo } {
+  const dias = diasEntre(hoje, prazo)
+  if (dias === null) return { texto: 'Sem prazo definido', tom: 'neutro' }
+  if (dias < 0) return { texto: `${-dias} ${dias === -1 ? 'dia' : 'dias'} de atraso`, tom: 'atrasado' }
+  if (dias === 0) return { texto: 'Vence hoje', tom: 'hoje' }
+  if (dias === 1) return { texto: 'Vence amanhã', tom: 'proximo' }
+  return { texto: `Vence em ${dias} dias`, tom: dias <= 3 ? 'proximo' : 'ok' }
+}
+
 export interface PedidoParaResumo {
   situacao: SituacaoPedido
   dataEnvio: DataEntrada

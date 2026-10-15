@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   dataRetornoPara,
+  descreverPrazo,
   diasEntre,
   hojeIso,
   isSituacao,
@@ -76,4 +77,15 @@ test('não inventa indicadores quando ainda não há dados', () => {
   assert.equal(resumo.taxaRetrabalho, null)
   assert.equal(resumo.retornoMedio, null)
   assert.equal(resumo.taxaNoPrazo, null)
+})
+
+test('descreve o prazo em linguagem simples', () => {
+  const hoje = '2026-10-15'
+  assert.deepEqual(descreverPrazo('2026-10-12', hoje), { texto: '3 dias de atraso', tom: 'atrasado' })
+  assert.deepEqual(descreverPrazo('2026-10-14', hoje), { texto: '1 dia de atraso', tom: 'atrasado' })
+  assert.deepEqual(descreverPrazo('2026-10-15', hoje), { texto: 'Vence hoje', tom: 'hoje' })
+  assert.deepEqual(descreverPrazo('2026-10-16', hoje), { texto: 'Vence amanhã', tom: 'proximo' })
+  assert.deepEqual(descreverPrazo('2026-10-18', hoje), { texto: 'Vence em 3 dias', tom: 'proximo' })
+  assert.deepEqual(descreverPrazo('2026-10-25', hoje), { texto: 'Vence em 10 dias', tom: 'ok' })
+  assert.deepEqual(descreverPrazo(null, hoje), { texto: 'Sem prazo definido', tom: 'neutro' })
 })
