@@ -408,6 +408,45 @@ export async function liquidarConta(input: z.input<typeof baixaSchema>) {
   }
 }
 
+// Desfaz uma baixa lançada por engano: as movimentações são marcadas como estornadas
+// (preservadas para auditoria) e a conta volta a ficar em aberto.
+export async function estornarBaixa(id: number, tipo: 'receber' | 'pagar', motivo: string) {
+  const usuario = await requireUser()
+  const motivoLimpo = motivo.trim()
+  if (motivoLimpo.length < 5) return { success: false, error: 'Explique o motivo do estorno.' }
+  try {
+    await prisma.$transaction(async (tx) => {
+      const estorno = { estornadaEm: new Date(), estornadaPor: usuario.nome, motivoEstorno: motivoLimpo }
+      if (tipo === 'receber') {
+        const conta = await tx.contaReceber.findUnique({ where: { id } })
+        if (!conta || conta.status === 'Cancelado') throw new Error('Esta conta não está disponível para estorno.')
+        if (Number(conta.valorRecebido) <= 0) throw new Error('Esta conta não possui baixa para estornar.')
+        await tx.movimentacaoFinanceira.updateMany({ where: { contaReceberId: id, estornadaEm: null }, data: estorno })
+        await tx.contaReceber.update({ where: { id }, data: {
+          valorRecebido: 0, status: 'Pendente', dataRecebimento: null, formaRecebimento: null,
+        } })
+      } else {
+        const conta = await tx.contaPagar.findUnique({ where: { id } })
+        if (!conta || conta.status === 'Cancelado') throw new Error('Esta conta não está disponível para estorno.')
+        if (Number(conta.valorPago) <= 0) throw new Error('Esta conta não possui pagamento para estornar.')
+        await tx.movimentacaoFinanceira.updateMany({ where: { contaPagarId: id, estornadaEm: null }, data: estorno })
+        await tx.contaPagar.update({ where: { id }, data: {
+          valorPago: 0, status: 'Pendente', dataPagamento: null, formaPagamento: null,
+        } })
+      }
+    })
+    revalidarFinanceiro()
+    revalidatePath('/dashboard')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao estornar baixa:', error)
+    const mensagem = error instanceof Error && !(error instanceof Prisma.PrismaClientKnownRequestError)
+      ? error.message
+      : 'Não foi possível estornar a baixa.'
+    return { success: false, error: mensagem }
+  }
+}
+
 export async function cancelarConta(id: number, tipo: 'receber' | 'pagar', motivo: string) {
   const usuario = await requireUser()
   if (motivo.trim().length < 5) return { success: false, error: 'Explique o motivo do cancelamento.' }

@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, CalendarDays,
   CheckCircle2, CircleDollarSign, FileBarChart, Landmark, Plus, RefreshCw,
-  Pencil, Search, TrendingUp, XCircle,
+  Pencil, Search, TrendingUp, Undo2, XCircle,
 } from 'lucide-react'
-import { cancelarConta, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
+import { cancelarConta, estornarBaixa, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
 import { BaixaContaModal } from '@/components/financeiro/baixa-conta-modal'
 import { EditarContaModal } from '@/components/financeiro/editar-conta-modal'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
@@ -109,6 +109,8 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
   const [edicao, setEdicao] = useState<(Lancamento & { tipo: 'receber' | 'pagar' }) | null>(null)
   const [cancelamento, setCancelamento] = useState<{ id: number; tipo: 'receber' | 'pagar' } | null>(null)
   const [cancelando, setCancelando] = useState(false)
+  const [estorno, setEstorno] = useState<{ id: number; tipo: 'receber' | 'pagar'; descricao: string } | null>(null)
+  const [estornando, setEstornando] = useState(false)
   const [sincronizando, setSincronizando] = useState(false)
 
   const filtrar = (itens: Lancamento[]) => itens.filter((item) => {
@@ -130,6 +132,17 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
     setCancelamento(null)
   }
 
+  async function confirmarEstorno(motivo: string) {
+    if (!estorno) return
+    setEstornando(true)
+    const resultado = await estornarBaixa(estorno.id, estorno.tipo, motivo)
+    setEstornando(false)
+    if (!resultado.success) return toast.error(resultado.error)
+    toast.success('Baixa estornada. O lançamento voltou a ficar em aberto.')
+    setEstorno(null)
+    router.refresh()
+  }
+
   async function sincronizar() {
     setSincronizando(true)
     const resultado = await sincronizarFinanceiroRetroativo()
@@ -144,6 +157,7 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
       {baixa && <BaixaContaModal key={`${baixa.tipo}-${baixa.id}`} conta={baixa} contasFinanceiras={dados.contasFinanceiras} onClose={() => setBaixa(null)} />}
       {edicao && <EditarContaModal key={`${edicao.tipo}-${edicao.id}`} conta={edicao} onClose={() => setEdicao(null)} />}
       <ReasonModal isOpen={cancelamento !== null} onClose={() => setCancelamento(null)} onConfirm={confirmarCancelamento} title="Cancelar lançamento" description="O registro será preservado para auditoria." label="Motivo do cancelamento" confirmLabel="Cancelar lançamento" loading={cancelando} />
+      <ReasonModal key={estorno ? `${estorno.tipo}-${estorno.id}` : 'estorno'} isOpen={estorno !== null} onClose={() => setEstorno(null)} onConfirm={confirmarEstorno} title="Estornar baixa" description={estorno ? `${estorno.descricao} voltará a ficar em aberto. A baixa anterior fica registrada no histórico.` : ''} label="Motivo do estorno" placeholder="Ex.: baixa lançada por engano, pagamento ainda não realizado" confirmLabel="Estornar baixa" loading={estornando} />
 
       <Header title="Financeiro" subtitle="Caixa, cobranças, despesas e resultado do laboratório" action={{ label: 'Novo lançamento', onClick: () => setNovoTipo(tab === 'pagar' ? 'pagar' : 'receber') }} />
 
@@ -201,8 +215,8 @@ export function FinanceiroView({ dados }: FinanceiroViewProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="receber" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('receber')} addLabel="Nova receita" /><LancamentosList itens={receberFiltrado} tipo="receber" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'receber' })} onCancelar={(id) => setCancelamento({ id, tipo: 'receber' })} /></TabsContent>
-          <TabsContent value="pagar" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('pagar')} addLabel="Nova despesa" /><LancamentosList itens={pagarFiltrado} tipo="pagar" onBaixa={setBaixa} onEditar={(item) => setEdicao({ ...item, tipo: 'pagar' })} onCancelar={(id) => setCancelamento({ id, tipo: 'pagar' })} /></TabsContent>
+          <TabsContent value="receber" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('receber')} addLabel="Nova receita" /><LancamentosList itens={receberFiltrado} tipo="receber" onBaixa={setBaixa} onEstornar={setEstorno} onEditar={(item) => setEdicao({ ...item, tipo: 'receber' })} onCancelar={(id) => setCancelamento({ id, tipo: 'receber' })} /></TabsContent>
+          <TabsContent value="pagar" className="mt-4 space-y-4"><FilterBar busca={busca} onBusca={setBusca} status={status} onStatus={setStatus} onAdd={() => setNovoTipo('pagar')} addLabel="Nova despesa" /><LancamentosList itens={pagarFiltrado} tipo="pagar" onBaixa={setBaixa} onEstornar={setEstorno} onEditar={(item) => setEdicao({ ...item, tipo: 'pagar' })} onCancelar={(id) => setCancelamento({ id, tipo: 'pagar' })} /></TabsContent>
 
           <TabsContent value="caixa" className="mt-4 space-y-4">
             <section className="grid gap-4 sm:grid-cols-3"><MetricCard title="Entradas no caixa" value={dados.resumo.entradas} detail="Baixas realizadas dentro deste mês" icon={ArrowUpRight} tone="green" /><MetricCard title="Saídas do caixa" value={dados.resumo.saidas} detail="Pagamentos realizados dentro deste mês" icon={ArrowDownRight} tone="red" /><MetricCard title="Resultado de caixa" value={dados.resumo.resultadoRealizado} detail="Entradas menos saídas pela data da movimentação" icon={Banknote} tone="blue" /></section>
@@ -238,8 +252,9 @@ function FilterBar({ busca, onBusca, status, onStatus, onAdd, addLabel }: { busc
   return <div className="flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:border-white/10 dark:bg-zinc-900 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input aria-label="Buscar lançamentos" value={busca} onChange={(event) => onBusca(event.target.value)} placeholder="Buscar cliente, fornecedor, paciente ou OS" className="pl-9" /></div><Select value={status} onValueChange={onStatus}><SelectTrigger aria-label="Filtrar por situação" className="w-full lg:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todas as situações</SelectItem><SelectItem value="abertos">Somente em aberto</SelectItem><SelectItem value="vencido">Vencidos</SelectItem><SelectItem value="parcial">Parciais</SelectItem><SelectItem value="cancelado">Cancelados</SelectItem></SelectContent></Select><Button onClick={onAdd}><Plus className="h-4 w-4" />{addLabel}</Button></div>
 }
 
-function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens: Lancamento[]; tipo: 'receber' | 'pagar'; onBaixa: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number }) => void; onEditar: (item: Lancamento) => void; onCancelar: (id: number) => void }) {
+function LancamentosList({ itens, tipo, onBaixa, onEstornar, onEditar, onCancelar }: { itens: Lancamento[]; tipo: 'receber' | 'pagar'; onBaixa: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string; restante: number }) => void; onEstornar: (conta: { id: number; tipo: 'receber' | 'pagar'; descricao: string }) => void; onEditar: (item: Lancamento) => void; onCancelar: (id: number) => void }) {
   const rotuloLiquidado = tipo === 'receber' ? 'Recebido' : 'Pago'
+  const podeEstornar = (item: Lancamento) => item.liquidado > 0 && item.status !== 'Cancelado'
   const grupos = Object.entries(itens.reduce<Record<string, Lancamento[]>>((resultado, item) => {
     const data = item.vencimento.slice(0, 10)
     resultado[data] = [...(resultado[data] || []), item]
@@ -286,7 +301,7 @@ function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens
                         <td className="px-5 py-3"><p>{tipo === 'receber' ? item.cliente : item.fornecedor}</p><p className="text-xs text-slate-500">{tipo === 'pagar' ? item.categoria : item.servico}</p></td>
                         <td className="px-5 py-3"><Badge variant={badgeVariant(item.status)}>{item.status}</Badge>{item.dataBaixa && <p className="mt-1 text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</td>
                         <td className="px-5 py-3 text-right"><p className="font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="mt-1 text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}</td>
-                        <td className="px-5 py-3"><div className="flex justify-end gap-1">{statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}</div></td>
+                        <td className="px-5 py-3"><div className="flex justify-end gap-1">{statusAberto(item.status) && <Button size="sm" variant="outline" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}><CheckCircle2 className="h-4 w-4" />{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}{podeEstornar(item) && <Button size="sm" variant="outline" onClick={() => onEstornar({ id: item.id, tipo, descricao: item.descricao })} title="Desfazer a baixa deste lançamento"><Undo2 className="h-4 w-4" />Estornar</Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`} title="Editar lançamento"><Pencil className="h-4 w-4 text-slate-400" /></Button>}{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4 text-slate-400" /></Button>}</div></td>
                       </tr>
                     ))}
                   </tbody>
@@ -297,7 +312,7 @@ function LancamentosList({ itens, tipo, onBaixa, onEditar, onCancelar }: { itens
                 {lancamentos.map((item) => (
                   <article key={item.id} className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p>{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}<p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor || 'Não informado'} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div>
-                    <div className="flex items-end justify-between gap-3"><div><p className="text-lg font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}{item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</div><div className="flex gap-1">{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>}{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div>
+                    <div className="flex items-end justify-between gap-3"><div><p className="text-lg font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}{item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</div><div className="flex gap-1">{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>}{podeEstornar(item) && <Button size="sm" variant="outline" onClick={() => onEstornar({ id: item.id, tipo, descricao: item.descricao })}><Undo2 className="h-4 w-4" />Estornar</Button>}{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div>
                   </article>
                 ))}
               </div>
