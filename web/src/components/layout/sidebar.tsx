@@ -19,6 +19,7 @@ import {
   Sparkles,
   Clock,
   Building2,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -46,6 +47,7 @@ const navigation: NavigationItem[] = [
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },
   { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
+  { name: 'Lab Interno', href: '/lab-interno', icon: FlaskConical },
   { name: 'Labs Externos', href: '/labs-externos', icon: Building2 },
   { name: 'Relatórios', href: '/relatorios', icon: BarChart3, hasAI: true },
   { name: 'Configurações', href: '/configuracoes', icon: Settings },
