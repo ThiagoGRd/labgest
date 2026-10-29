@@ -263,6 +263,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                           <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="operador">Operador (Acesso padrão)</SelectItem>
+                            <SelectItem value="recepcao">Recepção (Distribuição clínica)</SelectItem>
                             <SelectItem value="admin">Administrador (Acesso total)</SelectItem>
                           </SelectContent>
                         </Select>
@@ -292,7 +293,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             user.tipo === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                           }`}>
-                            {user.tipo === 'admin' ? 'Admin' : 'Operador'}
+                            {user.tipo === 'admin' ? 'Admin' : user.tipo === 'recepcao' ? 'Recepção' : 'Operador'}
                           </span>
                           <div className="flex gap-2">
                             <button 

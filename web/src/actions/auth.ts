@@ -26,7 +26,7 @@ export async function login(formData: FormData) {
   const usuario = data.user.email
     ? await prisma.usuario.findFirst({
         where: { email: { equals: data.user.email, mode: 'insensitive' }, ativo: true },
-        select: { id: true },
+        select: { id: true, tipo: true },
       })
     : null
 
@@ -37,7 +37,7 @@ export async function login(formData: FormData) {
 
   await prisma.usuario.update({ where: { id: usuario.id }, data: { ultimoAcesso: new Date() } })
 
-  redirect('/dashboard')
+  redirect(usuario.tipo === 'recepcao' ? '/recepcao' : '/dashboard')
 }
 
 export async function logout() {
