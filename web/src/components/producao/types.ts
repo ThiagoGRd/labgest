@@ -21,6 +21,10 @@ export interface OrdemProducao {
   prazoFornecedor?: string | null
   dataRecebimentoFornecedor?: string | null
   justificativaAtrasoFornecedor?: string | null
+  localizacaoAtual?: string | null
+  situacaoLogistica?: string | null
+  dentistaResponsavel?: string | null
+  agendamentoClinico?: string | null
   cicloAtivoId?: number | null
   cicloStatus?: string | null
   cicloNumero?: number | null

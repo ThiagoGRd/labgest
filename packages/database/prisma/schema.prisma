@@ -105,6 +105,12 @@ model Ordem {
   fotosProva                                             Json?           @default("[]") @map("fotos_prova")
   fotosCaso                                              Json?           @default("[]") @map("fotos_caso")
   elementos                                              String?         @db.VarChar(100)
+  localizacaoAtual                                       String          @default("laboratorio") @map("localizacao_atual") @db.VarChar(40)
+  situacaoLogistica                                      String          @default("no_laboratorio") @map("situacao_logistica") @db.VarChar(50)
+  dentistaResponsavel                                    String?         @map("dentista_responsavel") @db.VarChar(255)
+  finalidadeClinica                                      String?         @map("finalidade_clinica") @db.VarChar(30)
+  agendamentoClinico                                     DateTime?       @map("agendamento_clinico") @db.Timestamptz(6)
+  movimentacaoLogisticaEm                               DateTime?       @map("movimentacao_logistica_em") @db.Timestamptz(6)
   workflowTipo                                           String?         @default("simples") @map("workflow_tipo") @db.VarChar(20)
   ciclo_id_atual                                         Int?
   ciclos                                                 CicloProducao[]
@@ -120,6 +126,7 @@ model Ordem {
   @@index([status], map: "idx_ordens_status")
   @@index([tipoWorkflow], map: "idx_ordens_tipo_workflow")
   @@index([passoFluxoAtual], map: "idx_ordens_passo_fluxo_atual")
+  @@index([situacaoLogistica], map: "idx_ordens_situacao_logistica")
   @@map("ordens")
 }
 

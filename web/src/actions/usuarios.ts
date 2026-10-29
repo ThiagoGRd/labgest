@@ -61,7 +61,11 @@ export async function criarUsuario(data: {
         tipo: data.tipo,
         senha: '',
         ativo: true,
-        permissoes: data.tipo === 'admin' ? ['all'] : ['read', 'write'],
+        permissoes: data.tipo === 'admin'
+          ? ['all']
+          : data.tipo === 'recepcao'
+            ? ['read', 'recepcao:movimentar']
+            : ['read', 'write'],
       }
     })
 
