@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
-import { ETAPA_IDS, etapaLabel } from '@/lib/workflow-config'
+import { ETAPA_IDS, etapaLabel, podeSelecionarEtapaNaEdicao } from '@/lib/workflow-config'
 import { formatarCpf } from '@/lib/cpf'
 
 interface Ordem {
@@ -60,7 +60,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
   })
 
   // Etapas canônicas disponíveis para seleção
-  const etapaOpcoes = ETAPA_IDS.map(id => ({ id, label: etapaLabel(id, 'lab') }))
+  const etapaOpcoes = ETAPA_IDS.filter(podeSelecionarEtapaNaEdicao).map(id => ({ id, label: etapaLabel(id, 'lab') }))
 
   useEffect(() => {
     if (ordem) {

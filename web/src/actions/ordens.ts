@@ -17,6 +17,7 @@ import {
   canAdvance,
   normalizarEtapa,
   statusParaEtapa,
+  podeSelecionarEtapaNaEdicao,
   ETAPA_FINAL,
   type ChecklistEstetico,
   type TipoWorkflow,
@@ -294,6 +295,9 @@ export async function updateOrdem(id: number, data: {
 
     // Normaliza etapaAtual para ID canônico antes de salvar
     const etapaCanonica = normalizarEtapa(data.etapaAtual)
+    if (!podeSelecionarEtapaNaEdicao(etapaCanonica)) {
+      return { success: false, error: 'Finalize a ordem e use Marcar como Entregue para confirmar a cobrança.' }
+    }
     const novoStatus = data.status === 'Pausado'
       ? data.status
       : statusParaEtapa(etapaCanonica)
