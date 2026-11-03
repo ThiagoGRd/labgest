@@ -78,6 +78,10 @@ export function statusParaEtapa(etapa: string): string {
   }
 }
 
+export function podeSelecionarEtapaNaEdicao(etapa: string): boolean {
+  return normalizarEtapa(etapa) !== 'entregue'
+}
+
 export interface SubetapaConfig {
   nome: string
   etapa: EtapaId

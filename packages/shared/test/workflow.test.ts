@@ -4,6 +4,7 @@ import {
   KANBAN_ETAPAS,
   getNextEtapa,
   normalizarEtapa,
+  podeSelecionarEtapaNaEdicao,
   statusParaEtapa,
 } from '../src/workflow'
 
@@ -35,4 +36,10 @@ test('avanço segue a mesma sequência exibida no Kanban', () => {
   assert.equal(getNextEtapa(null, 'em_prova'), 'ajuste')
   assert.equal(getNextEtapa(null, 'conferencia'), 'pronto')
   assert.equal(getNextEtapa(null, 'pronto'), null)
+})
+
+test('edição permite finalizar, mas não registrar entrega sem confirmar a cobrança', () => {
+  assert.equal(podeSelecionarEtapaNaEdicao('pronto'), true)
+  assert.equal(podeSelecionarEtapaNaEdicao('entregue'), false)
+  assert.equal(podeSelecionarEtapaNaEdicao(' Entregue '), false)
 })

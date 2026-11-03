@@ -47,6 +47,7 @@ Laboratórios de prótese dentária enfrentam dificuldades para:
 - Status: Aguardando → Em Produção → Finalizado / Cancelado / Pausado
 - Prioridade: Baixa, Normal, Alta, Urgente
 - Observações e histórico de alterações
+- A edição pode finalizar a produção em “Pronto p/ Entrega”; a entrega é confirmada pela ação própria, que registra a cobrança.
 
 #### 🦷 Cadastro de Serviços
 - Categorias de prótese:
