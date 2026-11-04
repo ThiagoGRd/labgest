@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { getLabsExternos, type LabExterno } from '@/actions/labs-externos'
 
 export interface OrdemFluxoProtese {
+  updatedAt: string
   id: number
   paciente: string
   dentista: string

@@ -73,6 +73,31 @@ async function main() {
     assert.equal(rows[0].data_retorno.getDate(), 5)
     assert.deepEqual((await pool.query('SELECT * FROM labs_externos_pedidos WHERE id=1')).rows[0], { ...before, ordem_id: null, fornecedor_confirmado_em: null })
   })
+  for (const [index, timezone] of ['UTC', 'Pacific/Auckland'].entries()) {
+    await test(`supplier civil dates and event timestamp are session-independent: ${timezone}`, async () => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query("SELECT set_config('TimeZone', $1, true)", [timezone])
+        const id = 44 + index
+        await client.query('SELECT id FROM ordens WHERE id=$1 FOR UPDATE', [id])
+        const tx = adapter(client), event = new Date('2026-11-02T01:30:00.000Z')
+        await helpers.registrarPedidoFornecedor(tx, order(id), 7, event, new Date('2026-11-17T01:30:00.000Z'))
+        const result = await helpers.confirmarPedidoFornecedor(tx, id, event)
+        assert.equal(result.dataRetorno.toISOString(), '2026-11-01T00:00:00.000Z')
+        const row = (await client.query('SELECT data_envio::text, prazo::text, data_retorno::text, fornecedor_confirmado_em::text FROM labs_externos_pedidos WHERE ordem_id=$1', [id])).rows[0]
+        assert.deepEqual(row, { data_envio: '2026-11-01', prazo: '2026-11-16', data_retorno: '2026-11-01', fornecedor_confirmado_em: '2026-11-02 01:30:00' })
+        // A previous civil return has no inferred hour and is never overwritten.
+        await client.query("UPDATE labs_externos_pedidos SET fornecedor_confirmado_em=NULL, data_retorno='2026-10-31' WHERE ordem_id=$1", [id])
+        const preserved = await helpers.confirmarPedidoFornecedor(tx, id, event)
+        assert.equal(preserved.dataRetorno.toISOString().slice(0, 10), '2026-10-31')
+        assert.equal((await client.query('SELECT data_retorno::text FROM labs_externos_pedidos WHERE ordem_id=$1', [id])).rows[0].data_retorno, '2026-10-31')
+      } finally {
+        await client.query('ROLLBACK')
+        client.release()
+      }
+    })
+  }
   await test('archive absence permits; installed incomplete archive fails closed with rollback', async () => {
     await helpers.garantirPedidoNaoArquivado(adapter(pool), 1)
     await pool.query('CREATE SCHEMA labgest_private; CREATE TABLE labgest_private.external_order_archive_capability(id INTEGER PRIMARY KEY)')

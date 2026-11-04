@@ -27,7 +27,7 @@ function App() {
   window.syntheticEvents.push({id:String(window.syntheticEvents.length+1), action:input.action, version:pedido.arquivoVersao+1, occurred_at:new Date(), actor_name:'Synthetic Administrator', reason:input.reason, snapshot:{paciente:pedido.paciente,lab_nome:pedido.labNome,situacao:pedido.situacao,servico:pedido.servico}, reconciliation_review:input.review});
   window.syntheticOrder={...pedido,arquivado:input.action==='archive',arquivoVersao:pedido.arquivoVersao+1}; window.syntheticRedraw(); return {success:true};
  };
- return <LabsExternosView pedidos={pedido.arquivado?[]:[pedido]} arquivados={pedido.arquivado?[pedido]:[]} arquivamentoDisponivel={window.syntheticCapability==='enabled'} atrasados={[]} retrabalhos={[]} stats={{total_enviados:pedido.arquivado?0:1,total_provando:0,total_prontos:0,total_entregues:0,total_atrasados:0,total_retrabalhos:0}} labs={[{id:1,nome:'Synthetic Laboratory',ativo:true}]} />;
+ return <div data-testid="synthetic-render" data-capability={window.syntheticCapability}><LabsExternosView pedidos={pedido.arquivado?[]:[pedido]} arquivados={pedido.arquivado?[pedido]:[]} arquivamentoDisponivel={window.syntheticCapability==='enabled'} atrasados={[]} retrabalhos={[]} stats={{total_enviados:pedido.arquivado?0:1,total_provando:0,total_prontos:0,total_entregues:0,total_atrasados:0,total_retrabalhos:0}} labs={[{id:1,nome:'Synthetic Laboratory',ativo:true}]} /></div>;
 }
 createRoot(document.getElementById('app')).render(<App/>);
 `
@@ -81,12 +81,15 @@ async function main() {
     }
     for (const capability of ['absent', 'disabled']) {
       await page.evaluate(value => { window.syntheticCapability=value; window.syntheticRedraw() }, capability)
+      await page.waitForFunction(value => document.querySelector('[data-testid=synthetic-render]')?.getAttribute('data-capability') === value, capability)
       await page.getByRole('button', { name: 'Mais ações para Synthetic Patient' }).click()
       assert.equal(await page.getByRole('menuitem', { name: 'Arquivar registro duplicado', exact: true }).count(), 0)
       await page.keyboard.press('Escape')
       assert.equal(await page.getByRole('button', { name: /^Arquivados/ }).count(), 0)
     }
     await page.evaluate(() => { window.syntheticCapability='enabled'; window.syntheticRedraw() })
+    // Await the React commit, not merely the scheduling of a synthetic prop update.
+    await page.waitForFunction(() => document.querySelector('[data-testid=synthetic-render]')?.getAttribute('data-capability') === 'enabled')
     await menu('Arquivar registro duplicado')
     await page.getByRole('button', {name:'Voltar',exact:true}).click()
     assert.equal(await page.evaluate(()=>window.syntheticSubmissions.length),0)
