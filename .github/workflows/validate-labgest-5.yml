@@ -131,6 +131,7 @@ jobs:
           TZ=UTC node web/tests/prisma-reports.integration.cjs "$DATABASE_URL"
           TZ=America/Sao_Paulo node web/tests/prisma-reports.integration.cjs "$DATABASE_URL"
           node web/tests/prisma-supplier-dates.integration.cjs "$DATABASE_URL"
+          node web/tests/prisma-message-revisions.integration.cjs "$DATABASE_URL"
       - name: Chromium component regressions with mocked actions/network
         id: browser
         continue-on-error: true
