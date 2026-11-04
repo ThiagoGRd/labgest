@@ -23,6 +23,7 @@ const TOM_PRAZO: Record<TomPrazo, string> = {
 interface PedidoCardProps {
   pedido: LabExternoPedido
   ocupado: boolean
+  onArquivo?: (pedido: LabExternoPedido, action: 'archive' | 'restore' | 'history') => void
   onMover: (id: number, situacao: SituacaoPedido) => void
   onEditar: (pedido: LabExternoPedido) => void
   onRetrabalho: (id: number) => void
@@ -40,7 +41,7 @@ function Progresso({ situacao }: { situacao: SituacaoPedido }) {
   )
 }
 
-export function PedidoCard({ pedido, ocupado, onMover, onEditar, onRetrabalho, onDesfazerRetrabalho }: PedidoCardProps) {
+export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRetrabalho, onDesfazerRetrabalho }: PedidoCardProps) {
   const etapa = ETAPA_POR_SITUACAO[pedido.situacao]
   const hoje = hojeIso()
   const entregue = pedido.situacao === 'Entregue'
@@ -58,6 +59,7 @@ export function PedidoCard({ pedido, ocupado, onMover, onEditar, onRetrabalho, o
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
         <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            {pedido.arquivado && <span className="text-xs font-semibold text-slate-500">Arquivado · #{pedido.id}</span>}
             <h3 className="truncate text-base font-bold text-slate-900 dark:text-white">{pedido.paciente}</h3>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${etapa.selo}`}>{etapa.rotulo}</span>
             {pedido.isRetrabalho && (
@@ -99,7 +101,7 @@ export function PedidoCard({ pedido, ocupado, onMover, onEditar, onRetrabalho, o
           </div>
 
           <div className="flex items-center gap-1.5">
-            {etapa.proxima && (
+            {!pedido.arquivado && etapa.proxima && (
               <button
                 type="button"
                 onClick={() => onMover(pedido.id, etapa.proxima!)}
@@ -117,14 +119,14 @@ export function PedidoCard({ pedido, ocupado, onMover, onEditar, onRetrabalho, o
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-                <DropdownMenuItem onClick={() => onEditar(pedido)}><Pencil className="mr-2 h-4 w-4" />Editar pedido</DropdownMenuItem>
-                {!entregue && !pedido.isRetrabalho && (
+                {!pedido.arquivado && <DropdownMenuItem onClick={() => onEditar(pedido)}><Pencil className="mr-2 h-4 w-4" />Editar pedido</DropdownMenuItem>}
+                {!pedido.arquivado && !entregue && !pedido.isRetrabalho && (
                   <DropdownMenuItem onClick={() => onRetrabalho(pedido.id)}><RefreshCw className="mr-2 h-4 w-4" />Marcar como retrabalho</DropdownMenuItem>
                 )}
-                {pedido.isRetrabalho && (
+                {!pedido.arquivado && pedido.isRetrabalho && (
                   <DropdownMenuItem onClick={() => onDesfazerRetrabalho(pedido.id)}><Undo2 className="mr-2 h-4 w-4" />Não é retrabalho</DropdownMenuItem>
                 )}
-                {etapa.anterior && (
+                {!pedido.arquivado && etapa.anterior && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => onMover(pedido.id, etapa.anterior!)}>
@@ -133,6 +135,13 @@ export function PedidoCard({ pedido, ocupado, onMover, onEditar, onRetrabalho, o
                     </DropdownMenuItem>
                   </>
                 )}
+                {onArquivo && <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onArquivo(pedido, pedido.arquivado ? 'restore' : 'archive')}>
+                    {pedido.arquivado ? 'Restaurar registro' : 'Arquivar registro duplicado'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onArquivo(pedido, 'history')}>Histórico de arquivamento</DropdownMenuItem>
+                </>}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

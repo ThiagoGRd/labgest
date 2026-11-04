@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { Building2, ClipboardList, Plus, Search, X } from 'lucide-react'
 import {
-  criarPedido, criarLab, atualizarSituacao, marcarRetrabalho, desmarcarRetrabalho, atualizarPedido,
+  alterarArquivoPedido, criarPedido, criarLab, atualizarSituacao, marcarRetrabalho, desmarcarRetrabalho, atualizarPedido,
   type LabExternoPedido, type LabExterno, type ResultadoAcao,
 } from '@/actions/labs-externos'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ReasonModal } from '@/components/ui/reason-modal'
 import { ETAPAS, ETAPA_POR_SITUACAO } from '@/components/labs-externos/etapas'
 import { ModalLaboratorio, type LaboratorioFormData } from '@/components/labs-externos/modal-laboratorio'
+import { ModalArquivo } from '@/components/labs-externos/modal-arquivo'
 import { ModalPedido, type PedidoFormData } from '@/components/labs-externos/modal-pedido'
 import { PainelLaboratorios } from '@/components/labs-externos/painel-laboratorios'
 import { PedidoCard } from '@/components/labs-externos/pedido-card'
@@ -35,6 +36,8 @@ interface Props {
   retrabalhos: LabExternoPedido[]
   stats: Stats
   labs: LabExterno[]
+  arquivados?: LabExternoPedido[]
+  arquivamentoDisponivel?: boolean
 }
 
 const POR_PAGINA = 20
@@ -49,7 +52,7 @@ const TITULO_LISTA: Record<FiltroPedidos, { titulo: string; descricao: string }>
   retrabalhos: { titulo: 'Retrabalhos', descricao: 'Peças marcadas como retrabalho que ainda não foram entregues.' },
 }
 
-export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs }: Props) {
+export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs, arquivados = [], arquivamentoDisponivel = false }: Props) {
   const [filtro, setFiltro] = useState<FiltroPedidos>('ativos')
   const [busca, setBusca] = useState('')
   const [labFiltro, setLabFiltro] = useState('')
@@ -61,6 +64,8 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   const [movendoId, setMovendoId] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
   const salvandoPedido = useRef(false)
+  const [mostrarArquivados, setMostrarArquivados] = useState(false)
+  const [arquivo, setArquivo] = useState<{ pedido: LabExternoPedido; action: 'archive' | 'restore' | 'history' } | null>(null)
 
   const contagens: Record<SituacaoPedido, number> = {
     Enviado: stats.total_enviados,
@@ -71,7 +76,8 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
 
   const filtrados = useMemo(() => {
     let lista: LabExternoPedido[]
-    switch (filtro) {
+    if (mostrarArquivados) lista = arquivados
+    else switch (filtro) {
       case 'atrasados': lista = atrasados; break
       case 'retrabalhos': lista = retrabalhos; break
       case 'ativos': lista = pedidos.filter((p) => p.situacao !== 'Entregue'); break
@@ -84,7 +90,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
       p.paciente.toLowerCase().includes(termo) ||
       p.dentista?.toLowerCase().includes(termo) ||
       p.servico?.toLowerCase().includes(termo))
-  }, [filtro, busca, labFiltro, pedidos, atrasados, retrabalhos])
+  }, [filtro, busca, labFiltro, pedidos, atrasados, retrabalhos, arquivados, mostrarArquivados])
 
   // Executa uma ação do servidor e mostra o resultado ao usuário (sucesso ou motivo do erro).
   function executar(acao: () => Promise<ResultadoAcao>, mensagemSucesso: string, aoConcluir?: () => void, aoFinalizar?: () => void) {
@@ -138,12 +144,15 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   }
 
   function mudarFiltro(novo: FiltroPedidos) {
+    setMostrarArquivados(false)
     setFiltro(novo)
     setLimite(POR_PAGINA)
   }
 
   const visiveis = filtrados.slice(0, limite)
-  const { titulo, descricao } = TITULO_LISTA[filtro]
+  const { titulo, descricao } = mostrarArquivados
+    ? { titulo: 'Registros arquivados', descricao: 'Histórico preservado. A restauração devolve o registro às listas e indicadores.' }
+    : TITULO_LISTA[filtro]
   const comFiltroExtra = Boolean(busca.trim() || labFiltro)
 
   return (
@@ -151,6 +160,10 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
       <Header title="Laboratórios externos" subtitle="Peças enviadas a laboratórios parceiros" action={{ label: 'Novo pedido', onClick: novoPedido }} />
 
       <main className="space-y-6 p-4 sm:p-6">
+        <div className="flex gap-3">
+          <button type="button" aria-pressed={!mostrarArquivados} onClick={() => { setMostrarArquivados(false); setLimite(POR_PAGINA) }} className={campoClasse}>Pedidos</button>
+          {(arquivamentoDisponivel || arquivados.length > 0) && <button type="button" aria-pressed={mostrarArquivados} onClick={() => { setMostrarArquivados(true); setLimite(POR_PAGINA) }} className={campoClasse}>Arquivados ({arquivados.length})</button>}
+        </div>
         <PipelineLabs filtro={filtro} contagens={contagens} atrasados={stats.total_atrasados} retrabalhos={stats.total_retrabalhos} onChange={mudarFiltro} />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -215,6 +228,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
                       key={pedido.id}
                       pedido={pedido}
                       ocupado={isPending && movendoId === pedido.id}
+                      onArquivo={arquivamentoDisponivel ? (p, action) => setArquivo({ pedido: p, action }) : undefined}
                       onMover={mover}
                       onEditar={(p) => { setPedidoEditando(p); setShowModal(true) }}
                       onRetrabalho={setRetrabalhoId}
@@ -270,6 +284,12 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
         </div>
       </main>
 
+      {arquivo && <ModalArquivo pedido={arquivo.pedido} action={arquivo.action} onClose={() => setArquivo(null)}
+        onConfirm={async input => {
+          const result = await alterarArquivoPedido(input)
+          if (result.success) { setArquivo(null); toast.success(input.action === 'archive' ? 'Registro arquivado. Histórico preservado.' : 'Registro restaurado.') }
+          return result
+        }} />}
       {showModal && (
         <ModalPedido
           labs={labs}

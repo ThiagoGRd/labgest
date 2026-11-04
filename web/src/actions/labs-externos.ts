@@ -3,7 +3,8 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { requireUser } from '@/lib/auth-utils'
+import { requireAdmin, requireUser } from '@/lib/auth-utils'
+import { alterarArquivamento, capacidadeArquivamento, estadosArquivamento, type ArchiveInput, type ArchiveEvent } from '@/lib/labs-externos-arquivo'
 import {
   dataRetornoPara,
   hojeIso,
@@ -32,6 +33,9 @@ export interface LabExternoPedido {
   createdAt: Date
   updatedAt: Date
   diasAtraso?: number
+  revisao: string
+  arquivoVersao: number
+  arquivado: boolean
 }
 
 export interface LabExterno {
@@ -59,15 +63,7 @@ interface LabExternoPedidoRow {
   created_at: Date
   updated_at: Date
   dias_atraso?: number | bigint | null
-}
-
-interface DashboardLabsExternosRow {
-  total_enviados: number
-  total_provando: number
-  total_prontos: number
-  total_entregues: number
-  total_atrasados: number
-  total_retrabalhos: number
+  revisao: string
 }
 
 const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe uma data válida.')
@@ -116,12 +112,12 @@ async function buscarLabAtivo(id: number) {
 
 // ─── Consultas ──────────────────────────────────────────────────────────────
 
-export async function getPedidosLabExterno(labId?: number) {
+export async function getPedidosLabExterno(labId?: number, arquivados = false): Promise<LabExternoPedido[]> {
   await requireUser()
   const hoje = hojeIso()
-  const pedidos = await prisma.$queryRaw<LabExternoPedidoRow[]>`
+  const pedidos: LabExternoPedidoRow[] = await prisma.$queryRaw<LabExternoPedidoRow[]>`
     SELECT
-      p.*,
+      p.*, md5(to_jsonb(p)::text) AS revisao,
       CASE
         WHEN p.prazo IS NOT NULL AND p.prazo < ${hoje}::date AND p.situacao != 'Entregue'
         THEN (${hoje}::date - p.prazo)::int
@@ -139,58 +135,69 @@ export async function getPedidosLabExterno(labId?: number) {
       p.prazo ASC NULLS LAST,
       p.created_at DESC
   `
-  return pedidos.map(normalizar)
+  const { states } = await estadosArquivamento(prisma)
+  const byId = new Map(states.map(state => [state.pedido_id, state]))
+  return pedidos.map(row => {
+    const state = byId.get(Number(row.id))
+    return { ...normalizar(row), arquivado: state?.archived ?? false, arquivoVersao: state?.version ?? 0 }
+  }).filter(pedido => pedido.arquivado === arquivados)
 }
 
 export async function getAtrasados() {
-  await requireUser()
-  const hoje = hojeIso()
-  const rows = await prisma.$queryRaw<LabExternoPedidoRow[]>`
-    SELECT
-      *,
-      (${hoje}::date - prazo)::int AS dias_atraso
-    FROM labs_externos_pedidos
-    WHERE prazo IS NOT NULL AND prazo < ${hoje}::date AND situacao != 'Entregue'
-    ORDER BY dias_atraso DESC
-  `
-  return rows.map(normalizar)
+  const pedidos = await getPedidosLabExterno()
+  return pedidos.filter(p => (p.diasAtraso ?? 0) > 0).sort((a, b) => (b.diasAtraso ?? 0) - (a.diasAtraso ?? 0))
 }
 
 export async function getRetrabalhos() {
-  await requireUser()
-  const rows = await prisma.$queryRaw<LabExternoPedidoRow[]>`
-    SELECT * FROM labs_externos_pedidos
-    WHERE is_retrabalho = true AND situacao != 'Entregue'
-    ORDER BY created_at DESC
-  `
-  return rows.map(normalizar)
+  const pedidos = await getPedidosLabExterno()
+  return pedidos.filter(p => p.isRetrabalho && p.situacao !== 'Entregue')
+    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
 }
 
 export async function getDashboardLabsExternos() {
-  await requireUser()
-  const hoje = hojeIso()
-  // Cast bigint to int to avoid JSON serialization issues
-  const rows = await prisma.$queryRaw<DashboardLabsExternosRow[]>`
-    SELECT
-      COUNT(*) FILTER (WHERE situacao = 'Enviado')::int   AS total_enviados,
-      COUNT(*) FILTER (WHERE situacao = 'Provando')::int   AS total_provando,
-      COUNT(*) FILTER (WHERE situacao = 'Pronto')::int    AS total_prontos,
-      COUNT(*) FILTER (WHERE situacao = 'Entregue')::int  AS total_entregues,
-      COUNT(*) FILTER (WHERE prazo IS NOT NULL AND prazo < ${hoje}::date AND situacao != 'Entregue')::int  AS total_atrasados,
-      COUNT(*) FILTER (WHERE is_retrabalho = true AND situacao != 'Entregue')::int AS total_retrabalhos
-    FROM labs_externos_pedidos
-  `
-  return rows[0] ?? {
-    total_enviados: 0,
-    total_provando: 0,
-    total_prontos: 0,
-    total_entregues: 0,
-    total_atrasados: 0,
-    total_retrabalhos: 0,
+  const pedidos = await getPedidosLabExterno()
+  return {
+    total_enviados: pedidos.filter(p => p.situacao === 'Enviado').length,
+    total_provando: pedidos.filter(p => p.situacao === 'Provando').length,
+    total_prontos: pedidos.filter(p => p.situacao === 'Pronto').length,
+    total_entregues: pedidos.filter(p => p.situacao === 'Entregue').length,
+    total_atrasados: pedidos.filter(p => (p.diasAtraso ?? 0) > 0).length,
+    total_retrabalhos: pedidos.filter(p => p.isRetrabalho && p.situacao !== 'Entregue').length,
   }
 }
 
-export async function getLabsExternos() {
+export async function getArquivamentoDisponivel(): Promise<boolean> {
+  const user = await requireUser()
+  const capability = await capacidadeArquivamento(prisma)
+  return capability.enabled && (user.tipo === 'admin' || user.permissoes.includes('all'))
+}
+
+export async function alterarArquivoPedido(input: ArchiveInput): Promise<ResultadoAcao> {
+  const user = await requireAdmin()
+  try {
+    await alterarArquivamento(prisma, input, user)
+    revalidarLabs()
+    return { success: true }
+  } catch (error) {
+    // Validation/domain errors are safe; database errors must not disclose SQL or credentials.
+    const message = error instanceof Error ? error.message : ''
+    const known = /^(Confirme|Conclua|Arquivamento seguro|Pedido não encontrado|O registro foi alterado|O arquivamento foi alterado|Este registro não está arquivado)/
+    return erro(known.test(message) ? message : 'Não foi possível confirmar o resultado. Atualize a página e confira o histórico antes de tentar novamente.')
+  }
+}
+
+export async function getHistoricoArquivo(id: number): Promise<ArchiveEvent[]> {
+  await requireAdmin()
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Pedido inválido.')
+  const capability = await capacidadeArquivamento(prisma)
+  if (!capability.installed) return []
+  return prisma.$queryRaw<ArchiveEvent[]>`
+    SELECT id::text, action, version, occurred_at, actor_name, reason, snapshot, reconciliation_review
+    FROM labgest_private.external_order_archive_event WHERE pedido_id = ${id} ORDER BY version DESC
+  `
+}
+
+export async function getLabsExternos(): Promise<LabExterno[]> {
   await requireUser()
   const labs = await prisma.$queryRaw<LabExterno[]>`
     SELECT * FROM labs_externos WHERE ativo = true ORDER BY nome
@@ -385,6 +392,9 @@ export async function excluirPedido(id: number): Promise<ResultadoAcao> {
 function normalizar(row: LabExternoPedidoRow): LabExternoPedido {
   return {
     id:               Number(row.id),
+    revisao:          row.revisao,
+    arquivoVersao:    0,
+    arquivado:        false,
     labId:            row.lab_id ? Number(row.lab_id) : null,
     labNome:          row.lab_nome,
     paciente:         row.paciente,

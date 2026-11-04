@@ -25,7 +25,7 @@ function load(relative, dependencies) {
   return exports
 }
 
-function view(save) {
+function view(save, props = {}) {
   const components = {}
   const transitions = []
   let stateIndex = 0
@@ -49,13 +49,13 @@ function view(save) {
   for (const [file, name] of [
     ['layout/dashboard-layout', 'DashboardLayout'], ['layout/header', 'Header'],
     ['ui/empty-state', 'EmptyState'], ['ui/reason-modal', 'ReasonModal'],
-    ['labs-externos/modal-laboratorio', 'ModalLaboratorio'], ['labs-externos/modal-pedido', 'ModalPedido'],
+    ['labs-externos/modal-arquivo', 'ModalArquivo'], ['labs-externos/modal-laboratorio', 'ModalLaboratorio'], ['labs-externos/modal-pedido', 'ModalPedido'],
     ['labs-externos/painel-laboratorios', 'PainelLaboratorios'], ['labs-externos/pedido-card', 'PedidoCard'],
     ['labs-externos/pipeline-labs', 'PipelineLabs'],
   ]) dependencies[`@/components/${file}`] = { [name]: name }
   const { LabsExternosView } = load('app/(dashboard)/labs-externos/labs-externos-view.tsx', dependencies)
-  LabsExternosView({ pedidos: [], atrasados: [], retrabalhos: [], stats: {}, labs: [] })
-  return { save: components.ModalPedido.onSave, settle: () => Promise.all(transitions) }
+  LabsExternosView({ pedidos: [], atrasados: [], retrabalhos: [], stats: {}, labs: [], ...props })
+  return { components, save: components.ModalPedido.onSave, settle: () => Promise.all(transitions) }
 }
 
 const pedido = { labId: 1, paciente: 'Paciente fictício', dataEnvio: '2026-11-04', prazo: '2026-11-19' }
@@ -97,10 +97,17 @@ test('legacy delete endpoint authenticates and preserves all data', async () => 
     zod: require('zod'),
     '@/lib/auth-utils': { requireUser: async () => { authenticated++ } },
     '@/lib/labs-externos-utils': {},
+    '@/lib/labs-externos-arquivo': {},
   })
   const result = await excluirPedido(123)
   assert.equal(authenticated, 1)
   assert.equal(writes, 0)
   assert.equal(result.success, false)
   assert.match(result.error, /cancelamento seguro/i)
+})
+
+test('archive controls stay hidden until the server capability is available', () => {
+  const props = { pedidos: [{ id: 10, situacao: 'Enviado', paciente: 'Paciente fictício' }] }
+  assert.equal(view(async () => ({ success: true }), props).components.PedidoCard.onArquivo, undefined)
+  assert.equal(typeof view(async () => ({ success: true }), { ...props, arquivamentoDisponivel: true }).components.PedidoCard.onArquivo, 'function')
 })
