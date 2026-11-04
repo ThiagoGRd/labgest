@@ -44,7 +44,7 @@ const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Prioridades', href: '/prioridades', icon: Clock },
   { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
-  { name: 'Produção', href: '/producao', icon: Kanban, hasBadge: true },
+  { name: 'Produção', href: '/producao', icon: Kanban },
   { name: 'Recepção', href: '/recepcao', icon: Route },
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Serviços', href: '/servicos', icon: Package },

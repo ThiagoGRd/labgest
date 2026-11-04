@@ -1,56 +1,27 @@
-'use client'
+"use client"
 
-import { useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { toast } from 'sonner'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Re-fetch through authenticated server routes; no raw order subscription or
+// patient payload is exposed to an anonymous browser channel.
 export function RealtimeOrders() {
   const router = useRouter()
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
   useEffect(() => {
-    // Initialize audio
-    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3') // Pleasant notification sound
-    audioRef.current.volume = 0.5
-
-    const supabase = createClient()
-
-    const channel = supabase
-      .channel('realtime-ordens')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'ordens',
-        },
-        (payload) => {
-          // Play sound
-          if (audioRef.current) {
-            audioRef.current.play().catch(e => console.log('Audio play failed:', e))
-          }
-
-          // Show Toast
-          toast.success('Novo Pedido Recebido!', {
-            description: `Paciente: ${payload.new.nome_paciente} - ${payload.new.servico_nome}`,
-            duration: 8000,
-            action: {
-              label: 'Ver',
-              onClick: () => router.push('/ordens'),
-            },
-          })
-
-          // Refresh data
-          router.refresh()
-        }
-      )
-      .subscribe()
-
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      const focused = document.activeElement
+      if (focused instanceof HTMLElement && (focused.matches('input, textarea, select') || focused.isContentEditable)) return
+      router.refresh()
+    }
+    const timer = window.setInterval(refresh, 30_000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
     return () => {
-      supabase.removeChannel(channel)
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
     }
   }, [router])
-
   return null
 }

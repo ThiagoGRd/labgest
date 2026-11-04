@@ -1,5 +1,6 @@
 'use client'
 
+import { calcularCustoMateriais } from '@/lib/servico-custo'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createServico, updateServico, type getMateriaisDisponiveis, type getServicos } from '@/actions/servicos'
@@ -38,7 +39,7 @@ export function ServicoFormModal({ servico, materiaisDisponiveis, onClose }: Ser
     tipoWorkflow: servico?.tipoWorkflow || 'geral',
     preco: servico?.preco.toString() || '',
     tempoProducao: servico?.tempoProducao.toString() || '',
-    custoMateriais: servico?.custoMateriais.toString() || '',
+    custoMateriais: servico?.custoMateriais?.toString() || '',
     descricao: servico?.descricao || '',
   })
   const [materiais, setMateriais] = useState(
@@ -48,13 +49,14 @@ export function ServicoFormModal({ servico, materiaisDisponiveis, onClose }: Ser
   const fluxo = formData.tipoWorkflow === 'geral'
     ? null
     : FLUXOS_PROTESE[formData.tipoWorkflow as TipoProteseId]
-  const custoCalculado = materiais.reduce((total, material) => {
-    const item = materiaisDisponiveis.find((disponivel) => disponivel.id === material.id)
-    return total + (item?.precoUnitario ?? 0) * material.quantidade
-  }, 0)
+  const custoCalculado = calcularCustoMateriais(materiais, [
+    ...(servico?.materiais ?? []),
+    ...materiaisDisponiveis,
+  ])
+  const indisponiveis = materiais.filter(material => !materiaisDisponiveis.some(item => item.id === material.id))
   const custo = materiais.length > 0 ? custoCalculado : Number(formData.custoMateriais) || 0
   const preco = Number(formData.preco) || 0
-  const margem = preco > 0 ? Math.round(((preco - custo) / preco) * 100) : 0
+  const margem = custo === null ? null : preco > 0 ? Math.round(((preco - custo) / preco) * 100) : 0
 
   const toggleMaterial = (id: number, selecionado: boolean) => {
     setMateriais((atuais) => selecionado
@@ -64,6 +66,7 @@ export function ServicoFormModal({ servico, materiaisDisponiveis, onClose }: Ser
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (custo === null || indisponiveis.length > 0) { setError('Remova ou reative os materiais indisponíveis antes de salvar.'); return }
     setLoading(true)
     setError('')
 
@@ -181,6 +184,10 @@ export function ServicoFormModal({ servico, materiaisDisponiveis, onClose }: Ser
             <h3 className="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><Package className="h-4 w-4 text-indigo-500" /> Materiais e custo</h3>
             <p className="text-xs text-slate-500">As quantidades serão baixadas do estoque quando a ordem for finalizada.</p>
           </div>
+          {indisponiveis.map(material => <div key={material.id} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
+            {servico?.materiais.find(item => item.id === material.id)?.nome ?? `Material #${material.id}`} · Indisponível para uso (arquivado ou não encontrado).
+            <Button type="button" variant="outline" onClick={() => toggleMaterial(material.id, false)}>Remover da receita</Button>
+          </div>)}
           {materiaisDisponiveis.length === 0 ? (
             <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">Cadastre materiais no Estoque para vinculá-los ao serviço.</p>
           ) : (
@@ -217,8 +224,8 @@ export function ServicoFormModal({ servico, materiaisDisponiveis, onClose }: Ser
             </div>
           )}
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 dark:bg-zinc-800/50 sm:max-w-md">
-            <div><p className="text-xs text-slate-500">Custo estimado</p><p className="font-bold text-slate-900 dark:text-white">{formatCurrency(custo)}</p></div>
-            <div><p className="text-xs text-slate-500">Margem estimada</p><p className={`font-bold ${margem >= 50 ? 'text-emerald-600' : margem >= 30 ? 'text-amber-600' : 'text-red-600'}`}>{margem}%</p></div>
+            <div><p className="text-xs text-slate-500">Custo estimado</p><p className="font-bold text-slate-900 dark:text-white">{custo === null ? 'Custo indisponível' : formatCurrency(custo)}</p></div>
+            <div><p className="text-xs text-slate-500">Margem estimada</p><p className={`font-bold ${(margem ?? -1) >= 50 ? 'text-emerald-600' : (margem ?? -1) >= 30 ? 'text-amber-600' : 'text-red-600'}`}>{margem === null ? 'Indisponível' : `${margem}%`}</p></div>
           </div>
         </section>
 

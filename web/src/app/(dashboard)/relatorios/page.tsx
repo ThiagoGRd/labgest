@@ -11,8 +11,8 @@ export default async function RelatoriosPage({ searchParams }: RelatoriosPagePro
   const { mes, cliente } = await searchParams
   const clienteId = Number(cliente)
   const [financeiro, ordensEntregues, clientes] = await Promise.all([
-    getRelatorioFinanceiro(),
-    getRelatorioOrdensEntregues(mes, Number.isInteger(clienteId) && clienteId > 0 ? clienteId : undefined),
+    getRelatorioFinanceiro(mes),
+    getRelatorioOrdensEntregues(mes, cliente === undefined ? undefined : clienteId),
     getClientesRelatorio(),
   ])
   

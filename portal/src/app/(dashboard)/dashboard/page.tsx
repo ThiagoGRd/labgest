@@ -1,12 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireClienteIdentity } from '@/lib/cliente-identity'
 import { getDashboardStats, getMeusPedidos } from '@/actions/pedidos'
 import { DashboardView } from './dashboard-view'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PortalDashboard() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const cliente = await requireClienteIdentity()
   
   // Buscar dados reais
   const stats = await getDashboardStats()
@@ -16,9 +15,9 @@ export default async function PortalDashboard() {
   const pedidosRecentes = pedidos.slice(0, 3)
 
   const userData = {
-    nome: user?.user_metadata?.full_name || 'Dentista',
-    email: user?.email || '',
-    cro: user?.user_metadata?.cro || '',
+    nome: cliente.nome,
+    email: cliente.email || '',
+    cro: cliente.cro || '',
   }
 
   return (

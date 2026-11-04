@@ -97,6 +97,8 @@ test('legacy delete endpoint authenticates and preserves all data', async () => 
     zod: require('zod'),
     '@/lib/auth-utils': { requireUser: async () => { authenticated++ } },
     '@/lib/labs-externos-utils': {},
+    './workflow-protese': {},
+    '@/lib/labs-externos-vinculo': {},
     '@/lib/labs-externos-arquivo': {},
   })
   const result = await excluirPedido(123)

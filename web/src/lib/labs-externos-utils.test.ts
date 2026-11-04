@@ -30,11 +30,11 @@ test('usa o dia local do laboratório, e não o dia em UTC', () => {
   assert.equal(hojeIso(new Date('2026-10-16T01:00:00Z')), '2026-10-15')
 })
 
-test('registra o retorno ao ficar Pronto, preserva a data e limpa ao voltar de etapa', () => {
+test('registra o retorno ao ficar Pronto, preserva a data inclusive ao voltar de etapa', () => {
   assert.equal(dataRetornoPara('Pronto', null, '2026-10-15'), '2026-10-15')
   assert.equal(dataRetornoPara('Entregue', '2026-10-10', '2026-10-15'), '2026-10-10')
-  assert.equal(dataRetornoPara('Provando', '2026-10-10', '2026-10-15'), null)
-  assert.equal(dataRetornoPara('Enviado', '2026-10-10', '2026-10-15'), null)
+  assert.equal(dataRetornoPara('Provando', '2026-10-10', '2026-10-15'), '2026-10-10')
+  assert.equal(dataRetornoPara('Enviado', '2026-10-10', '2026-10-15'), '2026-10-10')
 })
 
 test('valida a situação do pedido', () => {

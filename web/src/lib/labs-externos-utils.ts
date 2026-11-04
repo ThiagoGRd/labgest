@@ -54,14 +54,14 @@ export function prazoSugerido(dataEnvio: string, dias: number = PRAZO_PADRAO_DIA
 /**
  * A "data de retorno" é o dia em que a peça voltou pronta do laboratório.
  * Ela é registrada ao marcar o pedido como Pronto (ou Entregue, se o passo foi pulado)
- * e é limpa se o pedido voltar para uma etapa anterior.
+ * e é preservada como primeiro retorno, inclusive em correções de situação.
  */
 export function dataRetornoPara(
   situacao: SituacaoPedido,
   retornoAtual: string | null,
   hoje: string,
 ): string | null {
-  return situacao === 'Pronto' || situacao === 'Entregue' ? (retornoAtual ?? hoje) : null
+  return retornoAtual ?? (situacao === 'Pronto' || situacao === 'Entregue' ? hoje : null)
 }
 
 export type TomPrazo = 'atrasado' | 'hoje' | 'proximo' | 'ok' | 'neutro'
@@ -113,7 +113,7 @@ export function resumirLaboratorio(
   const abertos = pedidos.filter((pedido) => pedido.situacao !== 'Entregue')
   const atrasados = abertos.filter((pedido) => {
     const prazo = paraIso(pedido.prazo)
-    return prazo !== null && prazo < hoje
+    return (pedido.situacao === 'Enviado' || pedido.situacao === 'Provando') && paraIso(pedido.dataRetorno) === null && prazo !== null && prazo < hoje
   })
 
   const inicioJanela = somarDias(hoje, -janelaDias)

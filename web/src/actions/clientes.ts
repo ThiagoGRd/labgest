@@ -58,14 +58,22 @@ export async function createCliente(data: {
 }) {
   await requireUser()
   try {
-    await prisma.cliente.create({
-      data: validarCliente(data)
-    })
+    const campos = validarCliente(data)
+    campos.email = campos.email.toLowerCase()
+    await prisma.$transaction(async tx => {
+      // All application email writes share this transaction lock. ReadCommitted
+      // gives the duplicate query a fresh snapshot after the preceding writer.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(187431, 1)`
+      if (campos.email && await tx.cliente.findFirst({ where: { email: { equals: campos.email, mode: 'insensitive' } } })) {
+        throw new Error('Email já cadastrado. Revise o cadastro existente com o laboratório.')
+      }
+      await tx.cliente.create({ data: campos })
+    }, { isolationLevel: 'ReadCommitted' })
     revalidatePath('/clientes')
     return { success: true }
   } catch (error) {
-    console.error('Erro ao criar cliente:', error)
-    return { success: false, error: 'Erro ao criar cliente' }
+    if (!(error instanceof Error && error.message.startsWith('Email já'))) console.error('Erro ao criar cliente:', error)
+    return { success: false, error: error instanceof Error && error.message.startsWith('Email já') ? error.message : 'Erro ao criar cliente' }
   }
 }
 
@@ -95,10 +103,23 @@ export async function updateCliente(id: number, input: unknown) {
     return { success: false, error: error instanceof Error ? error.message : 'Dados inválidos' }
   }
   try {
-    await prisma.cliente.update({ where: { id }, data })
+    data.email = data.email.toLowerCase()
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(187431, 1)`
+      const cliente = await tx.cliente.findUnique({ where: { id } })
+      if (!cliente) throw new Error('Cliente não encontrado')
+      if (cliente.email?.trim() && cliente.email.trim().toLowerCase() !== data.email) {
+        throw new Error('O email de acesso não pode ser alterado ou removido por esta tela. Solicite ao laboratório a revisão do vínculo do portal.')
+      }
+      if (data.email && await tx.cliente.findFirst({ where: { id: { not: id }, email: { equals: data.email, mode: 'insensitive' } } })) {
+        throw new Error('Email já cadastrado. Revise o cadastro existente com o laboratório.')
+      }
+      await tx.cliente.update({ where: { id }, data })
+    }, { isolationLevel: 'ReadCommitted' })
     revalidatePath('/clientes')
     return { success: true }
-  } catch {
-    return { success: false, error: 'Não foi possível atualizar o cliente. Tente novamente.' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    return { success: false, error: /^(O email de acesso|Email já|Cliente não encontrado)/.test(message) ? message : 'Não foi possível atualizar o cliente. Tente novamente.' }
   }
 }

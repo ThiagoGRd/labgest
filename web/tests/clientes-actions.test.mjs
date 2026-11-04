@@ -8,8 +8,40 @@ function load({authorized = true, fail = false} = {}) {
   const calls = []
   const code = stripTypeScriptTypes(readFileSync(new URL('../src/actions/clientes.ts', import.meta.url), 'utf8'))
     .replace(/^import .*$/gm, '').replace(/export async function /g, 'async function ')
+  let rows = [{ id: 2, nome: 'Dentist', telefone: '123', cro: 'CRO 1', email: null }]
+  const adapter = records => ({
+    findUnique: async ({where}) => records.find(row => row.id === where.id) ?? null,
+    findFirst: async ({where}) => records.find(row => row.id !== where.id?.not && row.email?.toLowerCase() === where.email.equals.toLowerCase()) ?? null,
+    findMany: async () => records,
+    create: async query => { calls.push(query); const row = {id: 3, ...query.data}; records.push(row); return row },
+    update: async query => {
+      calls.push(query)
+      if (fail) throw Error('db failed')
+      const row = records.find(row => row.id === query.where.id)
+      if (!row) throw Error('record not found')
+      Object.assign(row, query.data)
+      return row
+    },
+  })
+  const prisma = {
+    cliente: adapter(rows),
+    $transaction: async (callback, options) => {
+      assert.equal(options.isolationLevel, 'ReadCommitted')
+      const snapshot = rows.map(row => ({...row}))
+      const result = await callback({
+        cliente: adapter(snapshot),
+        $executeRaw: async parts => {
+          assert.match(parts.join(''), /SELECT pg_advisory_xact_lock\(187431, 1\)/)
+          return 1
+        },
+      })
+      rows = snapshot
+      prisma.cliente = adapter(rows)
+      return result
+    },
+  }
   const scope = {validarCliente, console: {error() {}}, requireUser: async () => {if (!authorized) throw Error('denied')},
-    prisma: { cliente: { create: async query => { calls.push(query); return {} }, update: async query => { calls.push(query); if(fail) throw Error('db failed'); return {} } } },
+    prisma,
     revalidatePath: path => calls.push(path) }
   runInNewContext(code + '\nthis.create = createCliente; this.update = typeof updateCliente === "function" ? updateCliente : undefined', scope)
   return { update: scope.update, create: scope.create, calls }

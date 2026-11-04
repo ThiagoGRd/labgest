@@ -146,7 +146,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
   const handleConcluirEtapaClinica = async () => {
     setConcluindoEtapa(true)
     try {
-      const resultado = await concluirEtapaClinica(pedido.id)
+      const resultado = await concluirEtapaClinica(pedido.id, pedido.passoFluxoAtual || '')
       if (!resultado.success) {
         toast.error(resultado.error || 'Não foi possível concluir a etapa')
         return
@@ -220,7 +220,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
         {/* Detalhes (Direita) */}
         <div className="order-1 space-y-6 xl:order-2 xl:col-span-2">
 
-          {passoAtual?.responsavel === 'clinica' && !passoAtual.prova && (
+          {!['Pausado', 'Cancelado', 'Entregue'].includes(pedido.status) && passoAtual?.responsavel === 'clinica' && !passoAtual.prova && (
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 sm:p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
               <p className="text-xs font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">Ação da clínica</p>
               <h3 className="mt-1 font-bold text-slate-900 dark:text-white">{passoAtual.nome}</h3>

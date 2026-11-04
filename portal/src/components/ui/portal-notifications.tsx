@@ -46,9 +46,10 @@ export function PortalNotifications() {
 
   useEffect(() => {
     fetchNotificacoes()
+    window.addEventListener('labgest:messages-read', fetchNotificacoes)
     // Polling a cada 90s
     const interval = setInterval(fetchNotificacoes, 90000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); window.removeEventListener('labgest:messages-read', fetchNotificacoes) }
   }, [])
 
   // Fecha ao clicar fora

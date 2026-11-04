@@ -1,5 +1,8 @@
 'use server'
 
+import { erroTransicaoOrdem } from '@labgest/shared'
+
+import { resolveClienteIdentity } from '@/lib/cliente-identity'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
@@ -66,10 +69,9 @@ async function getClienteLogado() {
 
   if (!user || !user.email) return null
 
-  // Buscar cliente pelo email do Auth
-  const cliente = await prisma.cliente.findFirst({
-    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
-  })
+  const identity = await resolveClienteIdentity(user)
+  if (!identity.ok) return null
+  const cliente = identity.cliente
 
   return { user, cliente }
 }
@@ -90,7 +92,7 @@ export async function criarPedidoBatch(data: {
   }>
 }) {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) {
     return { success: false, error: 'Cliente não encontrado. Complete seu cadastro.' }
   }
@@ -172,7 +174,7 @@ export async function criarPedido(data: {
   arquivos: string[]
 }) {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) {
     return { success: false, error: 'Cliente não encontrado. Complete seu cadastro.' }
   }
@@ -235,37 +237,44 @@ export async function criarPedido(data: {
 
 export async function aprovarProva(pedidoId: number, checklist: Prisma.InputJsonObject) {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
 
   try {
-    const pedido = await prisma.ordem.findFirst({ where: { id: pedidoId, clienteId: logado.cliente.id } })
-    if (!pedido) return { success: false, error: 'Pedido não encontrado' }
+    return await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${pedidoId} AND cliente_id = ${logado.cliente.id} FOR UPDATE`
+      const pedido = await tx.ordem.findFirst({ where: { id: pedidoId, clienteId: logado.cliente.id } })
+      if (!pedido) return { success: false, error: 'Pedido não encontrado' }
 
-    // Atualizar checklist e mudar status
-    await prisma.ordem.update({
-      where: { id: pedidoId },
-      data: {
-        checklistEstetico: checklist,
-        // Ao aprovar prova, o dentista está "devolvendo" para o laboratório continuar
-        // O status ideal seria "Retorno de Prova" ou "Em Produção" novamente
-        status: 'Em Produção',
-        etapaAtual: 'acabamento',
-        subetapaAtual: 'Prova aprovada pelo dentista',
-        historicoEtapas: [
-          ...(pedido.historicoEtapas as Prisma.InputJsonObject[] || []),
-          {
-            etapa: pedido.etapaAtual,
-            acao: 'aprovou_prova',
-            data: new Date().toISOString(),
-            usuario: logado.cliente.nome
-          }
-        ]
-      }
+      const erroEstado = erroTransicaoOrdem(pedido.status, false)
+      if (erroEstado) return { success: false as const, error: erroEstado }
+      if (isTipoProtese(pedido.tipoWorkflow)) return { success: false, error: 'Registre a decisão no ciclo de prova da prótese.' }
+      if (pedido.status !== 'Em Prova') return { success: false, error: 'Esta ordem não está aguardando aprovação de prova.' }
+      // Atualizar checklist e mudar status
+      await tx.ordem.update({
+        where: { id: pedidoId },
+        data: {
+          checklistEstetico: checklist,
+          // Ao aprovar prova, o dentista está "devolvendo" para o laboratório continuar
+          // O status ideal seria "Retorno de Prova" ou "Em Produção" novamente
+          status: 'Em Produção',
+          etapaAtual: 'acabamento',
+          subetapaAtual: 'Prova aprovada pelo dentista',
+          historicoEtapas: [
+            ...(pedido.historicoEtapas as Prisma.InputJsonObject[] || []),
+            {
+              etapa: pedido.etapaAtual,
+              acao: 'aprovou_prova',
+              data: new Date().toISOString(),
+              usuario: logado.cliente.nome
+            }
+          ]
+        }
+      })
+
+      revalidatePath('/pedidos')
+      return { success: true }
     })
-
-    revalidatePath('/pedidos')
-    return { success: true }
   } catch (error) {
     console.error('Erro ao aprovar prova:', error)
     return { success: false, error: 'Erro ao aprovar prova' }
@@ -274,14 +283,14 @@ export async function aprovarProva(pedidoId: number, checklist: Prisma.InputJson
 
 export async function getPedidoById(id: number) {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) return null
 
   try {
     const pedido = await prisma.ordem.findFirst({
-      where: { 
+      where: {
         id,
-        clienteId: logado.cliente.id 
+        clienteId: logado.cliente.id
       },
       include: {
         servico: { select: { nome: true } },
@@ -343,7 +352,7 @@ export async function getPedidoById(id: number) {
 
 export async function getMeusPedidos() {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) return []
 
   try {
@@ -371,12 +380,12 @@ export async function getMeusPedidos() {
 
 export async function getHistoricoPedidos() {
   const logado = await getClienteLogado()
-  
+
   if (!logado?.cliente) return []
 
   try {
     const pedidos = await prisma.ordem.findMany({
-      where: { 
+      where: {
         clienteId: logado.cliente.id,
         status: { in: ['Finalizado', 'Entregue', 'Cancelado'] }
       },
@@ -389,7 +398,8 @@ export async function getHistoricoPedidos() {
       servico: p.servicoNome,
       status: p.status || 'Finalizado',
       dataEntrega: p.dataEntrega.toISOString(),
-      dataFinalizacao: p.dataFinalizacao?.toISOString() || p.updatedAt?.toISOString() || new Date().toISOString(),
+      dataFinalizacao: p.dataFinalizacao?.toISOString() || null,
+      dataEncerramento: (p.status === 'Cancelado' ? p.canceladoEm : p.status === 'Entregue' ? p.dataEntregaReal : p.dataFinalizacao)?.toISOString() || null,
       valor: Number(p.valorFinal),
     }))
   } catch (error) {
@@ -400,29 +410,30 @@ export async function getHistoricoPedidos() {
 
 export async function getDashboardStats() {
   const logado = await getClienteLogado()
-  
-  if (!logado?.cliente) return { total: 0, emAndamento: 0, finalizados: 0 }
+
+  if (!logado?.cliente) return { total: 0, emAndamento: 0, finalizados: 0, aguardando: 0 }
 
   try {
-    const [total, emAndamento, finalizados] = await Promise.all([
+    const [total, emAndamento, finalizados, aguardando] = await Promise.all([
       prisma.ordem.count({ where: { clienteId: logado.cliente.id } }),
-      prisma.ordem.count({ 
-        where: { 
+      prisma.ordem.count({
+        where: {
           clienteId: logado.cliente.id,
-          status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] }
-        } 
+          status: { in: ['Em Produção', 'Em Prova', 'Pausado'] }
+        }
       }),
-      prisma.ordem.count({ 
-        where: { 
+      prisma.ordem.count({
+        where: {
           clienteId: logado.cliente.id,
-          status: 'Finalizado'
-        } 
-      })
+          status: { in: ['Finalizado', 'Entregue'] }
+        }
+      }),
+      prisma.ordem.count({ where: { clienteId: logado.cliente.id, status: 'Aguardando' } })
     ])
 
-    return { total, emAndamento, finalizados }
+    return { total, emAndamento, finalizados, aguardando }
   } catch {
-    return { total: 0, emAndamento: 0, finalizados: 0 }
+    return { total: 0, emAndamento: 0, finalizados: 0, aguardando: 0 }
   }
 }
 
@@ -433,7 +444,7 @@ export async function getServicosDisponiveis() {
       orderBy: { nome: 'asc' },
       select: { id: true, nome: true, categoria: true, preco: true, tempoProducao: true, tipoWorkflow: true }
     })
-    
+
     return servicos.map(s => ({
       ...s,
       categoria: s.categoria || 'Geral',
@@ -451,9 +462,9 @@ export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
     if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
 
     const ordem = await prisma.ordem.findFirst({ where: { id: ordemId, clienteId: logado.cliente.id } })
-    
+
     if (!ordem) throw new Error('Ordem não encontrada')
-    
+
     const fotosAntigas = Array.isArray(ordem.fotosCaso) ? ordem.fotosCaso : []
     const novasFotos = [...fotosAntigas, fotoUrl]
 
@@ -461,7 +472,7 @@ export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
       where: { id: ordemId },
       data: { fotosCaso: novasFotos }
     })
-    
+
     revalidatePath('/')
     return { success: true }
   } catch (error) {

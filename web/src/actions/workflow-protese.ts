@@ -1,5 +1,7 @@
 'use server'
 
+import { erroTransicaoOrdem } from '@labgest/shared'
+
 import { Prisma, prisma } from '@labgest/database'
 import {
   calcularPrazoPasso,
@@ -12,6 +14,7 @@ import {
 } from '@/lib/workflow-config'
 import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
+import { registrarPedidoFornecedor, confirmarPedidoFornecedor } from '@/lib/labs-externos-vinculo'
 import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 
 function historicoComEvento(historico: Prisma.JsonValue, evento: Prisma.JsonObject) {
@@ -25,9 +28,10 @@ function revalidarFluxo() {
   revalidatePath('/financeiro')
   revalidatePath('/estoque')
   revalidatePath('/recepcao')
+  revalidatePath('/labs-externos')
 }
 
-export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string) {
+export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string, revisaoEsperada: string) {
   const usuario = await requireUser()
   if (!isTipoProtese(tipo)) return { success: false, error: 'Selecione um tipo de prótese válido' }
 
@@ -36,12 +40,16 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
   if (!passo) return { success: false, error: 'Selecione uma etapa válida para este tipo de prótese' }
 
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    const erroEstado = erroTransicaoOrdem(ordem.status, false)
+    if (erroEstado) return { success: false as const, error: erroEstado }
     if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
       return { success: false, error: 'Esta ordem já está encerrada e não pode ser reposicionada pela Produção' }
     }
 
+    if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false, error: 'A ordem foi alterada. Atualize antes de definir a etapa.' }
     const agora = new Date()
     const cicloAtivo = await tx.cicloProducao.findFirst({
       where: { ordemId, status: { in: ['no_lab', 'em_prova'] } },
@@ -128,13 +136,17 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
   return resultado
 }
 
-export async function concluirEtapaLaboratorial(ordemId: number) {
+export async function concluirEtapaLaboratorial(ordemId: number, etapaEsperada: string) {
   const usuario = await requireUser()
 
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Fluxo da prótese não identificado' }
+    const erroEstado = erroTransicaoOrdem(ordem.status, false)
+    if (erroEstado) return { success: false as const, error: erroEstado }
 
+    if (!etapaEsperada || ordem.passoFluxoAtual !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
     const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
     if (passoAtual.responsavel !== 'laboratorio') return { success: false, error: 'Esta etapa deve ser concluída pela clínica' }
 
@@ -212,48 +224,62 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
   return resultado
 }
 
-export async function registrarEnvioFornecedor(ordemId: number, fornecedor: string) {
+export async function registrarEnvioFornecedor(ordemId: number, fornecedor: string, labId?: number) {
   const usuario = await requireUser()
-  if (!fornecedor.trim()) return { success: false, error: 'Informe o nome do fornecedor' }
+  if (labId === undefined && !fornecedor.trim()) return { success: false, error: 'Informe o nome do fornecedor' }
 
-  const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+  return await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
   if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Ordem não encontrada' }
+    const erroEstado = erroTransicaoOrdem(ordem.status, false)
+    if (erroEstado) return { success: false as const, error: erroEstado }
   const passo = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
   if (passo.responsavel !== 'fornecedor') return { success: false, error: 'A ordem não está na etapa do fornecedor' }
 
+  if (ordem.dataEnvioFornecedor && !ordem.dataRecebimentoFornecedor) return { success: false, error: 'O envio já foi registrado. Confirme o recebimento antes de um novo envio.' }
   const agora = new Date()
   const prazo = calcularPrazoPasso(agora, passo, ordem.arcadas)
-  await prisma.ordem.update({
+  const lab = labId === undefined ? null : await registrarPedidoFornecedor(tx, ordem, labId, agora, prazo)
+  const nomeFornecedor = lab?.nome || fornecedor.trim()
+  await tx.ordem.update({
     where: { id: ordemId },
     data: {
-      fornecedorEstrutura: fornecedor.trim(),
+      fornecedorEstrutura: nomeFornecedor,
       dataEnvioFornecedor: agora,
       prazoFornecedor: prazo,
       prazoEtapaAtual: prazo,
       dataRecebimentoFornecedor: null,
       justificativaAtrasoFornecedor: null,
       historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
-        acao: 'enviado_fornecedor', fornecedor: fornecedor.trim(), data: agora.toISOString(), por: usuario.email || 'laboratorio',
+        acao: 'enviado_fornecedor', fornecedor: nomeFornecedor, data: agora.toISOString(), por: usuario.email || 'laboratorio',
       }),
     },
   })
 
   revalidarFluxo()
   return { success: true, prazo: prazo?.toISOString() }
+  })
 }
 
 export async function confirmarRecebimentoFornecedor(ordemId: number, justificativaAtraso?: string) {
   const usuario = await requireUser()
 
+  try {
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Ordem não encontrada' }
+    const erroEstado = erroTransicaoOrdem(ordem.status, false)
+    if (erroEstado) return { success: false as const, error: erroEstado }
     const passo = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
-    if (passo.responsavel !== 'fornecedor' || !ordem.dataEnvioFornecedor) return { success: false, error: 'O envio ao fornecedor ainda não foi registrado' }
+    if (passo.responsavel !== 'fornecedor' || !ordem.dataEnvioFornecedor || ordem.dataRecebimentoFornecedor) return { success: false, error: 'O envio ao fornecedor ainda não foi registrado' }
 
     const agora = new Date()
-    const atrasado = Boolean(ordem.prazoFornecedor && agora > ordem.prazoFornecedor)
-    if (atrasado && !justificativaAtraso?.trim()) return { success: false, error: 'Informe a justificativa do fornecedor para o atraso' }
+    const vinculado = await confirmarPedidoFornecedor(tx, ordemId)
+    const retorno = vinculado?.dataRetorno || agora
+    const atrasado = Boolean(ordem.prazoFornecedor && retorno > ordem.prazoFornecedor)
+    if (atrasado && !justificativaAtraso?.trim()) throw new Error('Informe a justificativa do fornecedor para o atraso')
 
     const proximo = getProximoPassoProtese(ordem.tipoWorkflow, passo.id)
     if (!proximo) return { success: false, error: 'Próxima etapa não encontrada' }
@@ -261,7 +287,7 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
-        dataRecebimentoFornecedor: agora,
+        dataRecebimentoFornecedor: retorno,
         justificativaAtrasoFornecedor: justificativaAtraso?.trim() || null,
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
@@ -279,4 +305,8 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
 
   if (resultado.success) revalidarFluxo()
   return resultado
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    return { success: false, error: message === 'Informe a justificativa do fornecedor para o atraso' ? message : 'Não foi possível confirmar o recebimento. Atualize e tente novamente.' }
+  }
 }

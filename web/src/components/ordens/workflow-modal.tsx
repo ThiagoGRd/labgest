@@ -107,7 +107,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
           return
         }
       }
-      const result = await avancarEtapa(ordem.id)
+      const result = await avancarEtapa(ordem.id, undefined, ordem.etapaAtual || '')
       if (result.success) {
         onSuccess?.()
         onClose()
@@ -129,7 +129,7 @@ export function WorkflowModal({ isOpen, onClose, ordem, onSuccess }: WorkflowMod
     setLoading(true)
     setError('')
     try {
-      const result = await retornarEtapa(ordem.id, motivoRetorno)
+      const result = await retornarEtapa(ordem.id, motivoRetorno, ordem.etapaAtual || '')
       if (result.success) {
         setShowRetorno(false)
         setMotivoRetorno('')

@@ -1,39 +1,24 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { requireClienteIdentity } from '@/lib/cliente-identity'
 import { prisma } from '@labgest/database'
 
-async function getClienteLogado() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user || !user.email) return null
-
-  const cliente = await prisma.cliente.findFirst({
-    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
-  })
-
-  return { user, cliente }
-}
-
 export async function getContasCliente() {
-  const logado = await getClienteLogado()
-  
-  if (!logado?.cliente) {
-    return { pendentes: [], pagas: [] }
-  }
+  const cliente = await requireClienteIdentity()
 
   const contas = await prisma.contaReceber.findMany({
-    where: { clienteId: logado.cliente.id, status: { not: 'Cancelado' } },
+    where: { clienteId: cliente.id, canceladoEm: null, status: { not: 'Cancelado' } },
     orderBy: { dataVencimento: 'asc' },
     include: {
-      ordem: { select: { nomePaciente: true, servicoNome: true } }
+      ordem: { select: { clienteId: true, nomePaciente: true, servicoNome: true } }
     }
   })
 
-  const hoje = new Date()
-  hoje.setHours(0, 0, 0, 0)
+  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const parte = (tipo: string) => Number(partes.find(p => p.type === tipo)?.value)
+  const hoje = new Date(Date.UTC(parte('year'), parte('month') - 1, parte('day')))
   const formatConta = (c: (typeof contas)[number]) => {
+    const ordemSegura = !c.ordem || c.ordem.clienteId === cliente.id
     const valor = Number(c.valor)
     const liquidado = Number(c.valorRecebido)
     const restante = Math.max(0, valor - liquidado)
@@ -47,10 +32,10 @@ export async function getContasCliente() {
         : diasAtraso ? 'Vencido' : 'Pendente'
     return {
       id: c.id,
-      descricao: c.descricao,
-      ordemId: c.ordemId,
-      paciente: c.ordem?.nomePaciente || '-',
-      servico: c.ordem?.servicoNome || '-',
+      descricao: ordemSegura ? c.descricao : 'Cobrança com vínculo da OS em revisão',
+      ordemId: ordemSegura ? c.ordemId : null,
+      paciente: ordemSegura ? c.ordem?.nomePaciente || '-' : 'Vínculo da OS em revisão',
+      servico: ordemSegura ? c.ordem?.servicoNome || '-' : '-',
       valor,
       liquidado,
       restante,

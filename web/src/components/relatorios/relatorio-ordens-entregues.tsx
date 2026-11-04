@@ -17,6 +17,7 @@ export interface OrdemEntregueRelatorio {
 }
 
 export interface RelatorioOrdensEntreguesData {
+  error?: string
   mes: string
   mesLabel: string
   clienteSelecionado: {

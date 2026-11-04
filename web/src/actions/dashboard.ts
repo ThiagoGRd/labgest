@@ -2,6 +2,7 @@
 
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
+import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 
 const STATUS_ENCERRADOS = ['Finalizado', 'Cancelado', 'Entregue']
 const STATUS_FORA_DA_FILA = [...STATUS_ENCERRADOS, 'Pausado']
@@ -97,25 +98,25 @@ export async function getDashboardData() {
       },
     }),
     prisma.ordem.count({ where: { status: 'Finalizado' } }),
-    prisma.contaReceber.aggregate({
+    prisma.movimentacaoFinanceira.aggregate({
       where: {
-        status: 'Recebido',
-        dataRecebimento: { gte: datas.inicioMesData, lt: datas.inicioProximoMesData },
+        tipo: 'Entrada',
+        estornadaEm: null,
+        dataMovimentacao: { gte: datas.inicioMesData, lt: datas.inicioProximoMesData },
       },
       _sum: { valor: true },
     }),
-    prisma.contaReceber.aggregate({
-      where: { status: { not: 'Recebido' } },
-      _sum: { valor: true },
-      _count: true,
+    prisma.contaReceber.findMany({
+      where: { canceladoEm: null, status: { notIn: ['Recebido', 'Cancelado'] } },
+      select: { valor: true, valorRecebido: true },
     }),
-    prisma.contaReceber.aggregate({
+    prisma.contaReceber.findMany({
       where: {
-        status: { not: 'Recebido' },
+        canceladoEm: null,
+        status: { notIn: ['Recebido', 'Cancelado'] },
         dataVencimento: { gte: datas.hoje, lt: datas.daquiOitoDias },
       },
-      _sum: { valor: true },
-      _count: true,
+      select: { valor: true, valorRecebido: true },
     }),
     prisma.ordem.findMany({
       where: {
@@ -130,6 +131,9 @@ export async function getDashboardData() {
       },
     }),
   ])
+
+  const abertas = saldoEmAberto.filter(c => Number(c.valor) > Number(c.valorRecebido))
+  const vencendo = vencendoSeteDias.filter(c => Number(c.valor) > Number(c.valorRecebido))
 
   return {
     usuario: {
@@ -147,10 +151,10 @@ export async function getDashboardData() {
     semEtapa: ordensSemEtapa,
     prontasParaEntrega,
     recebidoMes: Number(recebidoMes._sum.valor || 0),
-    saldoEmAberto: Number(saldoEmAberto._sum.valor || 0),
-    contasEmAberto: saldoEmAberto._count,
-    vencendoSeteDias: Number(vencendoSeteDias._sum.valor || 0),
-    contasVencendoSeteDias: vencendoSeteDias._count,
+    saldoEmAberto: resumirCobrancasMensais(abertas).saldo,
+    contasEmAberto: abertas.length,
+    vencendoSeteDias: resumirCobrancasMensais(vencendo).saldo,
+    contasVencendoSeteDias: vencendo.length,
     proximasEntregas: proximasEntregas.map((ordem) => ({
       id: ordem.id,
       paciente: ordem.nomePaciente,

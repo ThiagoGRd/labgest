@@ -8,6 +8,7 @@ import { botaoPrimario, botaoSecundario, campoClasse, rotuloClasse } from './cam
 import { ETAPA_POR_SITUACAO } from './etapas'
 
 export interface PedidoFormData {
+  ordemId?: number
   labId: number
   paciente: string
   dentista: string
@@ -35,6 +36,8 @@ function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode
 }
 
 export function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: ModalPedidoProps) {
+  const [ordemId, setOrdemId] = useState('')
+  const vinculado = Boolean(pedidoEdicao?.ordemId || ordemId)
   const [form, setForm] = useState({
     labId: pedidoEdicao?.labId ? String(pedidoEdicao.labId) : String(labs[0]?.id ?? ''),
     paciente: pedidoEdicao?.paciente ?? '',
@@ -50,8 +53,8 @@ export function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: 
 
   function enviar(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.paciente.trim() || !form.labId) return
-    onSave({ ...form, labId: Number(form.labId) })
+    if ((!vinculado && !form.paciente.trim()) || !form.labId) return
+    onSave({ ...form, paciente: vinculado && !pedidoEdicao ? 'OS vinculada' : form.paciente, labId: Number(form.labId), ...(!pedidoEdicao && ordemId ? { ordemId: Number(ordemId) } : {}) })
   }
 
   return (
@@ -65,18 +68,24 @@ export function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: 
       mobileFullscreen
     >
       <form onSubmit={enviar} className="space-y-4">
+        {!pedidoEdicao && <div>
+          <label htmlFor="ped-os" className={rotuloClasse}>ID exato da OS (opcional)</label>
+          <input id="ped-os" type="number" min="1" step="1" value={ordemId} onChange={e => setOrdemId(e.target.value)} className={campoClasse} />
+          <p className="text-xs text-slate-500">Vazio: pedido avulso. Com OS: registra o envio da etapa atual do fornecedor; paciente, dentista, serviço e datas vêm da OS. Envios antigos não são associados.</p>
+        </div>}
+        {pedidoEdicao?.ordemId && <p className="text-sm">Vinculado à OS #{pedidoEdicao.ordemId}. Confirme o recebimento na Produção; a entrega externa não entrega a OS ao cliente.</p>}
         <Grupo titulo="Paciente e peça">
           <div>
             <label htmlFor="ped-paciente" className={rotuloClasse}>Paciente *</label>
-            <input id="ped-paciente" required autoFocus={!pedidoEdicao} value={form.paciente} onChange={(e) => setForm((f) => ({ ...f, paciente: e.target.value }))} placeholder="Nome completo do paciente" className={campoClasse} />
+            <input id="ped-paciente" disabled={vinculado && !pedidoEdicao} required={!vinculado} autoFocus={!pedidoEdicao} value={form.paciente} onChange={(e) => setForm((f) => ({ ...f, paciente: e.target.value }))} placeholder="Nome completo do paciente" className={campoClasse} />
           </div>
           <div>
             <label htmlFor="ped-dentista" className={rotuloClasse}>Dentista</label>
-            <input id="ped-dentista" value={form.dentista} onChange={(e) => setForm((f) => ({ ...f, dentista: e.target.value }))} placeholder="Dr(a). Nome" className={campoClasse} />
+            <input id="ped-dentista" disabled={vinculado && !pedidoEdicao} value={form.dentista} onChange={(e) => setForm((f) => ({ ...f, dentista: e.target.value }))} placeholder="Dr(a). Nome" className={campoClasse} />
           </div>
           <div>
             <label htmlFor="ped-servico" className={rotuloClasse}>O que foi enviado</label>
-            <textarea id="ped-servico" rows={3} value={form.servico} onChange={(e) => setForm((f) => ({ ...f, servico: e.target.value }))} placeholder="Ex.: coroa sobre implante do elemento 36, cor A2" className={`${campoClasse} resize-none`} />
+            <textarea id="ped-servico" disabled={vinculado && !pedidoEdicao} rows={3} value={form.servico} onChange={(e) => setForm((f) => ({ ...f, servico: e.target.value }))} placeholder="Ex.: coroa sobre implante do elemento 36, cor A2" className={`${campoClasse} resize-none`} />
           </div>
         </Grupo>
 
@@ -84,7 +93,7 @@ export function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: 
           <div className={`grid grid-cols-1 gap-3 ${pedidoEdicao ? 'sm:grid-cols-2' : ''}`}>
             <div>
               <label htmlFor="ped-lab" className={rotuloClasse}>Laboratório *</label>
-              <select id="ped-lab" value={form.labId} onChange={(e) => setForm((f) => ({ ...f, labId: e.target.value }))} className={campoClasse}>
+              <select id="ped-lab" disabled={Boolean(pedidoEdicao?.ordemId)} value={form.labId} onChange={(e) => setForm((f) => ({ ...f, labId: e.target.value }))} className={campoClasse}>
                 {labs.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.cidade ? ` — ${l.cidade}` : ''}</option>)}
               </select>
               {labs.length === 0 && <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">Cadastre um laboratório antes de criar pedidos.</p>}
@@ -101,11 +110,11 @@ export function ModalPedido({ labs, pedidoEdicao, onClose, onSave, isPending }: 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="ped-envio" className={rotuloClasse}>Data de envio</label>
-              <input id="ped-envio" type="date" value={form.dataEnvio} onChange={(e) => setForm((f) => ({ ...f, dataEnvio: e.target.value, prazo: !prazoManual && e.target.value ? prazoSugerido(e.target.value) : f.prazo }))} className={campoClasse} />
+              <input id="ped-envio" disabled={vinculado} type="date" value={form.dataEnvio} onChange={(e) => setForm((f) => ({ ...f, dataEnvio: e.target.value, prazo: !prazoManual && e.target.value ? prazoSugerido(e.target.value) : f.prazo }))} className={campoClasse} />
             </div>
             <div>
-              <label htmlFor="ped-prazo" className={rotuloClasse}>Prazo de entrega</label>
-              <input id="ped-prazo" type="date" value={form.prazo} onChange={(e) => { setPrazoManual(true); setForm((f) => ({ ...f, prazo: e.target.value })) }} className={campoClasse} />
+              <label htmlFor="ped-prazo" className={rotuloClasse}>Prazo de retorno</label>
+              <input id="ped-prazo" disabled={vinculado} type="date" value={form.prazo} onChange={(e) => { setPrazoManual(true); setForm((f) => ({ ...f, prazo: e.target.value })) }} className={campoClasse} />
               {!pedidoEdicao && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Sugerido: {PRAZO_PADRAO_DIAS} dias após o envio</p>}
             </div>
           </div>

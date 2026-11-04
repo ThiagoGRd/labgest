@@ -33,6 +33,7 @@ export interface MovimentacaoEstoque {
 }
 
 export interface GestaoEstoqueData {
+  historico?: { mes: string; pagina: number; total: number; tamanhoPagina: number }
   itens: ItemEstoque[]
   movimentacoes: MovimentacaoEstoque[]
   emitidoEm: string

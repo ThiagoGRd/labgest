@@ -10,6 +10,7 @@ import { getFluxoProtese, type TipoProteseId } from '@/lib/workflow-config'
 import { timestampValido } from '@/lib/producao-utils'
 import { rotuloLocalizacaoTrabalho } from '@/lib/recepcao-utils'
 import { toast } from 'sonner'
+import { getLabsExternos, type LabExterno } from '@/actions/labs-externos'
 
 export interface OrdemFluxoProtese {
   id: number
@@ -23,6 +24,7 @@ export interface OrdemFluxoProtese {
   prazoEtapaAtual?: string | null
   fornecedorEstrutura?: string | null
   dataEnvioFornecedor?: string | null
+  dataRecebimentoFornecedor?: string | null
   prazoFornecedor?: string | null
   cicloDentistaDeci?: string | null
   cicloStatus?: string | null
@@ -47,6 +49,9 @@ function formatarPrazo(data?: string | null) {
 export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }: FluxoProteseBoardProps) {
   const router = useRouter()
   const fluxo = getFluxoProtese(tipo)
+  const [labs, setLabs] = useState<LabExterno[]>([])
+  const [labIds, setLabIds] = useState<Record<number, number | undefined>>({})
+  const [labsError, setLabsError] = useState('')
   const [fornecedores, setFornecedores] = useState<Record<number, string>>({})
   const [justificativas, setJustificativas] = useState<Record<number, string>>({})
   const [processando, setProcessando] = useState<number | null>(null)
@@ -57,6 +62,12 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
   useEffect(() => {
     const intervalo = window.setInterval(() => setAgora(Date.now()), 60_000)
     return () => window.clearInterval(intervalo)
+  }, [])
+
+  useEffect(() => {
+    let ativo = true
+    getLabsExternos().then(rows => { if (ativo) setLabs(rows) }).catch(() => { if (ativo) setLabsError('Não foi possível carregar os laboratórios. Atualize antes de vincular uma OS.') })
+    return () => { ativo = false }
   }, [])
 
   const executar = async (ordemId: number, acao: () => Promise<{ success: boolean; error?: string }>) => {
@@ -145,20 +156,26 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     {!pausada && passo.responsavel === 'clinica' ? <div className="mt-4 space-y-2 rounded-lg bg-sky-50 p-2 text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300"><p className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 shrink-0" />{rotuloLocalizacaoTrabalho(ordem.situacaoLogistica, ordem.dentistaResponsavel, ordem.localizacaoAtual)}</p><p className="text-center">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p></div> : null}
 
                     {!pausada && passo.responsavel === 'laboratorio' && (
-                      <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id))}>
+                      <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id, ordem.passoFluxoAtual || ''))}>
                         <CheckCircle2 className="h-4 w-4" /> {processando === ordem.id ? 'Atualizando...' : 'Concluir etapa'}
                       </Button>
                     )}
 
-                    {!pausada && passo.responsavel === 'fornecedor' && !ordem.dataEnvioFornecedor && (
+                    {!pausada && passo.responsavel === 'fornecedor' && (!ordem.dataEnvioFornecedor || ordem.dataRecebimentoFornecedor) && (
                       <div className="mt-4 space-y-2">
+                        <label htmlFor={`lab-${ordem.id}`} className="text-xs font-semibold">Laboratório vinculado (opcional)</label>
+                        <select id={`lab-${ordem.id}`} value={labIds[ordem.id] || ''} onChange={event => setLabIds(prev => ({ ...prev, [ordem.id]: event.target.value ? Number(event.target.value) : undefined }))} className="h-10 w-full rounded-lg border bg-background px-3 text-sm">
+                          <option value="">Registro avulso, sem vínculo com Labs Externos</option>
+                          {labs.map(lab => <option key={lab.id} value={lab.id}>{lab.nome} — #{lab.id}</option>)}
+                        </select>
+                        {labsError && <p role="alert" className="text-xs text-red-600">{labsError}</p>}
                         <label htmlFor={`fornecedor-${ordem.id}`} className="text-xs font-semibold text-slate-600 dark:text-slate-300">Nome do fornecedor</label>
-                        <input id={`fornecedor-${ordem.id}`} value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Ex.: Estruturas Silva" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
-                        <Button type="button" className="w-full bg-orange-600 text-white hover:bg-orange-700" disabled={processando === ordem.id || !fornecedores[ordem.id]?.trim()} onClick={() => executar(ordem.id, () => registrarEnvioFornecedor(ordem.id, fornecedores[ordem.id] || ''))}>Registrar envio — 15 dias</Button>
+                        <input id={`fornecedor-${ordem.id}`} disabled={Boolean(labIds[ordem.id])} value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Ex.: Estruturas Silva" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
+                        <Button type="button" className="w-full bg-orange-600 text-white hover:bg-orange-700" disabled={processando === ordem.id || (!labIds[ordem.id] && !fornecedores[ordem.id]?.trim())} onClick={() => executar(ordem.id, () => registrarEnvioFornecedor(ordem.id, fornecedores[ordem.id] || '', labIds[ordem.id]))}>Registrar envio — 15 dias</Button>
                       </div>
                     )}
 
-                    {!pausada && passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && (
+                    {!pausada && passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && !ordem.dataRecebimentoFornecedor && (
                       <div className="mt-4 space-y-2">
                         <p className="text-xs text-slate-600 dark:text-slate-300">Fornecedor: <strong>{ordem.fornecedorEstrutura}</strong></p>
                         {atrasado && <><label htmlFor={`justificativa-${ordem.id}`} className="text-xs font-semibold text-red-700 dark:text-red-300">Justificativa do atraso</label><textarea id={`justificativa-${ordem.id}`} value={justificativas[ordem.id] || ''} onChange={(event) => setJustificativas((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="O que o fornecedor informou?" rows={2} className="w-full resize-none rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/20" /></>}

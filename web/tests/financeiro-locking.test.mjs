@@ -138,6 +138,7 @@ for (const tipo of ['receber', 'pagar']) {
 test('automatic generation serializes order checks and bulk recovery cannot insert', async () => {
   let queue = Promise.resolve()
   const invoices = []
+  let clinicState = { status: 'Finalizado', passoFluxoAtual: 'entrega_clinica' }
   const prisma = { async $transaction(fn) {
     let release
     let locked = false
@@ -154,8 +155,8 @@ test('automatic generation serializes order checks and bulk recovery cannot inse
       cliente: { findFirst: async () => ({ id: 1 }) },
       ordem: {
         async findUnique() { assert.ok(locked); return { id: 1, valorFinal: 100, dataFinalizacao: new Date('2026-11-04'), servicoNome: 'Synthetic', nomePaciente: 'Synthetic' } },
-        async findFirst() { assert.ok(locked); return { id: 1, clienteId: 1, valorFinal: 100, contasReceber: [...invoices], historicoEtapas: [] } },
-        async update() { assert.ok(locked); return {} },
+        async findFirst() { assert.ok(locked); return { ...clinicState, id: 1, clienteId: 1, valorFinal: 100, contasReceber: [...invoices], historicoEtapas: [] } },
+        async update({ data }) { assert.ok(locked); Object.assign(clinicState, data); return {} },
       },
       contaReceber: {
         async findFirst() { assert.ok(locked); return invoices[0] },
@@ -176,20 +177,26 @@ test('automatic generation serializes order checks and bulk recovery cannot inse
   assert.equal(invoices.length, 1)
   assert.equal((await exports.sincronizarFinanceiroRetroativo()).success, false)
   assert.equal(invoices.length, 1)
-  const clinic = {}
+  const transition = {}
+runInNewContext(ts.transpileModule(readFileSync(new URL('../../packages/shared/src/order-transition.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: transition })
+const clinic = {}
   const clinicCode = ts.transpileModule(readFileSync(new URL('../../portal/src/actions/workflow-protese.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   runInNewContext(clinicCode, { exports: clinic, Date, require(name) {
     if (name === '@labgest/database') return { prisma }
     if (name === 'next/cache') return { revalidatePath() {} }
-    if (name === '@/lib/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { email: 'clinic@example.test' } } }) } }) }
+    if (name === '@labgest/shared') return transition
+  if (name === '@/lib/cliente-identity') return { resolveClienteIdentity: async () => ({ ok: true, cliente: { id: 1 } }) }
+  if (name === '@/lib/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { email: 'clinic@example.test', email_confirmed_at: '2026-11-01T00:00:00Z' } } }) } }) }
     if (name === '@/lib/workflow-config') return { isTipoProtese: () => true, getPassoProtese: () => ({ responsavel: 'clinica', entregaFinal: true, nome: 'Synthetic delivery' }) }
     throw new Error(`Unexpected clinic import ${name}`)
   } })
   for (const first of ['web', 'clinic']) {
     invoices.length = 0
+    clinicState = { status: 'Finalizado', passoFluxoAtual: 'entrega_clinica' }
     const web = () => exports.gerarCobrancaAutomatica(1)
-    const portal = () => clinic.concluirEtapaClinica(1)
-    await Promise.all(first === 'web' ? [web(), portal()] : [portal(), web()])
+    const portal = () => clinic.concluirEtapaClinica(1, 'entrega_clinica')
+    const outcomes = await Promise.all(first === 'web' ? [web(), portal()] : [portal(), web()])
+    assert.equal(outcomes[first === 'web' ? 1 : 0].success, true, 'authenticated clinic delivery must succeed')
     assert.equal(invoices.length, 1, `${first} first must not produce duplicate cross-app invoices`)
   }
 

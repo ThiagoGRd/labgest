@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { SidebarProvider, useSidebar } from '@/components/providers/sidebar-provider'
 import { cn } from '@/lib/utils'
 import { Menu } from 'lucide-react'
+import { RealtimeOrders } from '@/components/providers/realtime-orders'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -40,6 +41,7 @@ function DashboardContent({ children, user }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen mesh-bg relative overflow-hidden">
+      <RealtimeOrders />
       <Sidebar user={usuarioExibido} />
       
       {/* Mobile Top Header */}

@@ -12,14 +12,17 @@ export default function CadastroPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
 
   const handleSubmit = async (formData: FormData) => {
     setLoading(true)
     setError('')
+    setMessage('')
 
     try {
       const result = await cadastro(formData)
       if (result?.error) setError(result.error)
+      if (result?.message) setMessage(result.message)
     } catch (error) {
       unstable_rethrow(error)
       setError('Não foi possível concluir o cadastro. Tente novamente.')
@@ -40,6 +43,7 @@ export default function CadastroPage() {
         </div>
 
         <form action={handleSubmit} className="space-y-4">
+          {message && <div role="status" className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">{message} <Link href="/login" className="underline">Fazer login</Link></div>}
           {error && (
             <div role="alert" className="p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>

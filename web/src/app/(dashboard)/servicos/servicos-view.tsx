@@ -36,7 +36,8 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
 
-function margemColor(margem: number) {
+function margemColor(margem: number | null) {
+  if (margem === null) return 'text-slate-500'
   if (margem >= 50) return 'text-emerald-600 dark:text-emerald-400'
   if (margem >= 30) return 'text-amber-600 dark:text-amber-400'
   return 'text-red-600 dark:text-red-400'
@@ -64,7 +65,8 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
   const maisSolicitado = [...ativos].sort((a, b) => b.pedidos30Dias - a.pedidos30Dias)[0]
   const temposReais = ativos.flatMap((servico) => servico.tempoMedioReal === null ? [] : [servico.tempoMedioReal])
   const tempoMedio = temposReais.length > 0 ? Math.round(temposReais.reduce((total, dias) => total + dias, 0) / temposReais.length) : null
-  const margemMedia = ativos.length > 0 ? Math.round(ativos.reduce((total, servico) => total + servico.margemLucro, 0) / ativos.length) : 0
+  const margens = ativos.flatMap(servico => servico.margemLucro === null ? [] : [servico.margemLucro])
+  const margemMedia = margens.length > 0 ? Math.round(margens.reduce((total, margem) => total + margem, 0) / margens.length) : null
 
   const alterarStatus = (servico: Servico, ativo: boolean) => {
     startTransition(async () => {
@@ -111,7 +113,7 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
           <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-indigo-100 p-2.5 dark:bg-indigo-500/10"><Package className="h-5 w-5 text-indigo-600 dark:text-indigo-400" /></div><div><p className="text-xs text-slate-500">Serviços ativos</p><p className="text-xl font-bold text-slate-900 dark:text-white">{ativos.length}</p></div></CardContent></Card>
           <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-emerald-100 p-2.5 dark:bg-emerald-500/10"><TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div><div className="min-w-0"><p className="text-xs text-slate-500">Mais solicitado · 30 dias</p><p className="truncate text-sm font-bold text-slate-900 dark:text-white">{maisSolicitado?.pedidos30Dias ? maisSolicitado.nome : 'Sem pedidos'}</p></div></CardContent></Card>
           <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-amber-100 p-2.5 dark:bg-amber-500/10"><Clock3 className="h-5 w-5 text-amber-600 dark:text-amber-400" /></div><div><p className="text-xs text-slate-500">Prazo real médio</p><p className="text-xl font-bold text-slate-900 dark:text-white">{tempoMedio === null ? '—' : `${tempoMedio} dias`}</p></div></CardContent></Card>
-          <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-violet-100 p-2.5 dark:bg-violet-500/10"><WalletCards className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div><div><p className="text-xs text-slate-500">Margem estimada</p><p className={`text-xl font-bold ${margemColor(margemMedia)}`}>{margemMedia}%</p></div></CardContent></Card>
+          <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-xl bg-violet-100 p-2.5 dark:bg-violet-500/10"><WalletCards className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div><div><p className="text-xs text-slate-500">Margem estimada</p><p className={`text-xl font-bold ${margemColor(margemMedia)}`}>{margemMedia === null ? 'Indisponível' : `${margemMedia}%`}</p></div></CardContent></Card>
         </div>
 
         <Card>
@@ -150,8 +152,8 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
                       <tr key={servico.id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/50">
                         <td className="px-5 py-4"><p className="font-bold text-slate-900 dark:text-white">{servico.nome}</p><p className="mt-0.5 text-xs text-slate-500">{servico.categoria} · {servico.materiais.length} materiais</p></td>
                         <td className="max-w-52 px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{servico.tipoWorkflow ? FLUXOS_PROTESE[servico.tipoWorkflow].nomeCurto : <span className="text-amber-600">Fluxo geral</span>}</td>
-                        <td className="px-4 py-4 text-right"><p className="font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p><p className="text-xs text-slate-500">{formatCurrency(servico.custoMateriais)}</p></td>
-                        <td className={`px-4 py-4 text-center font-bold ${margemColor(servico.margemLucro)}`}>{servico.margemLucro}%</td>
+                        <td className="px-4 py-4 text-right"><p className="font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p><p className="text-xs text-slate-500">{servico.custoMateriais === null ? 'Custo indisponível' : formatCurrency(servico.custoMateriais)}</p></td>
+                        <td className={`px-4 py-4 text-center font-bold ${margemColor(servico.margemLucro)}`}>{servico.margemLucro === null ? 'Indisponível' : `${servico.margemLucro}%`}</td>
                         <td className="px-4 py-4 text-center text-sm text-slate-600 dark:text-slate-300"><p>{servico.tempoProducao} dias</p>{servico.tempoMedioReal !== null && <p className="text-xs text-slate-500">real: {servico.tempoMedioReal}d</p>}</td>
                         <td className="px-4 py-4 text-center"><p className="font-bold text-slate-900 dark:text-white">{servico.totalPedidos}</p><p className="text-xs text-slate-500">{servico.pedidos30Dias} em 30d</p></td>
                         <td className="px-4 py-4 text-center"><Badge variant={servico.ativo ? 'success' : 'secondary'}>{servico.ativo ? 'Ativo' : 'Arquivado'}</Badge></td>
@@ -169,7 +171,7 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
                   <CardContent className="space-y-4 p-4">
                     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge variant={servico.ativo ? 'success' : 'secondary'}>{servico.ativo ? 'Ativo' : 'Arquivado'}</Badge><h3 className="mt-2 font-bold text-slate-900 dark:text-white">{servico.nome}</h3><p className="text-xs text-slate-500">{servico.categoria}</p></div>{podeGerenciar && <ServicoMenu servico={servico} onEdit={() => setModalServico(servico)} onArchive={() => setServicoParaArquivar(servico)} onActivate={() => alterarStatus(servico, true)} disabled={isPending} />}</div>
                     <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-zinc-800/50"><p className="text-xs text-slate-500">Fluxo</p><p className="font-medium text-slate-800 dark:text-slate-200">{servico.tipoWorkflow ? FLUXOS_PROTESE[servico.tipoWorkflow].nomeCurto : 'Fluxo geral'}</p></div>
-                    <div className="grid grid-cols-3 gap-2 text-center"><div><p className="text-xs text-slate-500">Preço</p><p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p></div><div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${margemColor(servico.margemLucro)}`}>{servico.margemLucro}%</p></div><div><p className="text-xs text-slate-500">Prazo</p><p className="text-sm font-bold text-slate-900 dark:text-white">{servico.tempoProducao}d</p></div></div>
+                    <div className="grid grid-cols-3 gap-2 text-center"><div><p className="text-xs text-slate-500">Preço</p><p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p></div><div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${margemColor(servico.margemLucro)}`}>{servico.margemLucro === null ? 'Indisponível' : `${servico.margemLucro}%`}</p></div><div><p className="text-xs text-slate-500">Prazo</p><p className="text-sm font-bold text-slate-900 dark:text-white">{servico.tempoProducao}d</p></div></div>
                     {podeGerenciar && <Button type="button" variant="outline" className="w-full" onClick={() => setModalServico(servico)}><Edit3 className="h-4 w-4" /> Editar serviço</Button>}
                   </CardContent>
                 </Card>
