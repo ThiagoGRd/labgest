@@ -88,3 +88,19 @@ test('ignora contas canceladas ao verificar se já existe cobrança', async () =
     },
   })
 })
+
+for (const [instant, dia] of [
+  ['2027-01-01T02:59:59.999Z', '2026-12-31'],
+  ['2027-01-01T03:00:00.000Z', '2027-01-01'],
+]) test(`competência e vencimento usam dia civil do laboratório no evento ${instant}`, async () => {
+  const contexto = criarTransacao()
+  const evento = new Date(instant)
+  await garantirEfeitosFinalizacao(contexto.tx, 42, evento)
+  const conta = contexto.contasCriadas[0] as { data: { dataCompetencia: Date; dataVencimento: Date; observacoes: string } }
+  assert.equal(conta.data.dataCompetencia.toISOString(), `${dia}T00:00:00.000Z`)
+  assert.equal(conta.data.dataVencimento.toISOString(), `${dia}T00:00:00.000Z`)
+  assert.ok(conta.data.observacoes.endsWith(dia.split('-').reverse().join('/')))
+  assert.deepEqual(contexto.atualizacoesOrdem.at(-1), {
+    where: { id: 42 }, data: { cobrancaGeradaEm: evento },
+  })
+})

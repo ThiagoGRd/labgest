@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/lib/auth-utils'
-import { parseDateLocal } from '@/lib/date-utils'
+import { dataCivilDoLaboratorio } from '@/lib/data-civil'
 import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 import { resumirDespesasMensais } from '@/lib/regra-despesa-mensal'
 import { contasNoPeriodo, filtroReceberPeriodo, limitesMesReceber, mesDataFinanceira } from '@/lib/periodo-receber'
@@ -49,29 +49,35 @@ function revalidarFinanceiro() {
   revalidatePath('/relatorios')
 }
 
-function inicioDoDia(data = new Date()) {
-  return new Date(data.getFullYear(), data.getMonth(), data.getDate())
+// Explicit finance inputs describe civil dates, never instants in the server timezone.
+function parseDataCivilFinanceira(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Informe uma data válida.')
+  const data = new Date(`${value}T00:00:00.000Z`)
+  if (!Number.isFinite(data.getTime()) || data.toISOString().slice(0, 10) !== value) {
+    throw new Error('Informe uma data válida.')
+  }
+  return data
 }
 
 function adicionarMesesMantendoDia(data: Date, quantidade: number) {
-  const ano = data.getFullYear()
-  const mes = data.getMonth() + quantidade
-  const ultimoDia = new Date(ano, mes + 1, 0).getDate()
-  return new Date(ano, mes, Math.min(data.getDate(), ultimoDia))
+  const ano = data.getUTCFullYear()
+  const mes = data.getUTCMonth() + quantidade
+  const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(ano, mes, Math.min(data.getUTCDate(), ultimoDia)))
 }
 
 function statusReceber(status: string | null, vencimento: Date, recebido: number, total: number) {
   if (status === 'Cancelado') return 'Cancelado'
   if (recebido >= total) return 'Recebido'
-  if (recebido > 0) return vencimento < inicioDoDia() ? 'Parcial atrasado' : 'Parcial'
-  return vencimento < inicioDoDia() ? 'Vencido' : 'Pendente'
+  if (recebido > 0) return vencimento < dataCivilDoLaboratorio() ? 'Parcial atrasado' : 'Parcial'
+  return vencimento < dataCivilDoLaboratorio() ? 'Vencido' : 'Pendente'
 }
 
 function statusPagar(status: string | null, vencimento: Date, pago: number, total: number) {
   if (status === 'Cancelado') return 'Cancelado'
   if (pago >= total) return 'Pago'
-  if (pago > 0) return vencimento < inicioDoDia() ? 'Parcial atrasado' : 'Parcial'
-  return vencimento < inicioDoDia() ? 'Vencido' : 'Pendente'
+  if (pago > 0) return vencimento < dataCivilDoLaboratorio() ? 'Parcial atrasado' : 'Parcial'
+  return vencimento < dataCivilDoLaboratorio() ? 'Vencido' : 'Pendente'
 }
 
 // Bulk backfill cannot infer historical competence/due dates safely. Recovery
@@ -91,7 +97,7 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
       if (await tx.contaReceber.findFirst({ where: { ordemId } })) {
         return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
       }
-      const base = ordem.dataFinalizacao ?? new Date()
+      const base = ordem.dataFinalizacao ?? dataCivilDoLaboratorio()
       await tx.contaReceber.create({
         data: {
           ordemId,
@@ -100,7 +106,7 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
           clienteNome: ordem.clienteNome,
           valor: ordem.valorFinal,
           dataCompetencia: base,
-          dataVencimento: new Date(base.getFullYear(), base.getMonth(), base.getDate()),
+          dataVencimento: base,
           status: 'Pendente',
           usuarioId: usuario.id,
           observacoes: `Gerado automaticamente — Ordem #${ordem.id}`,
@@ -151,7 +157,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
     prisma.contaReceber.findMany({ select: { dataVencimento: true, dataCompetencia: true } }),
     prisma.contaPagar.findMany({ select: { dataVencimento: true } }),
     prisma.contaReceber.findMany({
-      where: { dataVencimento: { lt: inicioDoDia() }, status: { notIn: ['Recebido', 'Cancelado'] } },
+      where: { dataVencimento: { lt: dataCivilDoLaboratorio() }, status: { notIn: ['Recebido', 'Cancelado'] } },
       select: { valor: true, valorRecebido: true },
     }),
   ])
@@ -274,8 +280,8 @@ export async function createConta(input: z.input<typeof contaSchema>) {
   const usuario = await requireUser()
   try {
     const data = contaSchema.parse(input)
-    const vencimento = parseDateLocal(data.vencimento)
-    const competencia = data.competencia ? parseDateLocal(data.competencia) : vencimento
+    const vencimento = parseDataCivilFinanceira(data.vencimento)
+    const competencia = data.competencia ? parseDataCivilFinanceira(data.competencia) : vencimento
 
     if (data.tipo === 'receber') {
       if (!data.clienteId) return { success: false, error: 'Selecione um dentista/cliente.' }
@@ -329,7 +335,7 @@ export async function editarConta(id: number, tipo: 'receber' | 'pagar', input: 
   await requireUser()
   try {
     if (!input.descricao.trim() || input.valor <= 0) return { success: false, error: 'Revise a descrição e o valor.' }
-    const dataVencimento = parseDateLocal(input.vencimento)
+    const dataVencimento = parseDataCivilFinanceira(input.vencimento)
     const resultado = await prisma.$transaction(async (tx) => {
       await bloquearConta(tx, id, tipo)
       if (tipo === 'receber') {
@@ -374,13 +380,13 @@ export async function liquidarConta(input: z.input<typeof baixaSchema>) {
         const novoTotal = Number(conta.valorRecebido) + data.valor
         if (novoTotal > Number(conta.valor) + 0.001) throw new Error('O valor informado ultrapassa o saldo da conta.')
         await tx.movimentacaoFinanceira.create({ data: {
-          tipo: 'Entrada', valor: data.valor, dataMovimentacao: parseDateLocal(data.data),
+          tipo: 'Entrada', valor: data.valor, dataMovimentacao: parseDataCivilFinanceira(data.data),
           formaPagamento: data.formaPagamento, observacoes: data.observacoes,
           contaReceberId: data.id, contaFinanceiraId: contaFinanceira, usuarioId: usuario.id,
         } })
         await tx.contaReceber.update({ where: { id: data.id }, data: {
           valorRecebido: novoTotal, status: novoTotal >= Number(conta.valor) ? 'Recebido' : 'Parcial',
-          dataRecebimento: novoTotal >= Number(conta.valor) ? parseDateLocal(data.data) : null,
+          dataRecebimento: novoTotal >= Number(conta.valor) ? parseDataCivilFinanceira(data.data) : null,
           formaRecebimento: data.formaPagamento,
         } })
       } else {
@@ -389,13 +395,13 @@ export async function liquidarConta(input: z.input<typeof baixaSchema>) {
         const novoTotal = Number(conta.valorPago) + data.valor
         if (novoTotal > Number(conta.valor) + 0.001) throw new Error('O valor informado ultrapassa o saldo da conta.')
         await tx.movimentacaoFinanceira.create({ data: {
-          tipo: 'Saida', valor: data.valor, dataMovimentacao: parseDateLocal(data.data),
+          tipo: 'Saida', valor: data.valor, dataMovimentacao: parseDataCivilFinanceira(data.data),
           formaPagamento: data.formaPagamento, observacoes: data.observacoes,
           contaPagarId: data.id, contaFinanceiraId: contaFinanceira, usuarioId: usuario.id,
         } })
         await tx.contaPagar.update({ where: { id: data.id }, data: {
           valorPago: novoTotal, status: novoTotal >= Number(conta.valor) ? 'Pago' : 'Parcial',
-          dataPagamento: novoTotal >= Number(conta.valor) ? parseDateLocal(data.data) : null,
+          dataPagamento: novoTotal >= Number(conta.valor) ? parseDataCivilFinanceira(data.data) : null,
           formaPagamento: data.formaPagamento,
         } })
       }
@@ -490,5 +496,5 @@ export async function baixarConta(id: number, tipo: 'receber' | 'pagar') {
   const restante = tipo === 'receber'
     ? Number(conta.valor) - Number((conta as Prisma.ContaReceberGetPayload<object>).valorRecebido)
     : Number(conta.valor) - Number((conta as Prisma.ContaPagarGetPayload<object>).valorPago)
-  return liquidarConta({ id, tipo, valor: restante, data: new Date().toISOString().slice(0, 10), formaPagamento: 'Não informado' })
+  return liquidarConta({ id, tipo, valor: restante, data: dataCivilDoLaboratorio().toISOString().slice(0, 10), formaPagamento: 'Não informado' })
 }

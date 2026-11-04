@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { resolveClienteIdentity } from '@/lib/cliente-identity'
 import { createClient } from '@/lib/supabase/server'
@@ -254,6 +254,7 @@ export async function aprovarProva(pedidoId: number, checklist: Prisma.InputJson
       await tx.ordem.update({
         where: { id: pedidoId },
         data: {
+          updatedAt: proximaRevisaoOrdem(pedido.updatedAt),
           checklistEstetico: checklist,
           // Ao aprovar prova, o dentista está "devolvendo" para o laboratório continuar
           // O status ideal seria "Retorno de Prova" ou "Em Produção" novamente
@@ -321,6 +322,7 @@ export async function getPedidoById(id: number) {
 
     return {
       id: pedido.id,
+      updatedAt: pedido.updatedAt?.toISOString() || '',
       paciente: pedido.nomePaciente,
       servico: pedido.servicoNome || pedido.servico?.nome || '',
       status: pedido.status || 'Aguardando',

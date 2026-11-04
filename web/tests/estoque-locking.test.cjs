@@ -66,6 +66,7 @@ function fixture(materials = [[{ id: 1, quantidade: 20 }], [{ id: 1, quantidade:
     const exports = {}
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, Date, console: { error() {} }, require(name) {
       if (name === '@labgest/database') return { prisma }
+      if (name === '@labgest/shared') return load(path.join(__dirname, '../../packages/shared/src/date-civil.ts'))
       if (name === 'next/cache') return { revalidatePath() {} }
       if (name === '@/lib/auth-utils') return { requireUser: async () => ({ id: 1, nome: 'Synthetic tester' }) }
       if (name.startsWith('@/')) return load(path.join(sourceRoot, `${name.slice(2)}.ts`))

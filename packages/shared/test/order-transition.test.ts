@@ -17,3 +17,11 @@ test('active states permit transitions', () => {
     assert.equal(erroTransicaoOrdem(status), null)
   }
 })
+
+test('revision advances even if wall clock repeats or goes backwards', async () => {
+  const helper = await import('../src/order-transition')
+  const previous = new Date('2026-11-04T12:00:00.000Z')
+  assert.equal(typeof helper.proximaRevisaoOrdem, 'function')
+  assert.equal(helper.proximaRevisaoOrdem(previous, previous).getTime(), previous.getTime() + 1)
+  assert.equal(helper.proximaRevisaoOrdem(previous, new Date(0)).getTime(), previous.getTime() + 1)
+})

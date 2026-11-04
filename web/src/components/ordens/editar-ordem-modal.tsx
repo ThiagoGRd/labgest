@@ -11,6 +11,7 @@ import { ETAPA_IDS, isTipoProtese, etapaLabel, podeSelecionarEtapaNaEdicao } fro
 import { formatarCpf } from '@/lib/cpf'
 
 interface Ordem {
+  updatedAt: string
   id: number
   paciente: string
   cpfPaciente?: string
@@ -93,6 +94,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
 
     try {
       const result = await updateOrdem(ordem.id, {
+        revisaoEsperada: ordem.updatedAt,
         statusEsperado: ordem.status,
         etapaEsperada: ordem.etapaAtual,
         paciente: formData.paciente,

@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { dataCivilDoLaboratorio, erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
@@ -286,6 +286,7 @@ export async function updateOrdem(id: number, data: {
   material: string
   observacoes: string
   motivoStatus?: string
+  revisaoEsperada: string
   statusEsperado: string
   etapaEsperada: string
 }) {
@@ -311,14 +312,16 @@ export async function updateOrdem(id: number, data: {
     const resultado = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${id} FOR UPDATE`
 
-      const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true, tipoWorkflow: true, passoFluxoAtual: true } })
+      const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true, tipoWorkflow: true, passoFluxoAtual: true, updatedAt: true } })
       if (!ordemAtual) return { success: false as const, error: 'Ordem não encontrada' }
       if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
         return { success: false as const, error: 'Ordens encerradas não podem ser alteradas' }
       }
 
+      if (!data.revisaoEsperada || ordemAtual.updatedAt?.toISOString() !== data.revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de salvar.' }
       if (ordemAtual.status !== data.statusEsperado || normalizarEtapa(ordemAtual.etapaAtual || '') !== normalizarEtapa(data.etapaEsperada || '')) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de salvar.' }
       if (isTipoProtese(ordemAtual.tipoWorkflow) && normalizarEtapa(ordemAtual.etapaAtual || '') !== etapaCanonica) return { success: false as const, error: 'Use o fluxo específico da prótese para mudar a etapa.' }
+      if (normalizarEtapa(ordemAtual.etapaAtual || '') !== etapaCanonica && await tx.cicloProducao.findFirst({ where: { ordemId: id, status: { in: ['no_lab', 'em_prova'] } }, select: { id: true } })) return { success: false as const, error: 'Conclua o ciclo ativo pelo fluxo de produção antes de mudar a etapa.' }
       const statusEfetivo = data.status === 'Pausado' ? 'Pausado' : isTipoProtese(ordemAtual.tipoWorkflow) ? statusParaPassoProtese(getPassoProtese(ordemAtual.tipoWorkflow, ordemAtual.passoFluxoAtual)) : novoStatus
       const agora = new Date()
       const historico = (ordemAtual.historicoEtapas as Prisma.InputJsonObject[]) || []
@@ -331,6 +334,7 @@ export async function updateOrdem(id: number, data: {
       await tx.ordem.update({
         where: { id },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordemAtual.updatedAt),
           nomePaciente: data.paciente,
           cpfPaciente,
           dataEntrega,
@@ -340,7 +344,7 @@ export async function updateOrdem(id: number, data: {
           corDentes: data.corDentes,
           material: data.material,
           observacoes: data.observacoes,
-          dataFinalizacao: novoStatus === 'Finalizado' ? agora : null,
+          dataFinalizacao: novoStatus === 'Finalizado' ? dataCivilDoLaboratorio(agora) : null,
           motivoPausa: novoStatus === 'Pausado' ? data.motivoStatus?.trim() : null,
           pausadoEm: novoStatus === 'Pausado' ? agora : null,
           pausadoPor: novoStatus === 'Pausado' ? usuario.email : null,
@@ -513,7 +517,7 @@ export async function deleteOrdem(id: number) {
   }
 }
 
-export async function cancelarOrdem(id: number, motivo: string) {
+export async function cancelarOrdem(id: number, motivo: string, revisaoEsperada: string) {
   const usuario = await requireUser()
   if (!motivo.trim()) return { success: false, error: 'Informe o motivo do cancelamento' }
 
@@ -525,6 +529,7 @@ export async function cancelarOrdem(id: number, motivo: string) {
       return { success: false, error: 'Esta ordem não pode mais ser cancelada' }
     }
 
+    if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false, error: 'A ordem foi alterada. Atualize antes de cancelar.' }
     const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
     historico.push({
       etapa: ordem.etapaAtual || 'recebimento',
@@ -537,6 +542,7 @@ export async function cancelarOrdem(id: number, motivo: string) {
     await tx.ordem.update({
       where: { id },
       data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         status: 'Cancelado',
         motivoCancelamento: motivo.trim(),
         canceladoEm: new Date(),
@@ -577,7 +583,7 @@ export async function getDadosNovaOrdem() {
 // Workflow Actions — Avançar / Devolver etapas
 // ============================================================
 
-export async function avancarEtapa(ordemId: number, observacao?: string, etapaEsperada?: string) {
+export async function avancarEtapa(ordemId: number, observacao?: string, etapaEsperada?: string, revisaoEsperada?: string, checklistProva?: Partial<ChecklistEstetico>) {
   await requireUser()
   try {
     console.log('[avancarEtapa] Iniciando para ordem ID:', ordemId)
@@ -594,6 +600,8 @@ export async function avancarEtapa(ordemId: number, observacao?: string, etapaEs
       if (erroEstado) return { success: false as const, error: erroEstado }
       if (isTipoProtese(ordem.tipoWorkflow)) return { success: false as const, error: 'Use o fluxo específico da prótese.' }
       if (!etapaEsperada || normalizarEtapa(ordem.etapaAtual || '') !== normalizarEtapa(etapaEsperada)) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+      if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de continuar.' }
+      if (await tx.cicloProducao.findFirst({ where: { ordemId, status: { in: ['no_lab', 'em_prova'] } }, select: { id: true } })) return { success: false as const, error: 'Use o ciclo ativo da ordem para continuar o fluxo.' }
       const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
       // Normaliza etapa atual para ID canônico (lida com dados legados)
       const etapaAtualCanonica = normalizarEtapa(ordem.etapaAtual || 'recebimento')
@@ -601,10 +609,13 @@ export async function avancarEtapa(ordemId: number, observacao?: string, etapaEs
       const proxima = getNextEtapa(tipoWorkflow, etapaAtualCanonica)
       if (!proxima) return { success: false as const, error: 'Já está na última etapa' }
 
-      // Se é etapa de prova, verificar checklist
+      // Validate the proof draft under the same order lock and revision as its transition.
+      const checklistValidado = {
+        ...((ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}),
+        ...checklistProva,
+      }
       if (isEtapaProva(tipoWorkflow, etapaAtualCanonica)) {
-        const checklist = (ordem.checklistEstetico as Partial<ChecklistEstetico>) || {}
-        if (!canAdvance(tipoWorkflow, etapaAtualCanonica, checklist)) {
+        if (!canAdvance(tipoWorkflow, etapaAtualCanonica, checklistValidado)) {
           return { success: false as const, error: 'Complete o checklist de registro estético antes de avançar' }
         }
       }
@@ -617,6 +628,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string, etapaEs
         para: proxima,
         data: agora.toISOString(),
         observacao: observacao || undefined,
+        ...(isEtapaProva(tipoWorkflow, etapaAtualCanonica) ? { checklistEstetico: checklistValidado } : {}),
       })
 
       // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
@@ -626,12 +638,13 @@ export async function avancarEtapa(ordemId: number, observacao?: string, etapaEs
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
           etapaAtual: proxima,
           historicoEtapas: historico,
           status: novoStatus,
           progresso,
           checklistEstetico: {},
-          dataFinalizacao: proxima === ETAPA_FINAL ? agora : null,
+          dataFinalizacao: proxima === ETAPA_FINAL ? dataCivilDoLaboratorio(agora) : null,
         },
       })
 
@@ -752,6 +765,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
           etapaAtual: 'entregue',
           status: 'Entregue',
           historicoEtapas: historico,
@@ -783,7 +797,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
   }
 }
 
-export async function retornarEtapa(ordemId: number, motivoRetorno: string, etapaEsperada: string) {
+export async function retornarEtapa(ordemId: number, motivoRetorno: string, etapaEsperada: string, revisaoEsperada: string) {
   await requireUser()
   try {
     if (!motivoRetorno.trim()) {
@@ -799,6 +813,8 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string, etap
       if (erroEstado) return { success: false as const, error: erroEstado }
       if (isTipoProtese(ordem.tipoWorkflow)) return { success: false as const, error: 'Use o fluxo específico da prótese.' }
       if (!etapaEsperada || normalizarEtapa(ordem.etapaAtual || '') !== normalizarEtapa(etapaEsperada)) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+        if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de continuar.' }
+        if (await tx.cicloProducao.findFirst({ where: { ordemId, status: { in: ['no_lab', 'em_prova'] } }, select: { id: true } })) return { success: false as const, error: 'Use o ciclo ativo da ordem para continuar o fluxo.' }
       const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
       const etapaAtual = ordem.etapaAtual || 'Recebimento'
       const retorno = getRetornoEtapa(tipoWorkflow, etapaAtual)
@@ -822,6 +838,7 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string, etap
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
           etapaAtual: retorno,
           tentativaAtual: novaTentativa,
           historicoEtapas: historico,

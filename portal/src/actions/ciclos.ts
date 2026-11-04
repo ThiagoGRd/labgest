@@ -1,8 +1,9 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { prisma } from '@labgest/database'
+import { getPassoProtese, isTipoProtese, normalizarEtapa } from '@/lib/workflow-config'
 import { revalidatePath } from 'next/cache'
 import { resolveClienteIdentity } from '@/lib/cliente-identity'
 import { createClient } from '@/lib/supabase/server'
@@ -59,13 +60,19 @@ export async function salvarFeedbackProva(
       await tx.$queryRaw`SELECT id FROM ordens WHERE id = (SELECT ordem_id FROM ciclos_producao WHERE id = ${cicloId}) AND cliente_id = ${cliente.id} FOR UPDATE`
       const cicloAtual = await tx.cicloProducao.findUnique({
         where: { id: cicloId },
-        include: { ordem: { select: { clienteId: true, status: true } } },
+        include: { ordem: { select: { clienteId: true, status: true, etapaAtual: true, tipoWorkflow: true, passoFluxoAtual: true, updatedAt: true } } },
       })
       if (!cicloAtual || cicloAtual.ordem.clienteId !== cliente.id) {
         return { success: false, error: 'Prova não encontrada' }
       }
       const erroEstado = erroTransicaoOrdem(cicloAtual.ordem.status, false)
       if (erroEstado) return { success: false as const, error: erroEstado }
+      if (cicloAtual.ordem.status !== 'Em Prova' || normalizarEtapa(cicloAtual.ordem.etapaAtual || '') !== 'em_prova') return { success: false, error: 'A ordem não está mais nesta prova.' }
+      if (isTipoProtese(cicloAtual.ordem.tipoWorkflow)) {
+        const passo = getPassoProtese(cicloAtual.ordem.tipoWorkflow, cicloAtual.ordem.passoFluxoAtual)
+        if (!passo.prova || cicloAtual.etapa !== passo.nome) return { success: false, error: 'O ciclo não corresponde à prova atual da prótese.' }
+      }
+      if (cicloAtual.decisao) return { success: false, error: 'Esta prova já recebeu uma decisão. Atualize o pedido.' }
       const cicloAtivo = await tx.cicloProducao.findFirst({ where: { ordemId: cicloAtual.ordemId, status: { in: ['no_lab', 'em_prova'] } }, orderBy: { numeroCiclo: 'desc' }, select: { id: true } })
       if (!cicloAtivo || cicloAtivo.id !== cicloId) return { success: false, error: 'Esta prova não é mais o ciclo ativo da ordem.' }
       if (cicloAtual.status !== 'em_prova') {
@@ -84,6 +91,7 @@ export async function salvarFeedbackProva(
         tx.ordem.update({
           where: { id: cicloAtual.ordemId },
           data: {
+          updatedAt: proximaRevisaoOrdem(cicloAtual.ordem.updatedAt),
             status: 'Em Prova',
             etapaAtual: 'em_prova',
           },

@@ -14,15 +14,34 @@ function load(file,mocks){const source=fs.readFileSync(path.join(root,file),'utf
   const endpoint=(await admin.query('SELECT current_database() db,host(inet_server_addr()) address')).rows[0];assert.equal(endpoint.db,'postgres');assert.equal(endpoint.address,'127.0.0.1');
   const exists=await admin.query('SELECT 1 FROM pg_database WHERE datname=$1',[database]);assert.equal(exists.rowCount,0,'Refusing existing database; test never overwrites databases');
   await admin.query('CREATE DATABASE labgest_chat_test');created=true;pool=new Pool({...config,max:8});
-  await pool.query('CREATE TABLE ordens (id integer PRIMARY KEY, cliente_id integer NOT NULL, mensagens jsonb NOT NULL DEFAULT \'[]\'::jsonb)');
+  await pool.query('CREATE TABLE ordens (id integer PRIMARY KEY, cliente_id integer NOT NULL, mensagens jsonb NOT NULL DEFAULT \'[]\'::jsonb, updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), write_count integer NOT NULL DEFAULT 0)');
   await pool.query('INSERT INTO ordens(id,cliente_id) VALUES (1,1),(2,2)');
   const legacy={id:'legacy',role:'dentista',nome:'Historical',texto:'preserve',createdAt:'2020-01-01T00:00:00Z',extra:{audit:'unchanged'}};
   await pool.query('UPDATE ordens SET mensagens=$1::jsonb WHERE id=1',[JSON.stringify([legacy])]);
-  let observe=false,first=false,waits=0;
+  let observe=false,first=false,waits=0,participants=new Set();
+  const lockEvidence=[];
   function adapter(client){return {
-   $queryRaw:async(strings,...values)=>{const text=strings.reduce((out,s,i)=>out+(i?'$'+i:'')+s,'');sql.add(text);const hold=observe&&!first;if(hold)first=true;const result=await client.query(text,values);
-    if(hold){let blocked=false;for(let i=0;i<100;i++){const q=await pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name='labgest-chat-test' AND wait_event_type='Lock'");if(q.rowCount){blocked=true;waits++;break}await new Promise(r=>setTimeout(r,10))}assert.ok(blocked,'must observe PostgreSQL lock wait from overlapping actions')}return result.rows},
-   ordem:{findFirst:async({where})=>{const text='SELECT id, cliente_id AS "clienteId", mensagens FROM ordens WHERE id=$1'+(where.clienteId===undefined?'':' AND cliente_id=$2');sql.add(text);const result=await client.query(text,where.clienteId===undefined?[where.id]:[where.id,where.clienteId]);return result.rows[0]||null},update:async({where,data})=>{const text='UPDATE ordens SET mensagens=$1::jsonb WHERE id=$2';sql.add(text);await client.query(text,[JSON.stringify(data.mensagens),where.id])}}
+   $queryRaw:async(strings,...values)=>{
+    const text=strings.reduce((out,s,i)=>out+(i?'$'+i:'')+s,'');sql.add(text);
+    if(observe)participants.add(client.processID);
+    const result=await client.query(text,values);
+    // The first successful acquisition is the holder, regardless of which
+    // action issued its query first. Keep its transaction open until the exact
+    // competing backend is observed waiting on this holder in PostgreSQL.
+    const hold=observe&&!first;if(hold)first=true;
+    if(hold){
+     const holderPid=client.processID;let blocked=false;
+     for(let i=0;i<200;i++){
+      const contenderPids=[...participants].filter(pid=>pid!==holderPid);
+      const q=await pool.query("SELECT pid AS waiter, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE datname=$1 AND application_name='labgest-chat-test' AND wait_event_type='Lock' AND pid=ANY($2::int[]) AND $3::int=ANY(pg_blocking_pids(pid))",[database,contenderPids,holderPid]);
+      if(q.rowCount){assert.equal(q.rowCount,1);assert.ok(contenderPids.includes(q.rows[0].waiter));assert.ok(q.rows[0].blockers.includes(holderPid));lockEvidence.push({holderPid,waiterPid:q.rows[0].waiter,blockerPids:q.rows[0].blockers});blocked=true;waits++;break}
+      await new Promise(r=>setTimeout(r,10));
+     }
+     assert.ok(blocked,'must observe exact competing PostgreSQL backend blocked by the acquired row-lock holder');
+    }
+    return result.rows
+   },
+   ordem:{findFirst:async({where})=>{const text='SELECT id, cliente_id AS "clienteId", mensagens FROM ordens WHERE id=$1'+(where.clienteId===undefined?'':' AND cliente_id=$2');sql.add(text);const result=await client.query(text,where.clienteId===undefined?[where.id]:[where.id,where.clienteId]);return result.rows[0]||null},update:async({where,data})=>{const text='UPDATE ordens SET mensagens=$1::jsonb, updated_at=clock_timestamp(), write_count=write_count+1 WHERE id=$2';sql.add(text);await client.query(text,[JSON.stringify(data.mensagens),where.id])}}
   }}
   const prisma={...adapter(pool),$transaction:async fn=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn(adapter(client));await client.query('COMMIT');return result}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}}};
   const base={'./index':{prisma},'@labgest/database':{prisma},'node:crypto':crypto,'next/cache':{revalidatePath(){}}};
@@ -33,12 +52,16 @@ function load(file,mocks){const source=fs.readFileSync(path.join(root,file),'utf
   const unauthorized=load('portal/src/actions/mensagens.ts',{...base,'@/lib/cliente-identity':{requireClienteIdentity:async()=>{throw Error('Identity rejected')}}});
   const messages=async()=> (await pool.query('SELECT mensagens FROM ordens WHERE id=1')).rows[0].mensagens;
   const sendLab=()=>lab.enviarMensagemLab(1,'lab'),sendDentist=()=>portal.enviarMensagem(1,'dentist');
-  for(const [a,b] of [[sendLab,sendDentist],[sendLab,sendLab],[sendDentist,sendDentist]]){const before=(await messages()).length;observe=true;first=false;const result=await Promise.all([a(),b()]);observe=false;assert.ok(result.every(r=>r.success));assert.equal((await messages()).length,before+2)}
+  for(const [a,b] of [[sendLab,sendDentist],[sendLab,sendLab],[sendDentist,sendDentist]]){const before=(await messages()).length;observe=true;first=false;participants=new Set();const result=await Promise.all([a(),b()]);observe=false;assert.ok(result.every(r=>r.success));assert.equal((await messages()).length,before+2)}
   assert.equal(new Set((await messages()).map(m=>m.id)).size,7);
-  const displayed=(await messages()).filter(m=>m.role==='lab').map(m=>m.id);observe=true;first=false;
+  const displayed=(await messages()).filter(m=>m.role==='lab').map(m=>m.id);observe=true;first=false;participants=new Set();
   await Promise.all([portal.marcarMensagensLidas(1,displayed),lab.enviarMensagemLab(1,'unseen')]);observe=false;
   assert.equal((await messages()).filter(m=>m.role==='lab'&&!m.lidoPeloDentista).length,1);
-  const id=crypto.randomUUID();observe=true;first=false;const retry=await Promise.all([portal.enviarMensagem(1,'retry',undefined,id),portal.enviarMensagem(1,'retry',undefined,id)]);observe=false;
+  const receiptRevision=(await pool.query('SELECT updated_at::text,write_count FROM ordens WHERE id=1')).rows[0];
+  await portal.marcarMensagensLidas(1,displayed);await portal.marcarMensagensLidas(1,displayed);
+  await portal.marcarMensagensLidas(1,[]);await portal.marcarMensagensLidas(1,['not-displayed']);
+  assert.deepEqual((await pool.query('SELECT updated_at::text,write_count FROM ordens WHERE id=1')).rows[0],receiptRevision,'already-read/empty/unknown receipts must not write or invalidate revision');
+  const id=crypto.randomUUID();observe=true;first=false;participants=new Set();const retry=await Promise.all([portal.enviarMensagem(1,'retry',undefined,id),portal.enviarMensagem(1,'retry',undefined,id)]);observe=false;
   assert.ok(retry.every(r=>r.success));assert.equal((await messages()).filter(m=>m.id===id).length,1);
   assert.equal((await lab.enviarMensagemLab(1,'spoof',undefined,id)).success,false,'another role cannot claim successful replay');
   const labId=crypto.randomUUID();await lab.enviarMensagemLab(1,'original',undefined,labId);assert.equal((await labOther.enviarMensagemLab(1,'spoof',undefined,labId)).success,false,'another actor cannot claim successful replay');
@@ -46,6 +69,6 @@ function load(file,mocks){const source=fs.readFileSync(path.join(root,file),'utf
   await assert.rejects(()=>unauthorized.enviarMensagem(1,'denied'),/Identity rejected/);
   const snapshot=await messages();assert.equal((await portal.enviarMensagem(1,'invalid',undefined,'not-a-uuid')).success,false);assert.deepEqual(await messages(),snapshot);
   assert.deepEqual((await messages()).find(m=>m.id==='legacy'),legacy,'historical JSON metadata must be preserved');
-  console.log(JSON.stringify({result:'PASS',method:'actual source + PostgreSQL native SQL adapter; auth identity boundaries simulated, Prisma runtime not used',observedPostgresLockWaits:waits,cases:['lab/dentist','lab/lab','dentist/dentist','receipt/append unseen remains unread','stable-ID concurrent retry','cross-role and cross-actor replay rejected','foreign-order read/write/receipt denied','resolver denial before mutation','invalid request UUID rejected','historical JSON metadata preserved'],sourceHashes:hashes,executedSql:[...sql]},null,2));
+  console.log(JSON.stringify({result:'PASS',method:'actual source + PostgreSQL native SQL adapter; auth identity boundaries simulated, Prisma runtime not used',observedPostgresLockWaits:waits,lockEvidence,cases:['lab/dentist','lab/lab','dentist/dentist','receipt/append unseen remains unread','stable-ID concurrent retry','cross-role and cross-actor replay rejected','foreign-order read/write/receipt denied','resolver denial before mutation','invalid request UUID rejected','historical JSON metadata preserved','repeated or empty receipts preserve updatedAt and write count'],sourceHashes:hashes,executedSql:[...sql]},null,2));
  }finally{if(pool)await pool.end();if(created)await admin.query('DROP DATABASE labgest_chat_test');await admin.end()}
 })().catch(e=>{console.error(e);process.exitCode=1});

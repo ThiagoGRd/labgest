@@ -6,3 +6,8 @@ export function erroTransicaoOrdem(status: string | null, permitirFinalizado = f
   }
   return null
 }
+
+/** A new intent must never share the revision of an earlier mutation, even in one millisecond. */
+export function proximaRevisaoOrdem(anterior: Date | null | undefined, agora = new Date()): Date {
+  return new Date(Math.max(agora.getTime(), (anterior?.getTime() ?? -1) + 1))
+}

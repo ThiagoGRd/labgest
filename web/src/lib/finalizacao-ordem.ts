@@ -1,4 +1,5 @@
 import type { Prisma } from '@labgest/database'
+import { dataCivilDoLaboratorio } from './data-civil'
 import { bloquearItensEstoque } from './estoque-bloqueio'
 
 export async function garantirEfeitosFinalizacao(
@@ -61,7 +62,8 @@ export async function garantirEfeitosFinalizacao(
   }
 
   if (ordem.contasReceber.length === 0) {
-    const vencimento = new Date(finalizadaEm.getFullYear(), finalizadaEm.getMonth(), finalizadaEm.getDate())
+    // finalizadaEm é o instante da transição; @db.Date armazena o dia civil do laboratório.
+    const vencimento = dataCivilDoLaboratorio(finalizadaEm)
     await tx.contaReceber.create({
       data: {
         ordemId,
@@ -69,10 +71,10 @@ export async function garantirEfeitosFinalizacao(
         clienteId: ordem.clienteId,
         clienteNome: ordem.clienteNome,
         valor: ordem.valorFinal,
-        dataCompetencia: finalizadaEm,
+        dataCompetencia: vencimento,
         dataVencimento: vencimento,
         status: 'Pendente',
-        observacoes: `Gerado automaticamente — Ordem #${ordemId} finalizada em ${finalizadaEm.toLocaleDateString('pt-BR')}`,
+        observacoes: `Gerado automaticamente — Ordem #${ordemId} finalizada em ${vencimento.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
       },
     })
   }

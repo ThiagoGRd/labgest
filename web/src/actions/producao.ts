@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { dataCivilDoLaboratorio, erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { Prisma, prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
@@ -73,7 +73,7 @@ export async function getProducao() {
   }
 }
 
-export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: string) {
+export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: string, revisaoEsperada: string) {
   await requireUser()
   if (!isEtapaId(novaEtapa) || novaEtapa === 'entregue') {
     return { success: false, error: 'Etapa de produção inválida' }
@@ -101,6 +101,8 @@ export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: s
       }
 
       if (!etapaEsperada || normalizarEtapa(ordemAtual.etapaAtual || '') !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+      if (!revisaoEsperada || ordemAtual.updatedAt?.toISOString() !== revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de continuar.' }
+      if (await tx.cicloProducao.findFirst({ where: { ordemId: id, status: { in: ['no_lab', 'em_prova'] } }, select: { id: true } })) return { success: false as const, error: 'Use o ciclo ativo da ordem para continuar o fluxo.' }
       const agora = new Date()
       const historico = (Array.isArray(ordemAtual.historicoEtapas) ? ordemAtual.historicoEtapas : []) as Prisma.InputJsonObject[]
       const proximoHistorico = [
@@ -134,6 +136,7 @@ export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: s
         await tx.ordem.update({
           where: { id },
           data: {
+          updatedAt: proximaRevisaoOrdem(ordemAtual.updatedAt),
             etapaAtual: novaEtapa,
             status: novoStatus,
             dataFinalizacao: null,
@@ -154,7 +157,8 @@ export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: s
       if (novaEtapa === 'pronto') {
         await tx.ordem.update({
           where: { id },
-          data: { etapaAtual: novaEtapa, status: novoStatus, dataFinalizacao: agora, historicoEtapas: proximoHistorico },
+          data: {
+          updatedAt: proximaRevisaoOrdem(ordemAtual.updatedAt), etapaAtual: novaEtapa, status: novoStatus, dataFinalizacao: dataCivilDoLaboratorio(agora), historicoEtapas: proximoHistorico },
         })
         await garantirEfeitosFinalizacao(tx, id, agora)
         return { success: true }
@@ -163,6 +167,7 @@ export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: s
       await tx.ordem.update({
         where: { id },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordemAtual.updatedAt),
           etapaAtual: novaEtapa,
           status: novoStatus,
           dataFinalizacao: null,
