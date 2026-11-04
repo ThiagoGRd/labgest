@@ -75,7 +75,7 @@ const prisma = {
 }
 function load(file) {
   const exports = {}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, Date, console: { error() {} }, require(name) {
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, Date, Error, console: { error() {} }, require(name) {
     if (name === '@labgest/database') return { prisma }
     if (name === 'next/cache') return { revalidatePath() {} }
     if (name === '@/lib/auth-utils') return { requireUser: async () => ({ id: 1, nome: 'Synthetic tester' }) }
