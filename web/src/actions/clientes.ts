@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import { validarCadastroCliente } from '@/lib/clientes-cadastro'
 
 export async function getClientes() {
   await requireUser()
@@ -81,5 +82,24 @@ export async function toggleClienteStatus(id: string, ativo: boolean) {
     return { success: true }
   } catch {
     return { success: false, error: 'Erro ao atualizar status' }
+  }
+}
+
+export async function updateCliente(id: number, data: unknown) {
+  await requireUser()
+  const cadastro = validarCadastroCliente(data)
+  if (!Number.isSafeInteger(id) || id <= 0 || !cadastro) {
+    return { success: false as const, error: 'Dados inválidos. Confira nome, telefone, CRO e endereço.' }
+  }
+  try {
+    const cliente = await prisma.cliente.update({
+      where: { id },
+      data: { nome: cadastro.nome, telefone: cadastro.telefone, cro: cadastro.cro, endereco: cadastro.endereco },
+      select: { nome: true, telefone: true, cro: true, endereco: true },
+    })
+    revalidatePath('/clientes')
+    return { success: true as const, cliente: { ...cliente, endereco: cliente.endereco ?? '' } }
+  } catch {
+    return { success: false as const, error: 'Não foi possível atualizar o cliente. Confira se ele ainda existe e tente novamente.' }
   }
 }

@@ -1,6 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Modal } from '@/components/ui/modal'
+import { clientesCsv, type CadastroCliente } from '@/lib/clientes-cadastro'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -55,12 +58,18 @@ function formatDate(dateStr: string | null) {
 }
 
 export function ClientesView({ initialData }: ClientesViewProps) {
+  const router = useRouter()
+  const retornoFoco = useRef<HTMLElement | null>(null)
+  const buscaRef = useRef<HTMLInputElement>(null)
+  const [editando, setEditando] = useState<Cliente | null>(null)
+  const [visualizando, setVisualizando] = useState<Cliente | null>(null)
+  const [atualizacao, setAtualizacao] = useState<{ base: Cliente[]; clientes: Cliente[] } | null>(null)
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
 
   // Usar dados reais se existirem, senão usar lista vazia
-  const clientes = initialData || []
+  const clientes = atualizacao?.base === initialData ? atualizacao.clientes : initialData || []
 
   const filteredClientes = clientes.filter(cliente => {
     const matchSearch = 
@@ -71,24 +80,66 @@ export function ClientesView({ initialData }: ClientesViewProps) {
     return matchSearch && matchStatus
   })
 
+  const fecharModal = () => {
+    setModalOpen(false)
+    setEditando(null)
+    setVisualizando(null)
+    requestAnimationFrame(() => {
+      const alvo = retornoFoco.current
+      if (alvo?.isConnected) alvo.focus()
+      else buscaRef.current?.focus()
+    })
+  }
+
+  const exportar = () => {
+    if (!filteredClientes.length) return
+    try {
+      const url = URL.createObjectURL(new Blob([clientesCsv(filteredClientes)], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      try {
+        link.href = url
+        link.download = 'clientes-filtrados.csv'
+        document.body.appendChild(link)
+        link.click()
+      } finally {
+        link.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch {
+      toast.error('Não foi possível exportar os clientes.')
+    }
+  }
+
   return (
     <DashboardLayout>
-      <NovoClienteModal 
-        isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)}
-        onSuccess={() => {
-          // A página será revalidada automaticamente pelo Server Action
-          setModalOpen(false)
-          toast.success('Cliente cadastrado com sucesso!')
+      {(modalOpen || editando) && <NovoClienteModal
+        key={editando?.id ?? 'novo'}
+        isOpen
+        cliente={editando ?? undefined}
+        onClose={fecharModal}
+        onSuccess={(dados?: CadastroCliente) => {
+          if (editando && dados) setAtualizacao({ base: initialData, clientes: clientes.map(cliente => cliente.id === editando.id ? { ...cliente, ...dados } : cliente) })
+          toast.success(editando ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!')
+          router.refresh()
         }}
-      />
-      
+      />}
+      {visualizando && <Modal isOpen onClose={fecharModal} title="Dados do cliente" size="md">
+        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {[
+            ['Nome', visualizando.nome], ['CRO', visualizando.cro], ['Telefone', visualizando.telefone],
+            ['Email', visualizando.email], ['Endereço', visualizando.endereco], ['Situação', visualizando.ativo ? 'Ativo' : 'Inativo'],
+            ['Pedidos', String(visualizando.totalPedidos)], ['Total', formatCurrency(visualizando.valorTotal)],
+            ['Último pedido', formatDate(visualizando.ultimoPedido)],
+          ].map(([label, valor]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-words text-sm">{valor || 'Não informado'}</dd></div>)}
+        </dl>
+      </Modal>}
+
       <Header 
         title="Clientes" 
         subtitle={`${clientes.filter(c => c.ativo).length} dentistas ativos`}
         action={{
           label: 'Novo Cliente',
-          onClick: () => setModalOpen(true),
+          onClick: () => { retornoFoco.current = document.activeElement as HTMLElement; setModalOpen(true) },
         }}
       />
       
@@ -100,6 +151,7 @@ export function ClientesView({ initialData }: ClientesViewProps) {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
+                  ref={buscaRef}
                   placeholder="Buscar por nome, email ou CRO..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -116,11 +168,13 @@ export function ClientesView({ initialData }: ClientesViewProps) {
                   />
                   <span className="text-sm text-slate-600">Mostrar inativos</span>
                 </label>
-                <Button variant="outline" size="icon">
-                  <Download className="h-4 w-4" />
+                <Button variant="outline" onClick={exportar} disabled={!filteredClientes.length} aria-label={`Exportar filtrados (${filteredClientes.length})`}>
+                  <Download aria-hidden="true" className="h-4 w-4" />
+                  <span>CSV ({filteredClientes.length})</span>
                 </Button>
               </div>
             </div>
+            <p className="mt-2 text-xs text-slate-500">CSV somente dos clientes filtrados: nome, CRO, telefone, email, endereço e situação.</p>
           </CardContent>
         </Card>
 
@@ -181,10 +235,10 @@ export function ClientesView({ initialData }: ClientesViewProps) {
                     Último pedido: {formatDate(cliente.ultimoPedido)}
                   </p>
                   <div className="flex items-center gap-1">
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button aria-label={`Visualizar ${cliente.nome}`} onClick={event => { retornoFoco.current = event.currentTarget; setVisualizando(cliente) }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
                       <Eye className="h-4 w-4" />
                     </button>
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button aria-label={`Editar ${cliente.nome}`} onClick={event => { retornoFoco.current = event.currentTarget; setEditando(cliente) }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
                       <Edit className="h-4 w-4" />
                     </button>
                   </div>
@@ -196,7 +250,7 @@ export function ClientesView({ initialData }: ClientesViewProps) {
           {/* Add New Card */}
           <Card 
             className="border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors cursor-pointer"
-            onClick={() => setModalOpen(true)}
+            onClick={event => { retornoFoco.current = event.currentTarget; setModalOpen(true) }}
           >
             <CardContent className="p-6 flex flex-col items-center justify-center h-full min-h-[300px]">
               <div className="p-4 rounded-full bg-indigo-100 mb-4">
