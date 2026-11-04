@@ -93,7 +93,7 @@ export function Sidebar({ user }: SidebarProps) {
   const renderLink = (item: NavigationItem) => {
     const active = pathname === item.href || pathname?.startsWith(item.href + '/')
     return (
-      <Link key={item.href} href={item.href} aria-label={item.name} aria-current={active ? 'page' : undefined}
+      <Link key={item.href} href={item.href} aria-label={collapsed ? item.name : undefined} aria-current={active ? 'page' : undefined}
         onClick={() => setIsOpenMobile(false)} title={collapsed ? item.name : undefined}
         className={cn('flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm font-medium transition-colors group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           active ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:bg-white/50 dark:hover:bg-white/10 hover:text-foreground',

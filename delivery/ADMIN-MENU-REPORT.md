@@ -38,7 +38,7 @@ As primeiras cinco verificações browser falharam antes da implementação por 
 
 Resultados finais:
 
-- `MENU_QA=/workspace/labgest-menu-qa node web/tests/admin-menu-browser.cjs`: **6/6 cenários passaram**, Chromium 1280, 768, 767, 390 e 320 px (320 com altura 640). Cobertura dos 13 hrefs, grupos, seleção exata/filha/prefixo negativo, Tab no recolhido, logout e badge locais, configuração restrita para recepcao, mobile fechado sem links, foco inicial/cíclico/restaurado, botão/Escape/overlay/navegação atual e nova, resize com drawer e com Novidades, fechamento de Novidades e aviso automático. Zero requisições externas/erros de página.
+- `MENU_QA=/workspace/labgest-menu-qa node web/tests/admin-menu-browser.cjs`: **7/7 cenários passaram**, Chromium 1280, 768, 767, 390 e 320 px (320 com altura 640). Cobertura dos 13 hrefs, grupos, seleção exata/filha/prefixo negativo, Tab no recolhido, logout e badge locais, configuração restrita para recepcao, mobile fechado sem links, foco inicial/cíclico/restaurado, botão/Escape/overlay/navegação atual e nova, resize com drawer e com Novidades, fechamento de Novidades e aviso automático. Zero requisições externas/erros de página.
 - Regressão adicional de associação acionador/drawer (`aria-controls`): falhou em duas larguras antes de remover o ID que sobrescrevia o ID Radix; passou na execução final (menu-controls-red.log versus menu-browser.log).
 - `node_modules/.bin/tsc --noEmit --incremental false -p web/tsconfig.json`: passou.
 - `npm run lint --workspace=web`: passou, sem avisos ESLint.
@@ -51,9 +51,17 @@ Resultados finais:
 
 Revisão visual local: grupos legíveis, estilos existentes claros/escuros, drawer de 256 px com labels no mobile, área dos destinos com rolagem própria em alturas menores e rodapé independente. Não se promete que todos os destinos caibam simultaneamente em uma tela pequena. Não há falha nova de produto identificada nas verificações executadas. Capturas desktop/mobile são somente QA local, não incluídas no pacote Library. As verificações PostgreSQL dependentes de banco descartável permanecem fora da execução, conforme limitação já registrada na base; nenhum banco real ou infraestrutura foi usado. Não foram lidos .env ou usados node_modules de macOS. Dependências Linux e Prisma offline já validados foram reutilizados em `/workspace/labgest-menu-validation`, sem instalação ou nova obtenção de checksum.
 
+## Ajuste após revisão independente — badge acessível
+
+O aria-label fixo dos links expandidos ocultava o count do MensagensBadge no nome acessível. Agora aria-label é usado somente no modo recolhido; desktop expandido e mobile usam o nome natural formado pelo texto e pelo badge real. Nenhuma alteração no componente de badge, consulta, regra de contagem ou aparência.
+
+Um cenário novo primeiro confirmou o número 3 visível e falhou ao buscar o nome acessível “Ordens 3” (menu-badge-red.log). Após a correção, Ordens e Produção expõem o número no nome acessível em desktop/mobile. Os demais seis cenários passaram já na execução vermelha; as asserções reforçadas de foco não exigiram alteração de produto: Shift+Tab do primeiro controle (logo) vai exatamente ao último (Novidades), e Tab do último volta exatamente ao primeiro. Após mobile→desktop com Novidades aberto, fechar esse modal devolve foco ao botão Novidades visível antes de qualquer clique no conteúdo.
+
+Nesta revisão foram reexecutados os sete cenários do admin-menu, typecheck, lint, os 53 testes de regressão e 35 unitários. Os logs dos outros três harnesses browser e da compilação CSS isolada são da entrega anterior deste mesmo candidato, na qual passaram; não foram repetidos para a alteração de uma propriedade de acessibilidade. O harness admin-menu recompila Tailwind real a cada execução. Capturas continuam locais, sem upload.
+
 ## Entrega
 
-Patch somente desde a base 1e35added, relatório, plano, manifesto de arquivos/hashes e evidências textuais. Nova identidade Library, sem alterar pacotes anteriores. Commit final consta no manifesto. Sem push, PR, merge, deploy, produção, credenciais ou lockfile.
+Patch somente desde a base 1e35added, relatório, plano, manifesto de arquivos/hashes e evidências textuais. Identidade própria deste candidato na Library, substituída na revisão para preservar seu histórico; pacotes de outras entregas não alterados. Commit final consta no manifesto. Sem push, PR, merge, deploy, produção, credenciais ou lockfile.
 
 
 ## Arquivos exatos deste incremento
