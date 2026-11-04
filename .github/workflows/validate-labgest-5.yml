@@ -99,6 +99,10 @@ jobs:
             TZ="$zone" node --test web/tests/financeiro-periodo.test.mjs
             TZ="$zone" ./node_modules/.bin/tsx --test web/src/lib/periodo-receber.test.ts
           done
+          for zone in UTC America/Maceio Pacific/Kiritimati; do
+            TZ="$zone" node --test web/tests/financeiro-correlation.test.cjs web/tests/financeiro-write-dates.test.cjs
+            TZ="$zone" ./node_modules/.bin/tsx --test packages/shared/test/date-civil.test.ts web/src/lib/finalizacao-ordem.test.ts
+          done
       - name: Source actions with disposable PostgreSQL
         id: postgres
         continue-on-error: true
@@ -113,6 +117,7 @@ jobs:
           LABGEST_TEST_DATABASE_URL='postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_external_link_test' node web/tests/labs-externos-link-postgres.integration.cjs
           node web/tests/portal-binding-postgres.integration.cjs 'postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_identity_test'
           LABGEST_PG_TEST_TOOLS="$RUNNER_TEMP/labgest-test-drivers/node_modules" LABGEST_CHAT_TEST_DATABASE_URL='postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_chat_test' node scripts/test-correlation-messages-postgres.cjs
+          LABGEST_PG_TEST_TOOLS="$RUNNER_TEMP/labgest-test-drivers/node_modules" LABGEST_WORKFLOW_TEST_DATABASE_URL='postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_workflow_test' node scripts/test-correlation-workflow-postgres.cjs
       - name: Genuine generated Prisma runtime on exact disposable schema
         id: prisma
         continue-on-error: true
@@ -132,6 +137,7 @@ jobs:
           node web/tests/admin-browser.integration.cjs
           node portal/tests/upload-regressions.cjs
           node scripts/test-correlation-messages-browser.cjs
+          node scripts/test-correlation-workflow-browser.cjs
           node web/tests/labs-externos-archive-browser.integration.cjs
       - name: Lint web and portal
         id: lint
