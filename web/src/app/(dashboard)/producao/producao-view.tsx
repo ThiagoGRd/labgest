@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { contextoAtencao, limparAtencao, type RetornoDashboard } from '@/lib/dashboard-attention'
+import { AtencaoProducao } from './atencao-producao'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +49,8 @@ const etapas = KANBAN_ETAPAS
 
 interface ProducaoViewProps {
   initialOrdens: OrdemProducao[]
+  semEtapaIds: number[]
+  retornosDashboard: RetornoDashboard[]
 }
 
 function getPriorityColor(priority: string) {
@@ -307,8 +311,11 @@ function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino, loading }: C
   )
 }
 
-export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
+export function ProducaoView({ initialOrdens, semEtapaIds, retornosDashboard }: ProducaoViewProps) {
   const router = useRouter()
+  const params = useSearchParams()
+  const pathname = usePathname()
+  const contexto = contextoAtencao(params.get('atencao'), 'producao')
   const ordensPorEtapa = useMemo(() => agruparOrdens(initialOrdens), [initialOrdens])
   const [draggedItem, setDraggedItem] = useState<{ ordem: OrdemProducao; fromEtapa: string } | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
@@ -524,6 +531,14 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
       />
 
       <main className="p-4 sm:p-6">
+        {contexto === 'retornos' || contexto === 'sem-etapa' ? (
+          <AtencaoProducao contexto={contexto}
+            ordens={contexto === 'sem-etapa' ? initialOrdens.filter((ordem) => semEtapaIds.includes(ordem.id)) : initialOrdens}
+            retornos={retornosDashboard}
+            onLimpar={() => router.push(limparAtencao(pathname, params.toString()))}
+            onAbrir={handlePatientClick} onDefinir={setOrdemParaDefinirEtapa} onConfirmar={setConfirmarRetornoOrdem} />
+        ) : <>
+
         {tipoSelecionado === 'todos' && (
           <ResumoProducao
             contagens={contagens}
@@ -701,6 +716,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
             <span className="text-xs">Trabalho cíclico (vai e volta)</span>
           </div>
         </div>
+        </>}
       </main>
     </DashboardLayout>
   )

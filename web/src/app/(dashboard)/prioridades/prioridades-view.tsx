@@ -1,5 +1,7 @@
 'use client'
 
+import { useSearchParams, usePathname, useRouter } from 'next/navigation'
+import { contextoAtencao, limparAtencao } from '@/lib/dashboard-attention'
 import { useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { toast } from 'sonner'
@@ -39,6 +41,7 @@ interface PrioridadesViewProps {
   respostasDentista: OrdemPrioridade[]
   fornecedorAtrasado: OrdemPrioridade[]
   atrasados: OrdemPrioridade[]
+  prazoVencido: OrdemPrioridade[]
   provasPendentesClinicorp: OrdemPrioridade[]
   hoje: OrdemPrioridade[]
   urgentes: OrdemPrioridade[]
@@ -252,8 +255,14 @@ function ListaPrioridades({
 }
 
 export function PrioridadesView(props: PrioridadesViewProps) {
+  const params = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
+  const contexto = contextoAtencao(params.get('atencao'), 'prioridades')
+  const limpar = () => router.push(limparAtencao(pathname, params.toString()))
   const relatorioRef = useRef<HTMLDivElement>(null)
   const [aba, setAba] = useState<Aba>('acao')
+  const abaVisivel = contexto === 'hoje' ? 'cronograma' : contexto === 'atrasadas' ? 'acao' : aba
   const [busca, setBusca] = useState('')
   const [selectedOrdem, setSelectedOrdem] = useState<OrdemDetalhada | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
@@ -270,6 +279,7 @@ export function PrioridadesView(props: PrioridadesViewProps) {
       respostasDentista: filtrar(props.respostasDentista),
       fornecedorAtrasado: filtrar(props.fornecedorAtrasado),
       atrasados: filtrar(props.atrasados),
+      prazoVencido: filtrar(props.prazoVencido),
       provasPendentesClinicorp: filtrar(props.provasPendentesClinicorp),
       hoje: filtrar(props.hoje),
       urgentes: filtrar(props.urgentes),
@@ -370,17 +380,17 @@ export function PrioridadesView(props: PrioridadesViewProps) {
           <div className="flex min-w-0 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900" aria-label="Visão das prioridades">
             <button
               type="button"
-              aria-pressed={aba === 'acao'}
-              onClick={() => setAba('acao')}
-              className={cn('flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors lg:flex-none', aba === 'acao' ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white')}
+              aria-pressed={abaVisivel === 'acao'}
+              onClick={() => { setAba('acao'); if (contexto) limpar() }}
+              className={cn('flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors lg:flex-none', abaVisivel === 'acao' ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white')}
             >
               Ação imediata
             </button>
             <button
               type="button"
-              aria-pressed={aba === 'cronograma'}
-              onClick={() => setAba('cronograma')}
-              className={cn('flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors lg:flex-none', aba === 'cronograma' ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white')}
+              aria-pressed={abaVisivel === 'cronograma'}
+              onClick={() => { setAba('cronograma'); if (contexto) limpar() }}
+              className={cn('flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors lg:flex-none', abaVisivel === 'cronograma' ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white')}
             >
               Hoje e próximos
             </button>
@@ -404,7 +414,28 @@ export function PrioridadesView(props: PrioridadesViewProps) {
           </div>
         </div>
 
-        {aba === 'acao' ? (
+        {contexto ? (
+          <section aria-label="Seleção do painel" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950">
+              <h2 className="font-semibold">{contexto === 'hoje' ? 'Entregas para hoje' : 'Ordens atrasadas — prazo vencido'}</h2>
+              <Button variant="outline" onClick={limpar}>Limpar seleção</Button>
+            </div>
+            {contexto === 'hoje' ? (
+              <ListaPrioridades titulo="Entregas para hoje" descricao="Todas as ordens ativas com entrega prevista para hoje."
+                ordens={listas.hoje} tipo="hoje" dataReferencia={props.dataReferencia}
+                openingOrdemId={openingOrdemId} onOpen={handleOpenOrdem} vazio="Nenhuma entrega encontrada para esta seleção e busca." />
+            ) : (
+              <div className="grid gap-5 xl:grid-cols-2">
+                <ListaPrioridades titulo="Prazo vencido — fora de prova" descricao="Inclui ordens com resposta do dentista ou fornecedor pendente."
+                  ordens={listas.prazoVencido.filter((ordem) => ![ordem.status, ordem.etapaAtual].some((valor) => valor?.toLowerCase().includes('prova')))}
+                  tipo="atrasado" dataReferencia={props.dataReferencia} openingOrdemId={openingOrdemId} onOpen={handleOpenOrdem} vazio="Nenhuma ordem encontrada." />
+                <ListaPrioridades titulo="Prazo vencido — em prova clínica" descricao="Incluídas no número do painel; confirmar agenda clínica antes de tratar como atraso do laboratório."
+                  ordens={listas.prazoVencido.filter((ordem) => [ordem.status, ordem.etapaAtual].some((valor) => valor?.toLowerCase().includes('prova')))}
+                  tipo="clinicorp" dataReferencia={props.dataReferencia} openingOrdemId={openingOrdemId} onOpen={handleOpenOrdem} vazio="Nenhuma prova encontrada." />
+              </div>
+            )}
+          </section>
+        ) : aba === 'acao' ? (
           <div className="grid items-start gap-5 xl:grid-cols-2">
             <ListaPrioridades
               titulo="Dentista já respondeu"

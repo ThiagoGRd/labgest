@@ -150,7 +150,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       value: initialData.atrasadas.toString(),
       detail: initialData.atrasadas ? 'Precisam de revisão' : 'Nenhuma pendência',
       icon: AlertTriangle,
-      href: '/prioridades',
+      href: '/prioridades?atencao=atrasadas',
       tone: initialData.atrasadas
         ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'
         : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
@@ -172,7 +172,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       label: 'Ordens atrasadas',
       value: initialData.atrasadas,
       description: 'Prazo de entrega já vencido',
-      href: '/prioridades',
+      href: '/prioridades?atencao=atrasadas',
       icon: AlertTriangle,
       tone: 'text-red-600 bg-red-50 dark:bg-red-500/10 dark:text-red-300',
     },
@@ -180,7 +180,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       label: 'Entregas para hoje',
       value: initialData.entregasHoje,
       description: 'Confirmar acabamento e saída',
-      href: '/prioridades',
+      href: '/prioridades?atencao=hoje',
       icon: CalendarDays,
       tone: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-300',
     },
@@ -188,7 +188,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       label: 'Retornos respondidos',
       value: initialData.retornosPendentes,
       description: 'Dentista já aprovou ou pediu ajuste',
-      href: '/producao',
+      href: '/producao?atencao=retornos',
       icon: RotateCcw,
       tone: 'text-violet-600 bg-violet-50 dark:bg-violet-500/10 dark:text-violet-300',
     },
@@ -196,7 +196,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       label: 'Etapa a definir',
       value: initialData.semEtapa,
       description: 'Ordens antigas sem fluxo detalhado',
-      href: '/producao',
+      href: '/producao?atencao=sem-etapa',
       icon: Tags,
       tone: 'text-orange-600 bg-orange-50 dark:bg-orange-500/10 dark:text-orange-300',
     },
@@ -223,29 +223,6 @@ export function DashboardView({ initialData }: DashboardViewProps) {
           <Link href="/financeiro" className={buttonVariants({ variant: 'outline', className: 'shrink-0' })}><WalletCards className="h-4 w-4" /> Financeiro</Link>
         </nav>
 
-        <section aria-label="Indicadores principais" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => (
-            <Link key={stat.name} href={stat.href} className="group rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-              <Card className="h-full hover:-translate-y-0.5 hover:border-indigo-200 dark:hover:border-indigo-500/30">
-                <CardContent className="p-5 sm:p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.name}</p>
-                      <p className="mt-2 truncate text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{stat.value}</p>
-                    </div>
-                    <div className={`rounded-2xl p-3 ${stat.tone}`}><stat.icon className="h-5 w-5" /></div>
-                  </div>
-                  <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    {stat.trend === 'alta' && <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />}
-                    {stat.trend === 'baixa' && <ArrowDownRight className="h-3.5 w-3.5 text-amber-600" />}
-                    <span>{stat.detail}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </section>
-
         <section>
           <div className="mb-3 flex items-end justify-between gap-4">
             <div>
@@ -269,6 +246,29 @@ export function DashboardView({ initialData }: DashboardViewProps) {
               </Link>
             ))}
           </div>
+        </section>
+
+        <section aria-label="Indicadores principais" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map((stat) => (
+            <Link key={stat.name} href={stat.href} className="group rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <Card className="h-full hover:-translate-y-0.5 hover:border-indigo-200 dark:hover:border-indigo-500/30">
+                <CardContent className="p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.name}</p>
+                      <p className="mt-2 truncate text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{stat.value}</p>
+                    </div>
+                    <div className={`rounded-2xl p-3 ${stat.tone}`}><stat.icon className="h-5 w-5" /></div>
+                  </div>
+                  <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    {stat.trend === 'alta' && <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />}
+                    {stat.trend === 'baixa' && <ArrowDownRight className="h-3.5 w-3.5 text-amber-600" />}
+                    <span>{stat.detail}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </section>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
