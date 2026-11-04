@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -60,6 +60,13 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
   const [selectedPedido, setSelectedPedido] = useState<PedidoDetalhado | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [loadingId, setLoadingId] = useState<number | null>(null)
+  const [erroDetalhesId, setErroDetalhesId] = useState<number | null>(null)
+  const consultaAtual = useRef({ sequencia: 0, id: null as number | null })
+
+  useEffect(() => () => {
+    consultaAtual.current.sequencia += 1
+    consultaAtual.current.id = null
+  }, [])
 
   const filteredPedidos = pedidos.filter(pedido => {
     const matchSearch = 
@@ -69,18 +76,37 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
     return matchSearch && matchStatus
   })
 
+  const limparConsulta = () => {
+    consultaAtual.current.sequencia += 1
+    consultaAtual.current.id = null
+    setErroDetalhesId(null)
+    setLoadingId(null)
+  }
+
   const handleView = async (id: number) => {
+    if (consultaAtual.current.id === id) return
+    const sequencia = ++consultaAtual.current.sequencia
+    consultaAtual.current.id = id
+    setErroDetalhesId(null)
+    setSelectedPedido(null)
+    setModalOpen(false)
     setLoadingId(id)
     try {
       const pedidoDetalhado = await getPedidoById(id)
+      if (sequencia !== consultaAtual.current.sequencia) return
       if (pedidoDetalhado) {
         setSelectedPedido(pedidoDetalhado as PedidoDetalhado)
         setModalOpen(true)
+      } else {
+        setErroDetalhesId(id)
       }
-    } catch (error) {
-      console.error('Erro ao abrir pedido:', error)
+    } catch {
+      if (sequencia === consultaAtual.current.sequencia) setErroDetalhesId(id)
     } finally {
-      setLoadingId(null)
+      if (sequencia === consultaAtual.current.sequencia) {
+        consultaAtual.current.id = null
+        setLoadingId(null)
+      }
     }
   }
 
@@ -88,7 +114,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
     <PortalLayout user={user}>
       <VisualizarPedidoModal 
         isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)} 
+        onClose={() => { setModalOpen(false); setSelectedPedido(null) }}
         pedido={selectedPedido} 
       />
 
@@ -112,7 +138,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                 <Input
                   placeholder="Buscar por paciente ou serviço..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); limparConsulta() }}
                   className="pl-9 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:placeholder-zinc-500"
                 />
               </div>
@@ -120,7 +146,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                 {['todos', 'Aguardando', 'Em Produção', 'Em Prova', 'Finalizado'].map((status) => (
                   <button
                     key={status}
-                    onClick={() => setStatusFilter(status)}
+                    onClick={() => { setStatusFilter(status); limparConsulta() }}
                     className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
                       statusFilter === status
                         ? 'bg-emerald-600 text-white'
@@ -134,6 +160,15 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
             </div>
           </CardContent>
         </Card>
+
+        {erroDetalhesId !== null && (
+          <div role="alert" className="flex flex-col gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between">
+            <p>Não foi possível carregar os detalhes do pedido #{erroDetalhesId}. Tente novamente.</p>
+            <Button variant="outline" onClick={() => handleView(erroDetalhesId)} className="shrink-0">
+              Tentar novamente
+            </Button>
+          </div>
+        )}
 
         {/* Orders List */}
         <Card className="dark:bg-zinc-900 dark:border-zinc-800">
@@ -182,7 +217,7 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
                         {formatCurrency(pedido.valor)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleView(pedido.id)} disabled={loadingId === pedido.id}>
+                        <Button variant="ghost" size="icon" onClick={() => handleView(pedido.id)} disabled={loadingId === pedido.id} aria-label={`Visualizar pedido #${pedido.id}`} aria-busy={loadingId === pedido.id}>
                           {loadingId === pedido.id ? (
                             <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
                           ) : (
