@@ -120,7 +120,7 @@ test('month navigation preserves competence and changing basis preserves month',
   const routes = []
   const components = new Proxy({}, { get: (_target, name) => String(name) })
   const view = loadSource('app/(dashboard)/financeiro/financeiro-view.tsx', {
-    react: { useState: value => [value, () => {}] },
+    react: { useRef: value => ({ current: value }), useState: value => [value, () => {}] },
     'next/navigation': { useRouter: () => ({ push: url => routes.push(url) }) },
     'lucide-react': components, components,
     '@/actions/financeiro': {}, sonner: { toast: {} },

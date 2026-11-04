@@ -30,36 +30,46 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const reading = useRef(false)
+  const sending = useRef(false)
   const observacaoObrigatoria = decisao === 'ajustes'
   const observacaoAusente = observacaoObrigatoria && !observacoes.trim()
 
   const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (reading.current || sending.current) return
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    reading.current = true
     setUploading(true)
+    setError('')
     try {
       // Converter para base64 localmente (sem upload externo por enquanto)
       const encoded = await Promise.all(
-        files.map(file => new Promise<string>((resolve) => {
+        files.map(file => new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
+          reader.onerror = () => reject(new Error('Não foi possível ler a foto. Tente novamente.'))
+          reader.onabort = () => reject(new Error('Leitura da foto cancelada. Tente novamente.'))
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         }))
       )
       setFotos(prev => [...prev, ...encoded])
     } catch (e) {
-      console.error(e)
+      setError(e instanceof Error ? e.message : 'Não foi possível ler as fotos.')
     } finally {
+      reading.current = false
       setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
     }
   }
 
   const handleEnviar = async () => {
-    if (!decisao) return
+    if (!decisao || sending.current || reading.current) return
     if (observacaoAusente) {
       setError('Descreva o que precisa ser ajustado antes de enviar.')
       return
     }
+    sending.current = true
     setLoading(true)
     setError('')
     try {
@@ -74,6 +84,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
     } catch {
       setError('Não foi possível enviar o resultado da prova.')
     } finally {
+      sending.current = false
       setLoading(false)
     }
   }
@@ -105,6 +116,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
+            disabled={loading}
             onClick={() => {
               setDecisao('ajustes')
               setError('')
@@ -123,6 +135,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
           </button>
           <button
             type="button"
+            disabled={loading}
             onClick={() => {
               setDecisao('aprovado')
               setError('')
@@ -151,6 +164,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
               <Image src={foto} alt={`Foto ${i+1}`} fill unoptimized className="rounded-xl border border-slate-200 object-cover dark:border-zinc-700" />
               <button
                 type="button"
+                disabled={loading}
                 aria-label={`Remover foto ${i + 1}`}
                 onClick={() => setFotos(f => f.filter((_, idx) => idx !== i))}
                 className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
@@ -161,6 +175,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
           ))}
           <button
             type="button"
+            disabled={loading || uploading}
             aria-label="Adicionar fotos da prova"
             onClick={() => fileRef.current?.click()}
             className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 transition-all hover:border-slate-500 hover:text-slate-700 dark:border-zinc-700 dark:text-zinc-500 dark:hover:border-zinc-500 dark:hover:text-zinc-300"
@@ -176,6 +191,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
           multiple
           capture="environment"
           className="hidden"
+          disabled={loading || uploading}
           onChange={handleFoto}
         />
       </div>
@@ -188,6 +204,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
         </label>
         <textarea
           id={`observacoes-prova-${cicloId}`}
+          disabled={loading}
           value={observacoes}
           onChange={(e) => {
             setObservacoes(e.target.value)
@@ -215,7 +232,7 @@ export function FeedbackProva({ cicloId, numeroCiclo, onSubmit }: FeedbackProvaP
       <div className="sticky bottom-0 z-10 -mx-4 bg-gradient-to-t from-amber-50 via-amber-50 px-4 pb-1 pt-3 dark:from-zinc-950 dark:via-zinc-950 sm:static sm:mx-0 sm:bg-none sm:p-0">
         <Button
           onClick={handleEnviar}
-          disabled={!decisao || loading || observacaoAusente}
+          disabled={!decisao || loading || uploading || observacaoAusente}
           className="h-12 w-full bg-emerald-600 text-white hover:bg-emerald-500"
         >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

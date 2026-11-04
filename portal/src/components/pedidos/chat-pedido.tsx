@@ -48,6 +48,11 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
   const [fotoUploading, setFotoUploading] = useState(false)
   const [fotoError, setFotoError] = useState('')
   // lightbox
+  const [sendError, setSendError] = useState('')
+  const uploadGeneration = useRef(0)
+  const sending = useRef(false)
+  useEffect(() => () => { uploadGeneration.current++ }, [])
+  useEffect(() => () => { if (fotoPreview) URL.revokeObjectURL(fotoPreview) }, [fotoPreview])
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -58,29 +63,37 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
   }, [mensagens])
 
   const handleSelectFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (sending.current) return
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setFotoError('Selecione apenas imagens.')
       return
     }
+    const request = ++uploadGeneration.current
+    setFotoUrl('')
     setFotoFile(file)
     setFotoPreview(URL.createObjectURL(file))
     setFotoError('')
     setFotoUploading(true)
     try {
       const url = await uploadFotoChat(file)
+      if (request !== uploadGeneration.current) return
       setFotoUrl(url)
     } catch {
+      if (request !== uploadGeneration.current) return
       setFotoError('Erro ao enviar imagem. Tente novamente.')
       setFotoFile(null)
       setFotoPreview('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
     } finally {
-      setFotoUploading(false)
+      if (request === uploadGeneration.current) setFotoUploading(false)
     }
   }
 
   const removeFoto = () => {
+    uploadGeneration.current++
+    setFotoUploading(false)
     setFotoFile(null)
     setFotoPreview('')
     setFotoUrl('')
@@ -90,22 +103,30 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
-    if ((!texto.trim() && !fotoUrl) || loading || fotoUploading) return
+    if ((!texto.trim() && !fotoUrl) || sending.current || fotoUploading || !!fotoError) return
 
+    sending.current = true
     setLoading(true)
+    setSendError('')
     const currentText = texto
     const currentFoto = fotoUrl
-    setTexto('')
-    removeFoto()
+
 
     try {
       const res = await enviarMensagem(ordemId, currentText, currentFoto || undefined)
-      if (res.success && res.mensagem) {
+      if (!res.success || !res.mensagem) {
+        setSendError(res.error || 'Não foi possível enviar a mensagem. Tente novamente.')
+        return
+      }
+      setTexto('')
+      removeFoto()
+      if (res.mensagem) {
         setMensagens(prev => [...prev, res.mensagem as Mensagem])
       }
     } catch (error) {
-      console.error(error)
+      setSendError(error instanceof Error ? error.message : 'Não foi possível enviar a mensagem. Tente novamente.')
     } finally {
+      sending.current = false
       setLoading(false)
     }
   }
@@ -221,7 +242,7 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
                   <p className="text-[10px] text-emerald-500 mt-0.5">Pronto para enviar</p>
                 )}
               </div>
-              <button onClick={removeFoto} className="p-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors shrink-0">
+              <button type="button" disabled={loading} onClick={removeFoto} className="p-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors shrink-0">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -237,6 +258,14 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
           </div>
         )}
 
+        {fotoError && (
+          <div className="px-3 text-sm text-red-600">
+            <p role="alert">{fotoError}</p>
+            <button type="button" disabled={loading} onClick={removeFoto} className="underline">Descartar anexo</button>
+          </div>
+        )}
+        {sendError && <p role="alert" className="px-3 text-sm text-red-600">{sendError}</p>}
+
         {/* Campo de texto + botões */}
         <form onSubmit={handleSend} className="p-3 border-t border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2">
           {/* Input hidden para câmera */}
@@ -244,6 +273,7 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
             type="file"
             accept="image/*"
             capture="environment"
+            disabled={loading}
             ref={fileInputRef}
             onChange={handleSelectFoto}
             className="hidden"
@@ -269,7 +299,7 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
           />
           <Button
             type="submit"
-            disabled={(!texto.trim() && !fotoUrl) || loading || fotoUploading}
+            disabled={(!texto.trim() && !fotoUrl) || loading || fotoUploading || !!fotoError}
             className="rounded-xl px-4 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

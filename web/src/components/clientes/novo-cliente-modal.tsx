@@ -1,22 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2 } from 'lucide-react'
-import { createCliente } from '@/actions/clientes'
+import { createCliente, updateCliente } from '@/actions/clientes'
+import { validarCliente, type ClienteCampos } from '@/lib/clientes-utils'
 
 interface NovoClienteModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  cliente?: ClienteCampos & { id: number }
 }
 
-export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModalProps) {
+export function NovoClienteModal({ isOpen, onClose, onSuccess, cliente }: NovoClienteModalProps) {
   const [loading, setLoading] = useState(false)
+  const pending = useRef(false)
+  const close = () => { if (!pending.current) onClose() }
   const [error, setError] = useState('')
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(cliente ? { nome: cliente.nome, telefone: cliente.telefone, email: cliente.email, cro: cliente.cro, endereco: cliente.endereco, observacoes: cliente.observacoes } : {
     nome: '',
     telefone: '',
     email: '',
@@ -32,11 +36,14 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (pending.current) return
+    pending.current = true
     setLoading(true)
     setError('')
     
     try {
-      const result = await createCliente(formData)
+      const data = validarCliente(formData)
+      const result = cliente ? await updateCliente(cliente.id, data) : await createCliente(data)
       
       if (result.success) {
         onSuccess?.()
@@ -46,8 +53,9 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         setError(result.error || 'Erro ao criar cliente')
       }
     } catch {
-      setError('Ocorreu um erro inesperado')
+      setError('Não foi possível salvar. Verifique os dados e tente novamente.')
     } finally {
+      pending.current = false
       setLoading(false)
     }
   }
@@ -55,24 +63,25 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title="Novo Cliente"
-      description="Cadastre um novo dentista"
+      onClose={close}
+      title={cliente ? 'Editar Cliente' : 'Novo Cliente'}
+      description={cliente ? 'Atualize os dados do dentista' : 'Cadastre um novo dentista'}
       size="md"
       dismissible={!loading}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+          <div role="alert" className="p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
             {error}
           </div>
         )}
         
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="cliente-nome" className="block text-sm font-medium text-slate-700 mb-1.5">
             Nome Completo *
           </label>
           <Input
+            id="cliente-nome"
             name="nome"
             value={formData.nome}
             onChange={handleChange}
@@ -83,10 +92,11 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label htmlFor="cliente-cro" className="block text-sm font-medium text-slate-700 mb-1.5">
               CRO *
             </label>
             <Input
+              id="cliente-cro"
               name="cro"
               value={formData.cro}
               onChange={handleChange}
@@ -95,10 +105,11 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label htmlFor="cliente-telefone" className="block text-sm font-medium text-slate-700 mb-1.5">
               Telefone *
             </label>
             <Input
+              id="cliente-telefone"
               name="telefone"
               value={formData.telefone}
               onChange={handleChange}
@@ -109,11 +120,12 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="cliente-email" className="block text-sm font-medium text-slate-700 mb-1.5">
             Email
           </label>
           <Input
             type="email"
+            id="cliente-email"
             name="email"
             value={formData.email}
             onChange={handleChange}
@@ -122,10 +134,11 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="cliente-endereco" className="block text-sm font-medium text-slate-700 mb-1.5">
             Endereço
           </label>
           <Input
+            id="cliente-endereco"
             name="endereco"
             value={formData.endereco}
             onChange={handleChange}
@@ -134,10 +147,11 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="cliente-observacoes" className="block text-sm font-medium text-slate-700 mb-1.5">
             Observações
           </label>
           <textarea
+            id="cliente-observacoes"
             name="observacoes"
             value={formData.observacoes}
             onChange={handleChange}
@@ -148,7 +162,7 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+          <Button type="button" variant="outline" onClick={close} disabled={loading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={loading}>
@@ -158,7 +172,7 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess }: NovoClienteModa
                 Salvando...
               </>
             ) : (
-              'Cadastrar'
+              cliente ? 'Salvar alterações' : 'Cadastrar'
             )}
           </Button>
         </div>

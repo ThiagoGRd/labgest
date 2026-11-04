@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Archive, Loader2, PackageCheck, RotateCcw } from 'lucide-react'
 import { alterarStatusItemEstoque, createItemEstoque, updateItemEstoque } from '@/actions/estoque'
 import { Modal } from '@/components/ui/modal'
@@ -19,6 +19,7 @@ const categorias = ['Resina', 'Metal', 'Dentes', 'Gesso', 'Cerâmica', 'Cera', '
 const unidades = ['g', 'kg', 'ml', 'L', 'unidade', 'caixa', 'kit', 'placa', 'frasco']
 
 export function NovoItemEstoqueModal({ item, onClose, onSuccess }: ItemEstoqueModalProps) {
+  const pendingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -42,42 +43,58 @@ export function NovoItemEstoqueModal({ item, onClose, onSuccess }: ItemEstoqueMo
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    setError('')
-    const dados = {
-      nome: formData.nome,
-      marca: formData.marca,
-      categoria: formData.categoria,
-      unidade: formData.unidade,
-      quantidadeMinima: Number(formData.minimo) || 0,
-      precoUnitario: Number(formData.preco) || 0,
-      fornecedor: formData.fornecedor,
-      localizacao: formData.localizacao,
-      dataValidade: formData.validade,
-      codigoBarras: formData.codigoBarras,
+    try {
+      setError('')
+      const dados = {
+        nome: formData.nome,
+        marca: formData.marca,
+        categoria: formData.categoria,
+        unidade: formData.unidade,
+        quantidadeMinima: Number(formData.minimo) || 0,
+        precoUnitario: Number(formData.preco) || 0,
+        fornecedor: formData.fornecedor,
+        localizacao: formData.localizacao,
+        dataValidade: formData.validade,
+        codigoBarras: formData.codigoBarras,
+      }
+      const resultado = item
+        ? await updateItemEstoque(item.id, dados)
+        : await createItemEstoque({ ...dados, quantidade: Number(formData.quantidade) || 0 })
+      if (!resultado.success) {
+        setError(resultado.error || 'Não foi possível salvar o item.')
+        return
+      }
+      onSuccess()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
     }
-    const resultado = item
-      ? await updateItemEstoque(item.id, dados)
-      : await createItemEstoque({ ...dados, quantidade: Number(formData.quantidade) || 0 })
-    setLoading(false)
-    if (!resultado.success) {
-      setError(resultado.error || 'Não foi possível salvar o item.')
-      return
-    }
-    onSuccess()
   }
 
   async function alterarStatus() {
     if (!item) return
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    setError('')
-    const resultado = await alterarStatusItemEstoque(item.id, !item.ativo)
-    setLoading(false)
-    if (!resultado.success) {
-      setError(resultado.error || 'Não foi possível alterar o status.')
-      return
+    try {
+      setError('')
+      const resultado = await alterarStatusItemEstoque(item.id, !item.ativo)
+      if (!resultado.success) {
+        setError(resultado.error || 'Não foi possível alterar o status.')
+        return
+      }
+      onSuccess()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
     }
-    onSuccess()
   }
 
   return (

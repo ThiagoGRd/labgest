@@ -2,7 +2,7 @@
   "name": "labgest",
   "version": "1.0.0",
   "private": true,
-  "description": "Sistema de Gestão para Laboratório de Prótese Dentária",
+  "description": "Sistema de Gest\u00e3o para Laborat\u00f3rio de Pr\u00f3tese Dent\u00e1ria",
   "workspaces": [
     "web",
     "portal",
@@ -20,7 +20,8 @@
     "db:generate": "npm run generate --workspace=@labgest/database",
     "db:push": "npm run push --workspace=@labgest/database",
     "db:migrate": "npm run migrate --workspace=@labgest/database",
-    "db:studio": "npm run studio --workspace=@labgest/database"
+    "db:studio": "npm run studio --workspace=@labgest/database",
+    "check:secrets": "node scripts/check-release-secrets.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

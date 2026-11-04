@@ -33,6 +33,17 @@ const baixaSchema = z.object({
   observacoes: z.string().trim().max(1000).optional(),
 })
 
+// All mutations of a financial account acquire its row before reading balances or
+// touching ledger rows. Keep this order (account -> ledger) in every transaction.
+// Static table names and bound IDs keep this query safe; locks last until commit.
+async function bloquearConta(tx: Prisma.TransactionClient, id: number, tipo: 'receber' | 'pagar') {
+  if (tipo === 'receber') {
+    await tx.$queryRaw`SELECT id FROM contas_receber WHERE id = ${id} FOR UPDATE`
+  } else {
+    await tx.$queryRaw`SELECT id FROM contas_pagar WHERE id = ${id} FOR UPDATE`
+  }
+}
+
 function revalidarFinanceiro() {
   revalidatePath('/financeiro')
   revalidatePath('/relatorios')
@@ -63,26 +74,27 @@ function statusPagar(status: string | null, vencimento: Date, pago: number, tota
   return vencimento < inicioDoDia() ? 'Vencido' : 'Pendente'
 }
 
+// Bulk backfill cannot infer historical competence/due dates safely. Recovery
+// requires an explicit reviewed per-order operation with confirmed dates.
 export async function sincronizarFinanceiroRetroativo() {
+  await requireUser()
+  return { success: false, error: 'A sincronização em massa está desativada. Revise cada cobrança e confirme suas datas antes de recuperar o lançamento.' }
+}
+
+export async function gerarCobrancaAutomatica(ordemId: number) {
   const usuario = await requireUser()
   try {
-    const ordens = await prisma.ordem.findMany({
-      where: {
-        status: { in: ['Finalizado', 'Entregue'] },
-        contasReceber: { none: {} },
-        valorFinal: { gt: 0 },
-      },
-      select: {
-        id: true, servicoNome: true, nomePaciente: true, clienteId: true,
-        clienteNome: true, valorFinal: true, dataFinalizacao: true, updatedAt: true,
-      },
-    })
-
-    for (const ordem of ordens) {
-      const base = ordem.dataFinalizacao ?? ordem.updatedAt ?? new Date()
-      await prisma.contaReceber.create({
+    const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+      const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+      if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+      if (await tx.contaReceber.findFirst({ where: { ordemId } })) {
+        return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
+      }
+      const base = ordem.dataFinalizacao ?? new Date()
+      await tx.contaReceber.create({
         data: {
-          ordemId: ordem.id,
+          ordemId,
           descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
           clienteId: ordem.clienteId,
           clienteNome: ordem.clienteNome,
@@ -91,41 +103,12 @@ export async function sincronizarFinanceiroRetroativo() {
           dataVencimento: new Date(base.getFullYear(), base.getMonth(), base.getDate()),
           status: 'Pendente',
           usuarioId: usuario.id,
-          observacoes: `Gerado retroativamente — Ordem #${ordem.id}`,
+          observacoes: `Gerado automaticamente — Ordem #${ordem.id}`,
         },
       })
-    }
-    revalidarFinanceiro()
-    return { success: true, criadas: ordens.length }
-  } catch (error) {
-    console.error('Erro na sincronização retroativa:', error)
-    return { success: false, error: 'Não foi possível sincronizar as cobranças.' }
-  }
-}
-
-export async function gerarCobrancaAutomatica(ordemId: number) {
-  const usuario = await requireUser()
-  try {
-    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-    if (await prisma.contaReceber.findFirst({ where: { ordemId } })) {
-      return { success: false, error: 'Já existe uma cobrança para esta ordem.' }
-    }
-    const base = ordem.dataFinalizacao ?? new Date()
-    await prisma.contaReceber.create({
-      data: {
-        ordemId,
-        descricao: `${ordem.servicoNome} — Pac: ${ordem.nomePaciente}`,
-        clienteId: ordem.clienteId,
-        clienteNome: ordem.clienteNome,
-        valor: ordem.valorFinal,
-        dataCompetencia: base,
-        dataVencimento: new Date(base.getFullYear(), base.getMonth(), base.getDate()),
-        status: 'Pendente',
-        usuarioId: usuario.id,
-        observacoes: `Gerado automaticamente — Ordem #${ordem.id}`,
-      },
+      return { success: true as const }
     })
+    if (!resultado.success) return resultado
     revalidarFinanceiro()
     revalidatePath('/ordens')
     return { success: true }
@@ -349,24 +332,29 @@ export async function editarConta(id: number, tipo: 'receber' | 'pagar', input: 
   try {
     if (!input.descricao.trim() || input.valor <= 0) return { success: false, error: 'Revise a descrição e o valor.' }
     const dataVencimento = parseDateLocal(input.vencimento)
-    if (tipo === 'receber') {
-      const conta = await prisma.contaReceber.findUnique({ where: { id } })
-      if (!conta || conta.status === 'Cancelado') return { success: false, error: 'Esta conta não pode ser editada.' }
-      if (input.valor < Number(conta.valorRecebido)) return { success: false, error: 'O valor não pode ser menor que o total já recebido.' }
-      await prisma.contaReceber.update({ where: { id }, data: {
-        descricao: input.descricao.trim(), valor: input.valor, dataVencimento, observacoes: input.observacoes,
-        status: Number(conta.valorRecebido) >= input.valor ? 'Recebido' : Number(conta.valorRecebido) > 0 ? 'Parcial' : 'Pendente',
-      } })
-    } else {
-      const conta = await prisma.contaPagar.findUnique({ where: { id } })
-      if (!conta || conta.status === 'Cancelado') return { success: false, error: 'Esta conta não pode ser editada.' }
-      if (input.valor < Number(conta.valorPago)) return { success: false, error: 'O valor não pode ser menor que o total já pago.' }
-      await prisma.contaPagar.update({ where: { id }, data: {
-        descricao: input.descricao.trim(), valor: input.valor, dataVencimento,
-        categoria: input.categoria, fornecedor: input.fornecedor, observacoes: input.observacoes,
-        status: Number(conta.valorPago) >= input.valor ? 'Pago' : Number(conta.valorPago) > 0 ? 'Parcial' : 'Pendente',
-      } })
-    }
+    const resultado = await prisma.$transaction(async (tx) => {
+      await bloquearConta(tx, id, tipo)
+      if (tipo === 'receber') {
+        const conta = await tx.contaReceber.findUnique({ where: { id } })
+        if (!conta || conta.status === 'Cancelado') return { success: false, error: 'Esta conta não pode ser editada.' }
+        if (input.valor < Number(conta.valorRecebido)) return { success: false, error: 'O valor não pode ser menor que o total já recebido.' }
+        await tx.contaReceber.update({ where: { id }, data: {
+          descricao: input.descricao.trim(), valor: input.valor, dataVencimento, observacoes: input.observacoes,
+          status: Number(conta.valorRecebido) >= input.valor ? 'Recebido' : Number(conta.valorRecebido) > 0 ? 'Parcial' : 'Pendente',
+        } })
+      } else {
+        const conta = await tx.contaPagar.findUnique({ where: { id } })
+        if (!conta || conta.status === 'Cancelado') return { success: false, error: 'Esta conta não pode ser editada.' }
+        if (input.valor < Number(conta.valorPago)) return { success: false, error: 'O valor não pode ser menor que o total já pago.' }
+        await tx.contaPagar.update({ where: { id }, data: {
+          descricao: input.descricao.trim(), valor: input.valor, dataVencimento,
+          categoria: input.categoria, fornecedor: input.fornecedor, observacoes: input.observacoes,
+          status: Number(conta.valorPago) >= input.valor ? 'Pago' : Number(conta.valorPago) > 0 ? 'Parcial' : 'Pendente',
+        } })
+      }
+      return { success: true as const }
+    })
+    if (!resultado.success) return resultado
     revalidarFinanceiro()
     return { success: true }
   } catch (error) {
@@ -380,6 +368,7 @@ export async function liquidarConta(input: z.input<typeof baixaSchema>) {
   try {
     const data = baixaSchema.parse(input)
     await prisma.$transaction(async (tx) => {
+      await bloquearConta(tx, data.id, data.tipo)
       const contaFinanceira = data.contaFinanceiraId ?? (await tx.contaFinanceira.findFirst({ where: { ativo: true }, select: { id: true } }))?.id
       if (data.tipo === 'receber') {
         const conta = await tx.contaReceber.findUnique({ where: { id: data.id } })
@@ -430,6 +419,7 @@ export async function estornarBaixa(id: number, tipo: 'receber' | 'pagar', motiv
   if (motivoLimpo.length < 5) return { success: false, error: 'Explique o motivo do estorno.' }
   try {
     await prisma.$transaction(async (tx) => {
+      await bloquearConta(tx, id, tipo)
       const estorno = { estornadaEm: new Date(), estornadaPor: usuario.nome, motivoEstorno: motivoLimpo }
       if (tipo === 'receber') {
         const conta = await tx.contaReceber.findUnique({ where: { id } })
@@ -465,15 +455,20 @@ export async function cancelarConta(id: number, tipo: 'receber' | 'pagar', motiv
   const usuario = await requireUser()
   if (motivo.trim().length < 5) return { success: false, error: 'Explique o motivo do cancelamento.' }
   try {
-    if (tipo === 'receber') {
-      const conta = await prisma.contaReceber.findUnique({ where: { id } })
-      if (!conta || Number(conta.valorRecebido) > 0) return { success: false, error: 'Uma conta com recebimentos precisa ter as baixas estornadas antes.' }
-      await prisma.contaReceber.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
-    } else {
-      const conta = await prisma.contaPagar.findUnique({ where: { id } })
-      if (!conta || Number(conta.valorPago) > 0) return { success: false, error: 'Uma conta com pagamentos precisa ter as baixas estornadas antes.' }
-      await prisma.contaPagar.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
-    }
+    const resultado = await prisma.$transaction(async (tx) => {
+      await bloquearConta(tx, id, tipo)
+      if (tipo === 'receber') {
+        const conta = await tx.contaReceber.findUnique({ where: { id } })
+        if (!conta || Number(conta.valorRecebido) > 0) return { success: false, error: 'Uma conta com recebimentos precisa ter as baixas estornadas antes.' }
+        await tx.contaReceber.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
+      } else {
+        const conta = await tx.contaPagar.findUnique({ where: { id } })
+        if (!conta || Number(conta.valorPago) > 0) return { success: false, error: 'Uma conta com pagamentos precisa ter as baixas estornadas antes.' }
+        await tx.contaPagar.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
+      }
+      return { success: true as const }
+    })
+    if (!resultado.success) return resultado
     revalidarFinanceiro()
     return { success: true }
   } catch (error) {

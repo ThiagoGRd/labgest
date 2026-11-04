@@ -1,30 +1,39 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Camera, FileImage, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from './button'
 import Image from 'next/image'
 
 interface CameraUploadProps {
-  onUploadComplete: (path: string) => void
+  onUploadComplete: (path: string) => void | Promise<void>
+  onStatusChange?: (status: 'idle' | 'uploading' | 'error' | 'complete') => void
+  disabled?: boolean
   label?: string
   instruction?: string
 }
 
 export function CameraUpload({ 
-  onUploadComplete, 
+  onUploadComplete, onStatusChange, disabled = false,
   label = "Tirar Foto do Caso",
   instruction = "Para evitar distorção no tamanho do dente, recomendamos usar a câmera com Zoom 2x e boa iluminação."
 }: CameraUploadProps) {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string>('')
   const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const persisting = useRef(false)
   const [error, setError] = useState('')
   const [uploadedPath, setUploadedPath] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const generation = useRef(0)
+  useEffect(() => () => { generation.current++ }, [])
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled || persisting.current) return
     setError('')
     const selectedFile = e.target.files?.[0]
     
@@ -42,7 +51,11 @@ export function CameraUpload({
   }
 
   const handleUpload = async (fileToUpload: File) => {
+    const request = ++generation.current
+    setUploadedPath('')
+    void onUploadComplete('')
     setUploading(true)
+    onStatusChange?.('uploading')
 
     try {
       const supabase = createClient()
@@ -59,24 +72,39 @@ export function CameraUpload({
 
       if (uploadError) throw uploadError
 
+      if (request !== generation.current) return
+      persisting.current = true
+      setSaving(true)
+      await onUploadComplete(data.path)
+      if (request !== generation.current) return
       setUploadedPath(data.path)
-      onUploadComplete(data.path)
+      onStatusChange?.('complete')
     } catch (err: unknown) {
-      console.error('Upload error:', err)
+      if (request !== generation.current) return
       setError(err instanceof Error ? err.message : 'Erro ao enviar a imagem')
       setFile(null)
       setPreview('')
+      if (inputRef.current) inputRef.current.value = ''
+      onStatusChange?.('error')
     } finally {
-      setUploading(false)
+      if (request === generation.current) {
+        persisting.current = false
+        setSaving(false)
+        setUploading(false)
+      }
     }
   }
 
   const removeFile = () => {
+    if (disabled || persisting.current) return
+    generation.current++
+    setUploading(false)
+    onStatusChange?.('idle')
     setFile(null)
     setPreview('')
     setUploadedPath('')
     setError('')
-    onUploadComplete('')
+    void onUploadComplete('')
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -102,6 +130,7 @@ export function CameraUpload({
         accept="image/*"
         capture="environment"
         ref={inputRef}
+        disabled={disabled || saving}
         onChange={handleFileChange}
         className="hidden"
       />
@@ -109,6 +138,7 @@ export function CameraUpload({
       {!file ? (
         <Button 
           type="button"
+          disabled={disabled || saving}
           onClick={() => inputRef.current?.click()}
           className="w-full h-24 border-2 border-dashed border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/50 hover:bg-slate-100 hover:border-indigo-400 dark:hover:bg-zinc-800 dark:hover:border-indigo-500 transition-colors flex flex-col items-center justify-center gap-2 text-slate-600 dark:text-slate-400"
           variant="ghost"
@@ -137,7 +167,7 @@ export function CameraUpload({
                 <div className="flex items-center gap-2 mt-1">
                   {uploading ? (
                     <span className="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1 font-medium">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Enviando...
+                      <Loader2 className="h-3 w-3 animate-spin" /> {saving ? 'Salvando...' : 'Enviando...'}
                     </span>
                   ) : uploadedPath ? (
                     <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
@@ -150,22 +180,24 @@ export function CameraUpload({
               </div>
             </div>
             
-            {(!uploading) && (
-              <button 
-                onClick={removeFile}
-                className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                title="Remover Imagem"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={disabled || saving}
+              onClick={removeFile}
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+              title="Remover Imagem"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          
-          {error && (
-            <div className="mt-3 p-2 bg-red-50 dark:bg-red-500/10 rounded border border-red-100 dark:border-red-500/20 text-xs text-red-600 dark:text-red-400">
-              {error}
-            </div>
-          )}
+        </div>
+      )}
+      {error && (
+        <div className="mt-2 text-xs text-red-600">
+          <p role="alert">{error}</p>
+          <button type="button" disabled={disabled || saving} onClick={removeFile} className="mt-2 underline">
+            Descartar anexo
+          </button>
         </div>
       )}
     </div>

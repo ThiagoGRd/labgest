@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { podeVerConfiguracoes } from '@/lib/admin-interactions'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
@@ -60,6 +61,7 @@ interface SidebarProps {
     nome: string
     email: string
     tipo: string
+    permissoes?: string[]
   }
 }
 
@@ -120,7 +122,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-        {navigation.filter((item) => user.tipo !== 'recepcao' || item.href === '/recepcao').map((item) => {
+        {navigation.filter((item) => (user.tipo !== 'recepcao' || item.href === '/recepcao') && (item.href !== '/configuracoes' || podeVerConfiguracoes(user))).map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
           return (
             <Link

@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
+import { Modal } from '@/components/ui/modal'
+import { clientesCsv } from '@/lib/clientes-utils'
+import { useRouter } from 'next/navigation'
 import { NovoClienteModal } from '@/components/clientes/novo-cliente-modal'
 import {
   Search,
@@ -35,6 +38,7 @@ interface Cliente {
   totalPedidos: number
   valorTotal: number
   ultimoPedido: string | null
+  observacoes: string
 }
 
 interface ClientesViewProps {
@@ -55,6 +59,8 @@ function formatDate(dateStr: string | null) {
 }
 
 export function ClientesView({ initialData }: ClientesViewProps) {
+  const router = useRouter()
+  const [selected, setSelected] = useState<{ cliente: Cliente; mode: 'view' | 'edit' } | null>(null)
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -63,7 +69,7 @@ export function ClientesView({ initialData }: ClientesViewProps) {
   const clientes = initialData || []
 
   const filteredClientes = clientes.filter(cliente => {
-    const matchSearch = 
+    const matchSearch =
       cliente.nome.toLowerCase().includes(search.toLowerCase()) ||
       cliente.email.toLowerCase().includes(search.toLowerCase()) ||
       cliente.cro.toLowerCase().includes(search.toLowerCase())
@@ -73,25 +79,46 @@ export function ClientesView({ initialData }: ClientesViewProps) {
 
   return (
     <DashboardLayout>
-      <NovoClienteModal 
-        isOpen={modalOpen} 
+      {modalOpen && <NovoClienteModal
+        isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSuccess={() => {
           // A página será revalidada automaticamente pelo Server Action
           setModalOpen(false)
+          router.refresh()
           toast.success('Cliente cadastrado com sucesso!')
         }}
-      />
-      
-      <Header 
-        title="Clientes" 
+      />}
+      {selected?.mode === 'edit' && <NovoClienteModal
+        key={selected.cliente.id}
+        isOpen
+        cliente={selected.cliente}
+        onClose={() => setSelected(null)}
+        onSuccess={() => { setSelected(null); router.refresh(); toast.success('Cliente atualizado com sucesso!') }}
+      />}
+      {selected?.mode === 'view' && <Modal isOpen onClose={() => setSelected(null)} title="Detalhes do Cliente" description={selected.cliente.nome}>
+        <dl className="space-y-3 text-sm">
+          {[
+            ['Nome', selected.cliente.nome], ['CRO', selected.cliente.cro],
+            ['Telefone', selected.cliente.telefone], ['Email', selected.cliente.email],
+            ['Endereço', selected.cliente.endereco], ['Observações', selected.cliente.observacoes],
+            ['Status', selected.cliente.ativo ? 'Ativo' : 'Inativo'],
+            ['Pedidos', String(selected.cliente.totalPedidos)], ['Valor total', formatCurrency(selected.cliente.valorTotal)],
+            ['Último pedido', formatDate(selected.cliente.ultimoPedido)],
+          ].map(([label, value]) => <div key={label}><dt className="font-medium">{label}</dt><dd className="whitespace-pre-wrap break-words">{value || '-'}</dd></div>)}
+        </dl>
+        <div className="flex justify-end mt-6"><Button variant="outline" onClick={() => setSelected(null)}>Fechar</Button></div>
+      </Modal>}
+
+      <Header
+        title="Clientes"
         subtitle={`${clientes.filter(c => c.ativo).length} dentistas ativos`}
         action={{
           label: 'Novo Cliente',
           onClick: () => setModalOpen(true),
         }}
       />
-      
+
       <div className="p-6 space-y-6">
         {/* Filters */}
         <Card>
@@ -116,7 +143,22 @@ export function ClientesView({ initialData }: ClientesViewProps) {
                   />
                   <span className="text-sm text-slate-600">Mostrar inativos</span>
                 </label>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" aria-label="Exportar clientes filtrados" disabled={filteredClientes.length === 0} onClick={() => {
+                  let url: string | undefined
+                  try {
+                    url = URL.createObjectURL(new Blob([clientesCsv(filteredClientes)], { type: 'text/csv;charset=utf-8;' }))
+                    const link = document.createElement('a')
+                    link.href = url
+                    link.download = 'clientes.csv'
+                    document.body.appendChild(link)
+                    link.click()
+                    link.remove()
+                  } catch {
+                    toast.error('Não foi possível exportar. Tente novamente.')
+                  } finally {
+                    if (url) { const downloadUrl = url; setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000) }
+                  }
+                }}>
                   <Download className="h-4 w-4" />
                 </Button>
               </div>
@@ -181,10 +223,10 @@ export function ClientesView({ initialData }: ClientesViewProps) {
                     Último pedido: {formatDate(cliente.ultimoPedido)}
                   </p>
                   <div className="flex items-center gap-1">
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button type="button" aria-label={`Ver ${cliente.nome}`} onClick={() => setSelected({ cliente, mode: 'view' })} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
                       <Eye className="h-4 w-4" />
                     </button>
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button type="button" aria-label={`Editar ${cliente.nome}`} onClick={() => setSelected({ cliente, mode: 'edit' })} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors">
                       <Edit className="h-4 w-4" />
                     </button>
                   </div>
@@ -194,7 +236,7 @@ export function ClientesView({ initialData }: ClientesViewProps) {
           ))}
 
           {/* Add New Card */}
-          <Card 
+          <Card
             className="border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors cursor-pointer"
             onClick={() => setModalOpen(true)}
           >

@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { editarConta } from '@/actions/financeiro'
 import { Button } from '@/components/ui/button'
@@ -20,26 +20,36 @@ interface ContaEdicao {
 
 export function EditarContaModal({ conta, onClose }: { conta: ContaEdicao; onClose: () => void }) {
   const id = useId()
+  const pendingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleSubmit(formData: FormData) {
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    const resultado = await editarConta(conta.id, conta.tipo, {
-      descricao: String(formData.get('descricao') || ''),
-      valor: Number(formData.get('valor')),
-      vencimento: String(formData.get('vencimento') || ''),
-      categoria: String(formData.get('categoria') || ''),
-      fornecedor: String(formData.get('fornecedor') || ''),
-      observacoes: String(formData.get('observacoes') || ''),
-    })
-    setLoading(false)
-    if (!resultado.success) return setError(resultado.error || 'Não foi possível salvar.')
-    onClose()
+    try {
+      setError('')
+      const resultado = await editarConta(conta.id, conta.tipo, {
+        descricao: String(formData.get('descricao') || ''),
+        valor: Number(formData.get('valor')),
+        vencimento: String(formData.get('vencimento') || ''),
+        categoria: String(formData.get('categoria') || ''),
+        fornecedor: String(formData.get('fornecedor') || ''),
+        observacoes: String(formData.get('observacoes') || ''),
+      })
+      if (!resultado.success) return setError(resultado.error || 'Não foi possível salvar.')
+      onClose()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
+    }
   }
 
   return <Modal isOpen onClose={onClose} title="Editar lançamento" description="Valores já liquidados ficam protegidos" mobileFullscreen dismissible={!loading}>
-    <form action={handleSubmit} className="space-y-4">
+    <form onSubmit={(event) => { event.preventDefault(); void handleSubmit(new FormData(event.currentTarget)) }} className="space-y-4">
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div><label htmlFor={`${id}-descricao`} className="mb-1 block text-sm font-semibold">Descrição</label><Input id={`${id}-descricao`} name="descricao" defaultValue={conta.descricao} required minLength={3} /></div>
       <div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor={`${id}-valor`} className="mb-1 block text-sm font-semibold">Valor total</label><Input id={`${id}-valor`} name="valor" type="number" min="0.01" step="0.01" defaultValue={conta.valor} required /></div><div><label htmlFor={`${id}-vencimento`} className="mb-1 block text-sm font-semibold">Vencimento</label><Input id={`${id}-vencimento`} name="vencimento" type="date" defaultValue={conta.vencimento.slice(0, 10)} required /></div></div>

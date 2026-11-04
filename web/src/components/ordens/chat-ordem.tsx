@@ -45,6 +45,9 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
   const [mensagens, setMensagens] = useState<Mensagem[]>(mensagensIniciais || [])
   const [texto, setTexto] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const sendingRef = useRef(false)
+  const uploadVersion = useRef(0)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [fotoPreview, setFotoPreview] = useState<string>('')
   const [fotoUrl, setFotoUrl] = useState<string>('')
@@ -58,24 +61,44 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensagens])
 
+  useEffect(() => {
+    return () => { if (fotoPreview) URL.revokeObjectURL(fotoPreview) }
+  }, [fotoPreview])
+
+  useEffect(() => () => { uploadVersion.current += 1 }, [])
+
   const handleSelectFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !file.type.startsWith('image/')) return
+    if (!file || sendingRef.current) return
+    if (!file.type.startsWith('image/')) {
+      setError('Selecione uma imagem válida.')
+      e.target.value = ''
+      return
+    }
+    const version = ++uploadVersion.current
+    setError('')
+    setFotoUrl('')
     setFotoFile(file)
     setFotoPreview(URL.createObjectURL(file))
     setFotoUploading(true)
     try {
       const uploadedUrl = await uploadFotoChatLab(file, url)
-      setFotoUrl(uploadedUrl)
+      if (version === uploadVersion.current) setFotoUrl(uploadedUrl)
     } catch {
-      setFotoFile(null)
-      setFotoPreview('')
+      if (version === uploadVersion.current) {
+        setError('Não foi possível enviar a foto. Selecione a imagem novamente para tentar outra vez.')
+        setFotoFile(null)
+        setFotoPreview('')
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
     } finally {
-      setFotoUploading(false)
+      if (version === uploadVersion.current) setFotoUploading(false)
     }
   }
 
   const removeFoto = () => {
+    uploadVersion.current += 1
+    setFotoUploading(false)
     setFotoFile(null)
     setFotoPreview('')
     setFotoUrl('')
@@ -84,22 +107,24 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
-    if ((!texto.trim() && !fotoUrl) || loading || fotoUploading) return
+    if ((!texto.trim() && !fotoUrl) || sendingRef.current || fotoUploading) return
 
+    sendingRef.current = true
     setLoading(true)
-    const currentText = texto
-    const currentFoto = fotoUrl
-    setTexto('')
-    removeFoto()
-
+    setError('')
     try {
-      const res = await enviarMensagemLab(ordemId, currentText, currentFoto || undefined)
+      const res = await enviarMensagemLab(ordemId, texto, fotoUrl || undefined)
       if (res.success && res.mensagem) {
         setMensagens(prev => [...prev, res.mensagem])
+        setTexto('')
+        removeFoto()
+      } else {
+        setError(res.error || 'Não foi possível enviar a mensagem. Tente novamente.')
       }
-    } catch (error) {
-      console.error(error)
+    } catch {
+      setError('Não foi possível enviar a mensagem. Tente novamente.')
     } finally {
+      sendingRef.current = false
       setLoading(false)
     }
   }
@@ -175,6 +200,8 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
           <div ref={bottomRef} />
         </div>
 
+        {error && <p role="alert" className="px-3 py-2 text-sm text-red-600">{error}</p>}
+
         {/* Preview foto pendente */}
         {fotoFile && (
           <div className="px-3 py-2 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50 flex items-center gap-3">
@@ -187,7 +214,7 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
               )}
             </div>
             <span className="text-xs font-medium text-slate-500 flex-1 truncate">{fotoFile.name}</span>
-            <button onClick={removeFoto} className="p-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-slate-500 hover:text-red-500 transition-colors">
+            <button disabled={loading} aria-label="Remover foto" onClick={removeFoto} className="p-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-slate-500 hover:text-red-500 transition-colors">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>

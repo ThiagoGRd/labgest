@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { createConta } from '@/actions/financeiro'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ const categorias = ['Materiais', 'Laboratório externo', 'Folha de pagamento', '
 export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaContaModalProps) {
   const formId = useId()
   const [tipo, setTipo] = useState(tipoInicial)
+  const pendingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [parcelado, setParcelado] = useState(false)
@@ -27,28 +28,36 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
   const [valorTotal, setValorTotal] = useState('')
 
   async function handleSubmit(formData: FormData) {
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    setError('')
-    const resultado = await createConta({
-      tipo,
-      descricao: String(formData.get('descricao') || ''),
-      valor: Number(formData.get('valor')),
-      vencimento: String(formData.get('vencimento') || ''),
-      competencia: String(formData.get('competencia') || ''),
-      clienteId: tipo === 'receber' ? Number(formData.get('clienteId')) : undefined,
-      categoria: tipo === 'pagar' ? String(formData.get('categoria') || '') : undefined,
-      fornecedor: tipo === 'pagar' ? String(formData.get('fornecedor') || '') : undefined,
-      observacoes: String(formData.get('observacoes') || ''),
-      parcelas: tipo === 'pagar' && parcelado ? parcelas : 1,
-    })
-    setLoading(false)
-    if (!resultado.success) return setError(resultado.error || 'Não foi possível salvar.')
-    onClose()
+    try {
+      setError('')
+      const resultado = await createConta({
+        tipo,
+        descricao: String(formData.get('descricao') || ''),
+        valor: Number(formData.get('valor')),
+        vencimento: String(formData.get('vencimento') || ''),
+        competencia: String(formData.get('competencia') || ''),
+        clienteId: tipo === 'receber' ? Number(formData.get('clienteId')) : undefined,
+        categoria: tipo === 'pagar' ? String(formData.get('categoria') || '') : undefined,
+        fornecedor: tipo === 'pagar' ? String(formData.get('fornecedor') || '') : undefined,
+        observacoes: String(formData.get('observacoes') || ''),
+        parcelas: tipo === 'pagar' && parcelado ? parcelas : 1,
+      })
+      if (!resultado.success) return setError(resultado.error || 'Não foi possível salvar.')
+      onClose()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
+    }
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={tipo === 'receber' ? 'Nova conta a receber' : 'Nova conta a pagar'} description="Previsão financeira" mobileFullscreen dismissible={!loading}>
-      <form id={formId} action={handleSubmit} className="space-y-5">
+      <form id={formId} onSubmit={(event) => { event.preventDefault(); void handleSubmit(new FormData(event.currentTarget)) }} className="space-y-5">
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-zinc-800">
           <Button type="button" variant={tipo === 'receber' ? 'default' : 'ghost'} onClick={() => setTipo('receber')}>A receber</Button>

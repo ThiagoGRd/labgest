@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, Loader2, SlidersHorizontal } from 'lucide-react'
 import { registrarMovimentacaoEstoque } from '@/actions/estoque'
 import { Modal } from '@/components/ui/modal'
@@ -22,27 +22,36 @@ export function MovimentarEstoqueModal({ item, onClose, onSuccess }: MovimentarE
   const [motivo, setMotivo] = useState('')
   const [documento, setDocumento] = useState('')
   const [valorUnitario, setValorUnitario] = useState(String(item.precoUnitario || ''))
+  const pendingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    setError('')
-    const resultado = await registrarMovimentacaoEstoque({
-      estoqueId: item.id,
-      tipo,
-      quantidade: Number(quantidade),
-      motivo,
-      documento,
-      valorUnitario: tipo === 'Entrada' && valorUnitario ? Number(valorUnitario) : undefined,
-    })
-    setLoading(false)
-    if (!resultado.success) {
-      setError(resultado.error || 'Não foi possível registrar a movimentação.')
-      return
+    try {
+      setError('')
+      const resultado = await registrarMovimentacaoEstoque({
+        estoqueId: item.id,
+        tipo,
+        quantidade: Number(quantidade),
+        motivo,
+        documento,
+        valorUnitario: tipo === 'Entrada' && valorUnitario ? Number(valorUnitario) : undefined,
+      })
+      if (!resultado.success) {
+        setError(resultado.error || 'Não foi possível registrar a movimentação.')
+        return
+      }
+      onSuccess()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
     }
-    onSuccess()
   }
 
   const opcoes: Array<{ tipo: TipoMovimentacao; label: string; icon: typeof ArrowDownToLine }> = [

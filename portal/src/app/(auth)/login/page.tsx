@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { unstable_rethrow } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
@@ -16,10 +17,13 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const result = await login(formData)
-    
-    if (result?.error) {
-      setError(result.error)
+    try {
+      const result = await login(formData)
+      if (result?.error) setError(result.error)
+    } catch (error) {
+      unstable_rethrow(error)
+      setError('Não foi possível acessar o portal. Tente novamente.')
+    } finally {
       setLoading(false)
     }
   }
@@ -37,7 +41,7 @@ export default function LoginPage() {
 
         <form action={handleSubmit} className="space-y-5">
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div role="alert" className="p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>
             </div>
           )}

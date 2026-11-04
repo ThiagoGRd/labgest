@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { getUsuarioNavegacao } from '@/actions/usuario-navegacao'
 import { Sidebar } from '@/components/layout/sidebar'
 import { SidebarProvider, useSidebar } from '@/components/providers/sidebar-provider'
 import { cn } from '@/lib/utils'
@@ -11,14 +13,27 @@ interface DashboardLayoutProps {
     nome: string
     email: string
     tipo: string
+    permissoes?: string[]
   }
 }
 
 function DashboardContent({ children, user }: DashboardLayoutProps) {
   const { collapsed, toggleMobile } = useSidebar()
+  const [resolvedUser, setResolvedUser] = useState<DashboardLayoutProps['user']>()
+  const [userError, setUserError] = useState(false)
+  useEffect(() => {
+    if (user?.permissoes) return
+    let active = true
+    getUsuarioNavegacao().then(result => {
+      if (active) setResolvedUser(result)
+    }).catch(() => {
+      if (active) setUserError(true)
+    })
+    return () => { active = false }
+  }, [user])
 
-  const usuarioExibido = user ?? {
-    nome: 'Equipe LabGest',
+  const usuarioExibido = resolvedUser ?? user ?? {
+    nome: userError ? 'Usuário indisponível' : 'Carregando usuário...',
     email: '',
     tipo: 'Usuário',
   }

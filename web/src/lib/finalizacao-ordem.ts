@@ -5,6 +5,8 @@ export async function garantirEfeitosFinalizacao(
   ordemId: number,
   finalizadaEm = new Date(),
 ) {
+  // Shared creation lock: order first, then account/ledger if needed.
+  await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
   const ordem = await tx.ordem.findUnique({
     where: { id: ordemId },
     include: {

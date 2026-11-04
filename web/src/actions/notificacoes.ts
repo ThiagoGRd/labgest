@@ -1,25 +1,17 @@
 'use server'
 
 import { prisma } from '@labgest/database'
-import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 
 export async function getNotificacoesConfig() {
   await requireUser()
-  return {
-    novaOrdem: true,
-    atrasos: true,
-    estoqueBaixo: true,
-    ordemFinalizada: false,
-    resumoDiario: false
-  }
+  return { supported: false, error: 'Preferências de notificações ainda não estão disponíveis.' }
 }
 
 export async function saveNotificacoesConfig(config: Record<string, boolean>) {
   await requireUser()
-  console.log('Salvando preferências:', config)
-  revalidatePath('/configuracoes')
-  return { success: true }
+  void config // Compatibility only: these preferences have no delivery integration.
+  return { success: false, error: 'Preferências de notificações ainda não estão disponíveis. Nenhuma alteração foi salva.' }
 }
 
 export async function gerarNotificacaoWhatsApp(ordemId: number) {

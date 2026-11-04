@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { liquidarConta } from '@/actions/financeiro'
 import { Button } from '@/components/ui/button'
@@ -20,28 +20,38 @@ const formas = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro', 'Chequ
 export function BaixaContaModal({ conta, contasFinanceiras, onClose }: BaixaContaModalProps) {
   const id = useId()
   const [valor, setValor] = useState(conta ? String(conta.restante.toFixed(2)) : '')
+  const pendingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   async function handleSubmit(formData: FormData) {
     if (!conta) return
+    if (pendingRef.current) return
+    pendingRef.current = true
     setLoading(true)
-    const resultado = await liquidarConta({
-      id: conta.id,
-      tipo: conta.tipo,
-      valor: Number(valor),
-      data: String(formData.get('data')),
-      formaPagamento: String(formData.get('formaPagamento')),
-      contaFinanceiraId: Number(formData.get('contaFinanceiraId')) || undefined,
-      observacoes: String(formData.get('observacoes') || ''),
-    })
-    setLoading(false)
-    if (!resultado.success) return setError(resultado.error || 'Não foi possível registrar a baixa.')
-    onClose()
+    try {
+      setError('')
+      const resultado = await liquidarConta({
+        id: conta.id,
+        tipo: conta.tipo,
+        valor: Number(valor),
+        data: String(formData.get('data')),
+        formaPagamento: String(formData.get('formaPagamento')),
+        contaFinanceiraId: Number(formData.get('contaFinanceiraId')) || undefined,
+        observacoes: String(formData.get('observacoes') || ''),
+      })
+      if (!resultado.success) return setError(resultado.error || 'Não foi possível registrar a baixa.')
+      onClose()
+    } catch {
+      setError('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
+    }
   }
 
   return (
     <Modal isOpen={Boolean(conta)} onClose={onClose} title={conta?.tipo === 'receber' ? 'Registrar recebimento' : 'Registrar pagamento'} description={conta?.descricao} size="sm" mobileFullscreen dismissible={!loading}>
-      <form action={handleSubmit} className="space-y-4">
+      <form onSubmit={(event) => { event.preventDefault(); void handleSubmit(new FormData(event.currentTarget)) }} className="space-y-4">
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <div className="rounded-xl bg-slate-50 p-4 dark:bg-white/5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saldo em aberto</p><p className="mt-1 text-2xl font-bold">{formatCurrency(conta?.restante || 0)}</p></div>
         <div><label htmlFor={`${id}-valor`} className="mb-1 block text-sm font-semibold">Valor desta baixa</label><Input id={`${id}-valor`} value={valor} onChange={(event) => setValor(event.target.value)} type="number" min="0.01" max={conta?.restante} step="0.01" required /></div>

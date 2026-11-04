@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, CalendarDays,
-  CheckCircle2, CircleDollarSign, FileBarChart, Landmark, Plus, RefreshCw,
+  CheckCircle2, CircleDollarSign, FileBarChart, Landmark, Plus,
   Pencil, Search, TrendingUp, Undo2, XCircle,
 } from 'lucide-react'
-import { cancelarConta, estornarBaixa, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
+import { cancelarConta, estornarBaixa } from '@/actions/financeiro'
 import { BaixaContaModal } from '@/components/financeiro/baixa-conta-modal'
 import { EditarContaModal } from '@/components/financeiro/editar-conta-modal'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
@@ -112,7 +112,8 @@ export function FinanceiroView({ dados, criterioReceber }: FinanceiroViewProps) 
   const [cancelando, setCancelando] = useState(false)
   const [estorno, setEstorno] = useState<{ id: number; tipo: 'receber' | 'pagar'; descricao: string } | null>(null)
   const [estornando, setEstornando] = useState(false)
-  const [sincronizando, setSincronizando] = useState(false)
+  const cancelandoRef = useRef(false)
+  const estornandoRef = useRef(false)
 
   const filtrar = (itens: Lancamento[]) => itens.filter((item) => {
     const texto = `${item.descricao} ${item.cliente || ''} ${item.fornecedor || ''} ${item.paciente || ''} ${item.ordemId || ''}`.toLowerCase()
@@ -126,32 +127,41 @@ export function FinanceiroView({ dados, criterioReceber }: FinanceiroViewProps) 
 
   async function confirmarCancelamento(motivo: string) {
     if (!cancelamento) return
+    if (cancelandoRef.current) return
+    cancelandoRef.current = true
     setCancelando(true)
-    const resultado = await cancelarConta(cancelamento.id, cancelamento.tipo, motivo)
-    setCancelando(false)
-    if (!resultado.success) return toast.error(resultado.error)
-    toast.success('Lançamento cancelado e preservado no histórico.')
-    setCancelamento(null)
+    try {
+      const resultado = await cancelarConta(cancelamento.id, cancelamento.tipo, motivo)
+      if (!resultado.success) return toast.error(resultado.error)
+      toast.success('Lançamento cancelado e preservado no histórico.')
+      setCancelamento(null)
+    } catch {
+      toast.error('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      cancelandoRef.current = false
+      setCancelando(false)
+    }
   }
 
   async function confirmarEstorno(motivo: string) {
     if (!estorno) return
+    if (estornandoRef.current) return
+    estornandoRef.current = true
     setEstornando(true)
-    const resultado = await estornarBaixa(estorno.id, estorno.tipo, motivo)
-    setEstornando(false)
-    if (!resultado.success) return toast.error(resultado.error)
-    toast.success('Baixa estornada. O lançamento voltou a ficar em aberto.')
-    setEstorno(null)
-    router.refresh()
+    try {
+      const resultado = await estornarBaixa(estorno.id, estorno.tipo, motivo)
+      if (!resultado.success) return toast.error(resultado.error)
+      toast.success('Baixa estornada. O lançamento voltou a ficar em aberto.')
+      setEstorno(null)
+      router.refresh()
+    } catch {
+      toast.error('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      estornandoRef.current = false
+      setEstornando(false)
+    }
   }
 
-  async function sincronizar() {
-    setSincronizando(true)
-    const resultado = await sincronizarFinanceiroRetroativo()
-    setSincronizando(false)
-    if (!resultado.success) return toast.error(resultado.error)
-    toast.success(resultado.criadas ? `${resultado.criadas} cobranças recuperadas.` : 'Todas as ordens já estão sincronizadas.')
-  }
 
   return (
     <DashboardLayout>
@@ -177,7 +187,7 @@ export function FinanceiroView({ dados, criterioReceber }: FinanceiroViewProps) 
                   <SelectTrigger aria-label="Selecionar período" className="w-full sm:w-56"><SelectValue /></SelectTrigger>
                   <SelectContent>{dados.mesesDisponiveis.map((mes) => <SelectItem key={mes} value={mes}><span className="capitalize">{mesLabel(mes)}</span></SelectItem>)}</SelectContent>
                 </Select>
-                <Button variant="outline" size="icon" onClick={sincronizar} disabled={sincronizando} aria-label="Sincronizar cobranças de ordens finalizadas" title="Sincronizar ordens finalizadas"><RefreshCw className={`h-4 w-4 ${sincronizando ? 'animate-spin' : ''}`} /></Button>
+                <span className="max-w-56 text-xs text-slate-500" role="note">Sincronização histórica indisponível: cobranças antigas exigem revisão das datas de conclusão antes da recuperação.</span>
               </div>
             </div>
 
@@ -326,8 +336,8 @@ function LancamentosList({ itens, tipo, onBaixa, onEstornar, onEditar, onCancela
               <div className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
                 {lancamentos.map((item) => (
                   <article key={item.id} className="space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p>{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}<p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor || 'Não informado'} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div>
-                    <div className="flex items-end justify-between gap-3"><div><p className="text-lg font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}{item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</div><div className="flex gap-1">{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>}{podeEstornar(item) && <Button size="sm" variant="outline" onClick={() => onEstornar({ id: item.id, tipo, descricao: item.descricao })}><Undo2 className="h-4 w-4" />Estornar</Button>}{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div>
+                    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.descricao}</p>{item.ordemId && <a href={`/ordens?id=${item.ordemId}`} className="text-xs font-semibold text-indigo-600 hover:underline">OS #{item.ordemId} • {item.paciente}</a>}{item.parcelaNumero && item.parcelaTotal && <p className="text-xs font-semibold text-indigo-600">Parcela {item.parcelaNumero} de {item.parcelaTotal}</p>}<p className="text-xs text-slate-500">{tipo === 'receber' ? item.cliente : `${item.fornecedor || 'Não informado'} • ${item.categoria}`}</p></div><Badge variant={badgeVariant(item.status)}>{item.status}</Badge></div>
+                    <div className="flex items-end justify-between gap-3"><div><p className="text-lg font-bold">{formatCurrency(item.valor)}</p>{item.liquidado > 0 && <p className="text-xs font-medium text-emerald-600">{rotuloLiquidado}: {formatCurrency(item.liquidado)}</p>}{item.restante > 0 && item.liquidado > 0 && <p className="text-xs text-amber-600">Em aberto: {formatCurrency(item.restante)}</p>}{item.dataBaixa && <p className="text-xs text-slate-500">Baixa em {formatDate(item.dataBaixa)}</p>}</div><div className="flex flex-wrap justify-end gap-1">{item.liquidado === 0 && item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onCancelar(item.id)} aria-label={`Cancelar ${item.descricao}`} title="Cancelar lançamento"><XCircle className="h-4 w-4" /></Button>}{item.status !== 'Cancelado' && <Button size="icon" variant="ghost" onClick={() => onEditar(item)} aria-label={`Editar ${item.descricao}`}><Pencil className="h-4 w-4" /></Button>}{podeEstornar(item) && <Button size="sm" variant="outline" onClick={() => onEstornar({ id: item.id, tipo, descricao: item.descricao })}><Undo2 className="h-4 w-4" />Estornar</Button>}{statusAberto(item.status) && <Button size="sm" onClick={() => onBaixa({ id: item.id, tipo, descricao: item.descricao, restante: item.restante })}>{tipo === 'receber' ? 'Receber' : 'Pagar'}</Button>}</div></div>
                   </article>
                 ))}
               </div>

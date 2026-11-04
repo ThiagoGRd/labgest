@@ -193,8 +193,9 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   }
 
   const onPrintClick = async (ordem: Ordem) => {
+    try {
     const detalhes = await getOrdemById(ordem.id)
-    if (!detalhes) return
+    if (!detalhes) { toast.error('Não foi possível carregar a ordem para impressão.'); return }
     const dadosImpressao = {
       id: ordem.id,
       paciente: ordem.paciente,
@@ -210,6 +211,9 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     setTimeout(() => {
       handlePrint()
     }, 100)
+    } catch {
+      toast.error('Não foi possível carregar a ordem para impressão. Tente novamente.')
+    }
   }
 
   const ordens = resultado.ordens
@@ -225,25 +229,32 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   }
 
   const abrirOrdem = async (id: number, destino: 'ver' | 'editar' | 'fluxo') => {
+    if (openingOrdemId !== null) return
     setOpeningOrdemId(id)
     try {
       const ordem = await getOrdemById(id)
-      if (!ordem) return
+      if (!ordem) { toast.error('Não foi possível carregar a ordem.'); return }
       setSelectedOrdem(ordem)
       if (destino === 'ver') setViewModalOpen(true)
       if (destino === 'editar') setEditModalOpen(true)
       if (destino === 'fluxo') setWorkflowModalOpen(true)
+    } catch {
+      toast.error('Não foi possível carregar a ordem. Tente novamente.')
     } finally {
       setOpeningOrdemId(null)
     }
   }
 
   const handleNotify = async (id: number) => {
+    try {
     const result = await gerarNotificacaoWhatsApp(id)
     if (result.success && result.whatsappLink) {
       window.open(result.whatsappLink, '_blank', 'noopener,noreferrer')
     } else {
       toast.error(result.error || 'Não foi possível gerar a mensagem.')
+    }
+    } catch {
+      toast.error('Não foi possível gerar a mensagem. Tente novamente.')
     }
   }
 

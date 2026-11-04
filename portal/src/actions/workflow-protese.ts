@@ -24,6 +24,9 @@ export async function concluirEtapaClinica(ordemId: number) {
     const cliente = await tx.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }, select: { id: true } })
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
+    // Share the web's creation lock before taking the invoice snapshot. Restrict
+    // the lock to this authenticated clinic; ordering is order -> account/ledger.
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} AND cliente_id = ${cliente.id} FOR UPDATE`
     const ordem = await tx.ordem.findFirst({
       where: { id: ordemId, clienteId: cliente.id },
       include: { contasReceber: { where: { status: { not: 'Cancelado' } }, take: 1 } },

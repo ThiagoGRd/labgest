@@ -135,7 +135,8 @@ export async function getDashboardData() {
     usuario: {
       nome: usuario.nome,
       email: usuario.email,
-      tipo: usuario.tipo === 'admin' ? 'Administrador' : 'Operador',
+      tipo: usuario.tipo || '',
+      permissoes: usuario.permissoes,
     },
     totalOrdensMes,
     totalOrdensMesAnterior,

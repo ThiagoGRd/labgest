@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -89,7 +89,12 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   const [error, setError] = useState('')
   const [draftReady, setDraftReady] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
-  const [cameraPath, setCameraPath] = useState('')
+  const cameraPath = useRef('')
+  const filePath = useRef('')
+  const sending = useRef(false)
+  const [uploadStatuses, setUploadStatuses] = useState<Record<string, string>>({})
+  const [uploadKey, setUploadKey] = useState(0)
+  const uploadsBlocked = Object.values(uploadStatuses).some(status => status === 'uploading' || status === 'error')
   const [globalData, setGlobalData] = useState(initialGlobalData)
   const [dadosClinicos, setDadosClinicos] = useState(initialDadosClinicos)
   const [itens, setItens] = useState<ItemPedido[]>([])
@@ -172,18 +177,23 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
   }
 
   const handleFileUpload = (path: string) => {
-    if (!path) return
-    setGlobalData((prev) => ({ ...prev, arquivos: [...prev.arquivos, path] }))
+    const previousPath = filePath.current
+    filePath.current = path
+    setGlobalData((prev) => ({ ...prev, arquivos: [
+      ...prev.arquivos.filter(item => item !== previousPath),
+      ...(path ? [path] : []),
+    ] }))
   }
 
   const handleCameraUpload = (path: string) => {
+    const previousPath = cameraPath.current
+    cameraPath.current = path
     setGlobalData((prev) => ({
       ...prev,
       arquivos: path
-        ? [...prev.arquivos.filter((item) => item !== cameraPath), path]
-        : prev.arquivos.filter((item) => item !== cameraPath),
+        ? [...prev.arquivos.filter((item) => item !== previousPath), path]
+        : prev.arquivos.filter((item) => item !== previousPath),
     }))
-    setCameraPath(path)
   }
 
   const clearDraft = () => {
@@ -192,17 +202,22 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     setDadosClinicos(initialDadosClinicos)
     setItens([])
     setCurrentItem({ servicoId: '', elementos: '', corDentes: '', arcadas: 1, tipoProtese: 'geral' })
-    setCameraPath('')
+    cameraPath.current = ''
+    filePath.current = ''
+    setUploadStatuses({})
+    setUploadKey(key => key + 1)
     setDraftRestored(false)
     setError('')
   }
 
   const handleSubmit = async () => {
+    if (sending.current || uploadsBlocked) return
     if (!canSubmit) {
       setError('Preencha paciente, CPF válido, data de entrega e pelo menos um serviço.')
       return
     }
 
+    sending.current = true
     setLoading(true)
     setError('')
     try {
@@ -232,6 +247,7 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
     } catch {
       setError('Ocorreu um erro inesperado')
     } finally {
+      sending.current = false
       setLoading(false)
     }
   }
@@ -440,8 +456,9 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
                   <p className="text-xs text-slate-500">Opcional, mas ajuda o laboratório a entender o caso</p>
                 </div>
               </div>
-              <CameraUpload onUploadComplete={handleCameraUpload} label="Fotografar o caso" instruction="Use boa iluminação. No celular, abriremos a câmera traseira." />
-              <FileUpload onUploadComplete={handleFileUpload} label="Anexar STL, OBJ ou ZIP" />
+              <CameraUpload key={`camera-${uploadKey}`} disabled={loading} onStatusChange={status => setUploadStatuses(prev => ({ ...prev, camera: status }))} onUploadComplete={handleCameraUpload} label="Fotografar o caso" instruction="Use boa iluminação. No celular, abriremos a câmera traseira." />
+              {uploadsBlocked && <p role="status" className="text-sm text-amber-700">Conclua ou remova os anexos pendentes antes de enviar a ordem.</p>}
+              <FileUpload key={`file-${uploadKey}`} disabled={loading} onStatusChange={status => setUploadStatuses(prev => ({ ...prev, file: status }))} onUploadComplete={handleFileUpload} label="Anexar STL, OBJ ou ZIP" />
 
               {globalData.arquivos.length > 0 && (
                 <div className="space-y-2">
@@ -521,13 +538,13 @@ export function NovoPedidoView({ user, servicos }: NovoPedidoViewProps) {
             </div>
           </div>
 
-          <Button onClick={handleSubmit} disabled={loading || !canSubmit} className="hidden h-12 w-full bg-emerald-600 text-white hover:bg-emerald-700 md:flex">
+          <Button onClick={handleSubmit} disabled={loading || uploadsBlocked || !canSubmit} className="hidden h-12 w-full bg-emerald-600 text-white hover:bg-emerald-700 md:flex">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Send className="mr-2 h-5 w-5" /> Enviar ordem</>}
           </Button>
         </div>
 
         <div className="fixed inset-x-0 bottom-16 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 md:hidden">
-          <Button onClick={handleSubmit} disabled={loading || !canSubmit} className="h-12 w-full bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700">
+          <Button onClick={handleSubmit} disabled={loading || uploadsBlocked || !canSubmit} className="h-12 w-full bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Send className="mr-2 h-5 w-5" /> Enviar ordem • {formatCurrency(total)}</>}
           </Button>
         </div>

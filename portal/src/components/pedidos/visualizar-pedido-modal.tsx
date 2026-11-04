@@ -420,7 +420,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
                 </div>
               )}
               
-              <CameraUpload 
+              <CameraUpload key={pedido.id}
                 onUploadComplete={async (path: string) => {
                   if (!path) return;
                   const res = await adicionarFotoCaso(pedido.id, path)
@@ -431,7 +431,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
                     }))
                     toast.success("Foto enviada com sucesso!")
                   } else {
-                    toast.error("Falha ao salvar a foto na Ordem.")
+                    throw new Error("Falha ao salvar a foto na Ordem. Tente novamente.")
                   }
                 }}
               />

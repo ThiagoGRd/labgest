@@ -8,9 +8,17 @@ function criarTransacao(contasReceber: Array<{ id: number }> = []) {
   const atualizacoesOrdem: unknown[] = []
   let consultaOrdem: unknown
 
+  let locked = false
   const tx = {
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      assert.equal(strings.join('?'), 'SELECT id FROM ordens WHERE id = ? FOR UPDATE')
+      assert.deepEqual(values, [42])
+      locked = true
+      return [{ id: 42 }]
+    },
     ordem: {
       findUnique: async (consulta: unknown) => {
+        assert.ok(locked, 'Order must be locked before invoice snapshot')
         consultaOrdem = consulta
         return {
           id: 42,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { definirEtapaFluxoProtese } from '@/actions/workflow-protese'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ export function DefinirEtapaFluxoModal({ ordem, onClose, onSuccess }: DefinirEta
   const tipoSugerido = isTipoProtese(ordem.tipoWorkflow) ? ordem.tipoWorkflow : null
   const [tipo, setTipo] = useState<TipoProteseId | null>(tipoSugerido)
   const [passoId, setPassoId] = useState('')
+  const pendingRef = useRef(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const fluxo = tipo ? getFluxoProtese(tipo) : null
@@ -42,15 +43,23 @@ export function DefinirEtapaFluxoModal({ ordem, onClose, onSuccess }: DefinirEta
       return
     }
 
+    if (pendingRef.current) return
+    pendingRef.current = true
     setSalvando(true)
-    setErro('')
-    const resultado = await definirEtapaFluxoProtese(ordem.id, tipo, passoId)
-    setSalvando(false)
-    if (!resultado.success) {
-      setErro(resultado.error || 'Não foi possível definir a etapa')
-      return
+    try {
+      setErro('')
+      const resultado = await definirEtapaFluxoProtese(ordem.id, tipo, passoId)
+      if (!resultado.success) {
+        setErro(resultado.error || 'Não foi possível definir a etapa')
+        return
+      }
+      onSuccess()
+    } catch {
+      setErro('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    } finally {
+      pendingRef.current = false
+      setSalvando(false)
     }
-    onSuccess()
   }
 
   return (

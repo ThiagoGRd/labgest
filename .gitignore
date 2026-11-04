@@ -5,3 +5,13 @@ node_modules
 .next
 dist
 build
+
+# Never materialize or commit runtime credentials.
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account.json
+*.tsbuildinfo

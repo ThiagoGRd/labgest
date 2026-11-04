@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -76,9 +77,12 @@ export function PedidosView({ user, pedidos }: PedidosViewProps) {
       if (pedidoDetalhado) {
         setSelectedPedido(pedidoDetalhado as PedidoDetalhado)
         setModalOpen(true)
+      } else {
+        toast.error('Pedido não encontrado ou indisponível. Atualize a lista e tente novamente.')
       }
     } catch (error) {
       console.error('Erro ao abrir pedido:', error)
+      toast.error('Não foi possível abrir o pedido. Tente novamente.')
     } finally {
       setLoadingId(null)
     }

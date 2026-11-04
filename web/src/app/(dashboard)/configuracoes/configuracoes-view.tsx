@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { updateLabConfig } from '@/actions/configuracoes'
 import { criarUsuario, toggleStatusUsuario, excluirUsuario } from '@/actions/usuarios'
-import { saveNotificacoesConfig } from '@/actions/notificacoes'
+import { validarNovoUsuario } from '@/lib/admin-interactions'
 import {
   Building2,
   Users,
@@ -57,6 +57,9 @@ interface ConfiguracoesViewProps {
 export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesViewProps) {
   const [activeSection, setActiveSection] = useState('laboratorio')
   const [saving, setSaving] = useState(false)
+  const actionPending = useRef(false)
+  const togglePending = useRef(new Set<number>())
+  const [pendingUsers, setPendingUsers] = useState<number[]>([])
   const [showNewUser, setShowNewUser] = useState(false)
   const [usuarioParaExcluir, setUsuarioParaExcluir] = useState<Usuario | null>(null)
   const [excluindoUsuario, setExcluindoUsuario] = useState(false)
@@ -79,28 +82,27 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
     senha: ''
   })
 
-  // State Notificações
-  const [notificacoes, setNotificacoes] = useState({
-    novaOrdem: true,
-    atrasos: true,
-    estoqueBaixo: true,
-    ordemFinalizada: false,
-    resumoDiario: false
-  })
-
   const handleSaveLab = async () => {
+    if (actionPending.current) return
+    actionPending.current = true
     setSaving(true)
     try {
       const result = await updateLabConfig(labConfig)
       if (!result.success) toast.error('Não foi possível salvar as configurações.')
       else toast.success('Configurações salvas.')
+    } catch {
+      toast.error('Não foi possível concluir a operação. Tente novamente.')
     } finally {
+      actionPending.current = false
       setSaving(false)
     }
   }
 
   const handleCreateUser = async () => {
-    if (!newUser.nome || !newUser.email || !newUser.senha) return
+    const validationError = validarNovoUsuario({ ...newUser, senhaProvisoria: newUser.senha })
+    if (validationError) { toast.error(validationError); return }
+    if (actionPending.current) return
+    actionPending.current = true
     setSaving(true)
     try {
       const result = await criarUsuario({
@@ -115,17 +117,27 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
       } else {
         toast.error(result.error || 'Não foi possível cadastrar o usuário.')
       }
+    } catch {
+      toast.error('Não foi possível concluir a operação. Tente novamente.')
     } finally {
+      actionPending.current = false
       setSaving(false)
     }
   }
 
-  const handleSaveNotificacoes = async () => {
-    setSaving(true)
+  const handleToggleUsuario = async (user: Usuario) => {
+    if (togglePending.current.has(user.id)) return
+    togglePending.current.add(user.id)
+    setPendingUsers([...togglePending.current])
     try {
-      await saveNotificacoesConfig(notificacoes)
+      const result = await toggleStatusUsuario(user.id, !!user.ativo)
+      if (!result.success) toast.error(result.error || 'Não foi possível atualizar o usuário.')
+      else toast.success('Status do usuário atualizado.')
+    } catch {
+      toast.error('Não foi possível atualizar o usuário. Tente novamente.')
     } finally {
-      setSaving(false)
+      togglePending.current.delete(user.id)
+      setPendingUsers([...togglePending.current])
     }
   }
 
@@ -297,7 +309,8 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                           </span>
                           <div className="flex gap-2">
                             <button 
-                              onClick={() => toggleStatusUsuario(user.id, !!user.ativo)}
+                              onClick={() => handleToggleUsuario(user)}
+                              disabled={pendingUsers.includes(user.id)}
                               title={user.ativo ? 'Desativar' : 'Ativar'}
                               className={`p-2 rounded-lg transition-colors ${user.ativo ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
                             >
@@ -305,6 +318,7 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                             </button>
                             <button 
                               onClick={() => setUsuarioParaExcluir(user)}
+                              disabled={pendingUsers.includes(user.id)}
                               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -328,30 +342,17 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-4">
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando nova ordem for criada</span>
-                      <input type="checkbox" checked={notificacoes.novaOrdem} onChange={e => setNotificacoes({...notificacoes, novaOrdem: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando ordem estiver atrasada</span>
-                      <input type="checkbox" checked={notificacoes.atrasos} onChange={e => setNotificacoes({...notificacoes, atrasos: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando estoque estiver baixo</span>
-                      <input type="checkbox" checked={notificacoes.estoqueBaixo} onChange={e => setNotificacoes({...notificacoes, estoqueBaixo: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar dentista quando ordem for finalizada (Email)</span>
-                      <input type="checkbox" checked={notificacoes.ordemFinalizada} onChange={e => setNotificacoes({...notificacoes, ordemFinalizada: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    </label>
-                  </div>
-                  <div className="flex justify-end pt-4 border-t">
-                    <Button onClick={handleSaveNotificacoes} disabled={saving}>
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                      Salvar Preferências
-                    </Button>
-                  </div>
+                  <p className="text-sm text-slate-600" role="status">
+                    As preferências de notificações ainda não estão disponíveis. Não há salvamento dessas opções nem controle do envio por estas preferências.
+                  </p>
+                  <fieldset disabled className="space-y-4 opacity-60" aria-label="Preferências indisponíveis">
+                    {['Nova ordem criada', 'Ordem atrasada', 'Estoque baixo', 'Email ao dentista quando a ordem for finalizada'].map(label => (
+                      <label key={label} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <span>{label}</span><input type="checkbox" checked={false} readOnly />
+                      </label>
+                    ))}
+                    <Button disabled>Salvar Preferências (indisponível)</Button>
+                  </fieldset>
                 </CardContent>
               </Card>
             )}

@@ -653,6 +653,8 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
     }
 
     const resultado = await prisma.$transaction(async (tx) => {
+      // Lock order consistently: order -> account -> ledger.
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
       const ordem = await tx.ordem.findUnique({
         where: { id: ordemId },
         include: {
@@ -680,7 +682,15 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
         vencimento: dadosCobranca.vencimento,
       })
 
-      const contaExistente = ordem.contasReceber[0]
+      let contaExistente = ordem.contasReceber[0]
+      if (contaExistente) {
+        // Delivery edits the invoice too: refresh its balance after waiting for
+        // concurrent receipt/reversal/cancellation transactions to finish.
+        await tx.$queryRaw`SELECT id FROM contas_receber WHERE id = ${contaExistente.id} FOR UPDATE`
+        const atual = await tx.contaReceber.findUnique({ where: { id: contaExistente.id } })
+        if (!atual || atual.status === 'Cancelado') throw new Error('A cobrança foi alterada. Revise a conta antes de registrar a entrega')
+        contaExistente = atual
+      }
       let conta
       if (contaExistente) {
         const valorRecebido = Number(contaExistente.valorRecebido)

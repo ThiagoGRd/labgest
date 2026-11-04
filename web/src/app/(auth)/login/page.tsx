@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { unstable_rethrow } from 'next/navigation'
+import { executarAcaoPendente } from '@/lib/admin-interactions'
 import { login } from '@/actions/auth'
 
 export default function LoginPage() {
@@ -12,14 +14,14 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   const handleSubmit = async (formData: FormData) => {
-    setLoading(true)
+    if (loading) return
     setError('')
-
-    const result = await login(formData)
-    
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
+    try {
+      const result = await executarAcaoPendente(() => login(formData), setLoading)
+      if (result?.error) setError(result.error)
+    } catch (error) {
+      unstable_rethrow(error)
+      setError('Não foi possível entrar. Tente novamente.')
     }
   }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
 
 const outfit = Outfit({ 
   subsets: ["latin"],
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`${outfit.variable} ${plusJakarta.variable} antialiased font-sans`}>
         {children}
+        <Toaster richColors position="top-center" />
       </body>
     </html>
   );

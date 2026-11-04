@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { validarNovoUsuario } from '@/lib/admin-interactions'
 import { requireAdmin } from '@/lib/auth-utils'
 
 // Cria o cliente Admin apenas quando chamado em runtime (não no build)
@@ -36,6 +37,9 @@ export async function criarUsuario(data: {
   senhaProvisoria: string
 }) {
   await requireAdmin()
+  const validationError = validarNovoUsuario(data)
+  if (validationError) return { success: false, error: validationError }
+  data = { ...data, nome: data.nome.trim(), email: data.email.trim() }
   try {
     const supabaseAdmin = getSupabaseAdmin()
 

@@ -1,23 +1,32 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { UploadCloud, File, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { createClient } from '@/lib/supabase/client'
 
 interface FileUploadProps {
-  onUploadComplete: (path: string) => void
+  onUploadComplete: (path: string) => void | Promise<void>
+  onStatusChange?: (status: 'idle' | 'uploading' | 'error' | 'complete') => void
+  disabled?: boolean
   label?: string
 }
 
-export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: FileUploadProps) {
+export function FileUpload({ onUploadComplete, onStatusChange, disabled = false, label = "Arquivo STL ou ZIP" }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [uploadedPath, setUploadedPath] = useState('')
 
+  const generation = useRef(0)
+  useEffect(() => () => { generation.current++ }, [])
+
   const handleUpload = useCallback(async (fileToUpload: File) => {
+    const request = ++generation.current
+    setUploadedPath('')
+    void onUploadComplete('')
     setUploading(true)
+    onStatusChange?.('uploading')
 
     try {
       const supabase = createClient()
@@ -34,27 +43,34 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
 
       if (uploadError) throw uploadError
 
+      if (request !== generation.current) return
+      await onUploadComplete(data.path)
+      if (request !== generation.current) return
       setUploadedPath(data.path)
-      onUploadComplete(data.path)
+      onStatusChange?.('complete')
     } catch (err: unknown) {
-      console.error('Upload error:', err)
+      if (request !== generation.current) return
       setError(err instanceof Error ? err.message : 'Erro ao enviar arquivo')
       setFile(null)
+      onStatusChange?.('error')
     } finally {
-      setUploading(false)
+      if (request === generation.current) setUploading(false)
     }
-  }, [onUploadComplete])
+  }, [onUploadComplete, onStatusChange])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (disabled) return
     setError('')
     if (acceptedFiles.length > 0) {
       setFile(acceptedFiles[0])
       void handleUpload(acceptedFiles[0])
     }
-  }, [handleUpload])
+  }, [handleUpload, disabled])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    disabled,
+    onDropRejected: () => setError('Selecione um STL, OBJ ou ZIP de até 50MB.'),
     maxFiles: 1,
     accept: {
       'model/stl': ['.stl'],
@@ -69,10 +85,14 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
   })
 
   const removeFile = () => {
+    if (disabled) return
+    generation.current++
+    setUploading(false)
+    onStatusChange?.('idle')
     setFile(null)
     setUploadedPath('')
     setError('')
-    onUploadComplete('')
+    void onUploadComplete('')
   }
 
   return (
@@ -120,16 +140,16 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
               </div>
             </div>
             
-            {uploading ? (
-              <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />
-            ) : uploadedPath ? (
-              <button 
-                onClick={removeFile}
-                className="text-slate-400 hover:text-red-500 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            ) : null}
+            {uploading && <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />}
+            <button
+              type="button"
+              aria-label="Remover arquivo"
+              disabled={disabled}
+              onClick={removeFile}
+              className="text-slate-400 hover:text-red-500 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {(uploading || uploadedPath) && !error && (
@@ -150,10 +170,14 @@ export function FileUpload({ onUploadComplete, label = "Arquivo STL ou ZIP" }: F
               )}
             </div>
           )}
-
-          {error && (
-            <p className="text-xs text-red-600 mt-2">{error}</p>
-          )}
+        </div>
+      )}
+      {error && (
+        <div className="mt-2 text-xs text-red-600">
+          <p role="alert">{error}</p>
+          <button type="button" disabled={disabled} onClick={removeFile} className="mt-2 underline">
+            Descartar anexo
+          </button>
         </div>
       )}
     </div>
