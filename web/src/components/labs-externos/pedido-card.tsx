@@ -112,7 +112,7 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
                 {etapa.acaoAvancar}
               </button>
             )}
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label={`Mais ações para ${pedido.paciente}`} disabled={ocupado} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-60 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white">
                   <MoreHorizontal className="h-4 w-4" />
