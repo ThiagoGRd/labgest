@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { updateOrdem } from '@/actions/ordens'
-import { ETAPA_IDS, etapaLabel, podeSelecionarEtapaNaEdicao } from '@/lib/workflow-config'
+import { ETAPA_IDS, isTipoProtese, etapaLabel, podeSelecionarEtapaNaEdicao } from '@/lib/workflow-config'
 import { formatarCpf } from '@/lib/cpf'
 
 interface Ordem {
@@ -93,6 +93,8 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
 
     try {
       const result = await updateOrdem(ordem.id, {
+        statusEsperado: ordem.status,
+        etapaEsperada: ordem.etapaAtual,
         paciente: formData.paciente,
         cpfPaciente: formData.cpfPaciente,
         dataEntrega: formData.dataEntrega,
@@ -214,7 +216,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
 
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Etapa Atual</label>
-            <Select name="etapaAtual" value={formData.etapaAtual} onValueChange={(val) => setFormData(p => ({ ...p, etapaAtual: val }))}>
+            <Select disabled={isTipoProtese(ordem?.tipoWorkflow)} name="etapaAtual" value={formData.etapaAtual} onValueChange={(val) => setFormData(p => ({ ...p, etapaAtual: val }))}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {etapaOpcoes.map(({ id, label }) => <SelectItem key={id} value={id}>{label}</SelectItem>)}

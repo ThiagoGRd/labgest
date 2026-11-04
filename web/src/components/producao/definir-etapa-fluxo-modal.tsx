@@ -15,6 +15,7 @@ import {
 } from '@/lib/workflow-config'
 
 interface OrdemParaDefinirEtapa {
+  updatedAt: string
   id: number
   paciente: string
   servico: string
@@ -48,7 +49,7 @@ export function DefinirEtapaFluxoModal({ ordem, onClose, onSuccess }: DefinirEta
     setSalvando(true)
     try {
       setErro('')
-      const resultado = await definirEtapaFluxoProtese(ordem.id, tipo, passoId)
+      const resultado = await definirEtapaFluxoProtese(ordem.id, tipo, passoId, ordem.updatedAt)
       if (!resultado.success) {
         setErro(resultado.error || 'Não foi possível definir a etapa')
         return

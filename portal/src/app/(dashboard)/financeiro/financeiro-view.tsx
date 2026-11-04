@@ -25,7 +25,7 @@ interface Conta {
 
 interface FinanceiroViewProps { user: PortalUser; pendentes: Conta[]; pagas: Conta[] }
 
-function formatDate(value: string) { return new Date(value).toLocaleDateString('pt-BR') }
+function formatDate(value: string) { return new Date(value).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) }
 function formatCurrency(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) }
 function statusVariant(status: string): 'success' | 'warning' | 'destructive' {
   if (status === 'Pago') return 'success'

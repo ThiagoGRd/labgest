@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@labgest/database'
+import { prisma, type Prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { bloquearItensEstoque } from '@/lib/estoque-bloqueio'
@@ -53,18 +53,10 @@ async function validarCodigoBarras(codigoBarras: string | null, ignorarId?: numb
 
 export async function getEstoque() {
   await requireUser()
-  const inicioHistorico = new Date()
-  inicioHistorico.setFullYear(inicioHistorico.getFullYear() - 1)
-
   try {
-    const [estoque, movimentacoes] = await Promise.all([
+    const [estoque, historico] = await Promise.all([
       prisma.estoque.findMany({ orderBy: [{ ativo: 'desc' }, { nome: 'asc' }] }),
-      prisma.movimentacaoEstoque.findMany({
-        where: { createdAt: { gte: inicioHistorico } },
-        orderBy: { createdAt: 'desc' },
-        take: 1000,
-        include: { estoque: { select: { nome: true, unidade: true } } },
-      }),
+      getMovimentacoesEstoque(mesEstoqueAtual()),
     ])
 
     return {
@@ -85,22 +77,8 @@ export async function getEstoque() {
         ativo: item.ativo !== false,
         updatedAt: item.updatedAt?.toISOString() || null,
       })),
-      movimentacoes: movimentacoes.map(movimento => ({
-        id: movimento.id,
-        estoqueId: movimento.estoqueId,
-        itemNome: movimento.estoque.nome,
-        unidade: movimento.estoque.unidade,
-        tipo: movimento.tipo,
-        quantidade: Number(movimento.quantidade),
-        saldoAnterior: Number(movimento.saldoAnterior),
-        saldoPosterior: Number(movimento.saldoPosterior),
-        valorUnitario: movimento.valorUnitario == null ? null : Number(movimento.valorUnitario),
-        motivo: movimento.motivo,
-        documento: movimento.documento || '',
-        ordemId: movimento.ordemId,
-        usuarioNome: movimento.usuarioNome || 'Sistema',
-        createdAt: movimento.createdAt.toISOString(),
-      })),
+      movimentacoes: historico.movimentacoes,
+      historico: { mes: historico.mes, pagina: historico.pagina, total: historico.total, tamanhoPagina: historico.tamanhoPagina },
     }
   } catch (error) {
     console.error('Erro ao buscar estoque:', error)
@@ -215,7 +193,8 @@ export async function registrarMovimentacaoEstoque(data: {
 }) {
   const usuario = await requireUser()
   try {
-    if (!numeroValido(data.quantidade) || data.quantidade === 0) throw new Error('Informe uma quantidade maior que zero')
+    if (!['Entrada', 'Saída', 'Ajuste'].includes(data.tipo)) throw new Error('Tipo de movimentação inválido')
+    if (!numeroValido(data.quantidade) || (data.quantidade === 0 && data.tipo !== 'Ajuste')) throw new Error('Informe uma quantidade maior que zero')
     if (!data.motivo.trim()) throw new Error('Informe o motivo da movimentação')
     if (data.valorUnitario != null && !numeroValido(data.valorUnitario)) throw new Error('Informe um valor unitário válido')
 
@@ -261,6 +240,7 @@ export async function registrarMovimentacaoEstoque(data: {
     }, { isolationLevel: 'Serializable' })
 
     revalidatePath('/estoque')
+    revalidatePath('/servicos')
     return { success: true }
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : 'Erro ao movimentar estoque'
@@ -309,4 +289,60 @@ export async function abaterEstoquePorServico(servicoId: number) {
     console.error('Erro ao abater estoque:', error)
     return { success: false, error: 'Erro ao atualizar estoque' }
   }
+}
+
+function mesEstoqueAtual() {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit' }).formatToParts(new Date())
+  return `${partes.find(p => p.type === 'year')!.value}-${partes.find(p => p.type === 'month')!.value}`
+}
+
+function periodoEstoque(mes: string) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes) || Number(mes.slice(0, 4)) < 1900) throw new Error('Informe um mês válido')
+  // Maceió opera em UTC-3; o limite exclusivo inclui todo o último dia local.
+  const inicio = new Date(`${mes}-01T03:00:00.000Z`)
+  const fim = new Date(inicio)
+  fim.setUTCMonth(fim.getUTCMonth() + 1)
+  return { createdAt: { gte: inicio, lt: fim } }
+}
+
+type MovimentoComItem = Prisma.MovimentacaoEstoqueGetPayload<{ include: { estoque: { select: { nome: true; unidade: true } } } }>
+function serializarMovimentos(movimentos: MovimentoComItem[]) {
+  return movimentos.map(movimento => ({
+    id: movimento.id,
+    estoqueId: movimento.estoqueId,
+    itemNome: movimento.estoque.nome,
+    unidade: movimento.estoque.unidade,
+    tipo: movimento.tipo,
+    quantidade: Number(movimento.quantidade),
+    saldoAnterior: Number(movimento.saldoAnterior),
+    saldoPosterior: Number(movimento.saldoPosterior),
+    valorUnitario: movimento.valorUnitario == null ? null : Number(movimento.valorUnitario),
+    motivo: movimento.motivo,
+    documento: movimento.documento || '',
+    ordemId: movimento.ordemId,
+    usuarioNome: movimento.usuarioNome || 'Sistema',
+    createdAt: movimento.createdAt.toISOString(),
+  }))
+}
+
+export async function getMovimentacoesEstoque(mes: string, pagina = 1, busca = '') {
+  await requireUser()
+  const where = { ...periodoEstoque(mes), ...(busca.trim() ? { estoque: { nome: { contains: busca.trim().slice(0, 255), mode: 'insensitive' as const } } } : {}) }
+  if (!Number.isSafeInteger(pagina) || pagina < 1) throw new Error('Página inválida')
+  const tamanhoPagina = 100
+  const [movimentos, total] = await Promise.all([
+    prisma.movimentacaoEstoque.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (pagina - 1) * tamanhoPagina, take: tamanhoPagina, include: { estoque: { select: { nome: true, unidade: true } } } }),
+    prisma.movimentacaoEstoque.count({ where }),
+  ])
+  return { mes, pagina, tamanhoPagina, total, movimentacoes: serializarMovimentos(movimentos) }
+}
+
+// Exportação explícita e autenticada de um único mês, sem corte silencioso.
+export async function exportarMovimentacoesEstoque(mes: string) {
+  await requireUser()
+  const movimentos = await prisma.movimentacaoEstoque.findMany({
+    where: periodoEstoque(mes), orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: { estoque: { select: { nome: true, unidade: true } } },
+  })
+  return serializarMovimentos(movimentos)
 }

@@ -37,8 +37,10 @@ interface RelatorioData {
 }
 
 interface FinancialData {
+  periodoRanking: string
+  error?: string
   grafico: { mes: string; receita: number; despesa: number; lucro: number }[]
-  topClientes: { nome: string; total: number; qtd: number; ticket: number }[]
+  topClientes: { id: number | null; nome: string; total: number; qtd: number; ticket: number }[]
 }
 
 interface Message {
@@ -82,7 +84,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
   })
 
   useEffect(() => {
-    if (searchParams.get('imprimir') !== '1' || autoPrintExecutado.current) return
+    if (ordensEntregues.error || searchParams.get('imprimir') !== '1' || autoPrintExecutado.current) return
 
     autoPrintExecutado.current = true
     const timer = window.setTimeout(() => {
@@ -93,7 +95,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
     }, 250)
 
     return () => window.clearTimeout(timer)
-  }, [imprimirOrdensEntregues, pathname, searchParams])
+  }, [imprimirOrdensEntregues, pathname, searchParams, ordensEntregues.error])
 
   const selecionarMes = (mes: string) => {
     if (!mes) return
@@ -160,6 +162,8 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
         
         {/* Coluna 1 e 2: Dashboards Visuais */}
         <div className="lg:col-span-2 space-y-8 overflow-y-auto pr-2 custom-scrollbar">
+          {ordensEntregues.error && <p role="alert" className="text-red-600">{ordensEntregues.error}</p>}
+          {financeiro.error && <p role="alert" className="text-red-600">{financeiro.error}</p>}
           <Card className="overflow-hidden border-indigo-200/70 dark:border-indigo-500/20">
             <CardHeader className="border-b border-black/5 pb-5 dark:border-white/5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -172,7 +176,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   <label className="relative">
-                    <span className="sr-only">Mês das entregas</span>
+                    <span className="sr-only">Mês do relatório</span>
                     <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <Input
                       type="month"
@@ -192,7 +196,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
                   </select>
                   <Button
                     onClick={() => imprimirOrdensEntregues()}
-                    disabled={isChangingMonth}
+                    disabled={isChangingMonth || !!ordensEntregues.error}
                   >
                     {isChangingMonth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
                     {isChangingMonth ? 'Carregando...' : 'Gerar relatório'}
@@ -287,7 +291,7 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
           {/* Gráfico Principal */}
           <Card className="overflow-hidden">
             <CardHeader className="border-b border-black/5 dark:border-white/5 pb-6">
-              <CardTitle className="text-xl">Fluxo de Caixa (6 Meses)</CardTitle>
+              <CardTitle className="text-xl">Fluxo de Caixa (6 meses até {financeiro.periodoRanking})</CardTitle>
             </CardHeader>
             <CardContent className="h-[350px] pt-8">
               <ResponsiveContainer width="100%" height="100%">
@@ -322,12 +326,13 @@ export function RelatoriosView({ financeiro, ordensEntregues, clientes }: Relato
           {/* Top Clientes */}
           <Card>
             <CardHeader className="border-b border-black/5 dark:border-white/5 pb-6">
-              <CardTitle className="text-xl">Top 5 Clientes (Faturamento)</CardTitle>
+              <CardTitle className="text-xl">Top 5 Clientes — Vendas de ordens</CardTitle>
+              <p className="text-sm text-slate-500">{financeiro.periodoRanking}: valor final após descontos das ordens criadas no mês, exceto canceladas. Todas as clínicas; registros sem vínculo cadastral ficam fora do ranking.</p>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-4">
                 {financeiro.topClientes.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white/40 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl group hover:scale-[1.01] transition-all">
+                  <div key={c.id} className="flex items-center justify-between p-4 bg-white/40 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-xl group hover:scale-[1.01] transition-all">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-600/20">
                         {i + 1}

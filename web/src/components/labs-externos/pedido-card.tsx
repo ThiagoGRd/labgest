@@ -48,7 +48,8 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
   const prazo = descreverPrazo(pedido.prazo, hoje)
   const comOLaboratorio = pedido.situacao === 'Enviado' || pedido.situacao === 'Provando'
   const diasDesdeEnvio = comOLaboratorio ? diasEntre(pedido.dataEnvio, hoje) : null
-  const atrasado = !entregue && prazo.tom === 'atrasado'
+  const aguardandoRetorno = comOLaboratorio && !pedido.dataRetorno
+  const atrasado = aguardandoRetorno && prazo.tom === 'atrasado'
 
   return (
     <article className={`relative flex overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-zinc-900 ${
@@ -69,6 +70,7 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
             )}
           </div>
 
+          <p className="text-xs text-slate-500">{pedido.ordemId ? <>OS #{pedido.ordemId} · {pedido.fornecedorConfirmadoEm ? 'Recebimento confirmado na Produção' : pedido.dataRetorno ? 'Retorno registrado — confirme o recebimento na Produção' : 'Envio vinculado à Produção'}. Entrega externa não entrega a OS ao cliente.</> : 'Pedido avulso · sem vínculo com OS'}</p>
           {pedido.servico && <p className="line-clamp-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{pedido.servico}</p>}
 
           {pedido.isRetrabalho && pedido.motivoRetrabalho && (
@@ -90,10 +92,10 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
 
         <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
           <div className="flex flex-col gap-2 sm:items-end">
-            {!entregue && (
+            {aguardandoRetorno && (
               <span className={`inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${TOM_PRAZO[prazo.tom]}`}>
                 <CalendarClock className="h-3.5 w-3.5" />
-                {prazo.texto}
+                Prazo de retorno: {prazo.texto}
                 {pedido.prazo && <span className="font-normal opacity-80">· {formatDate(pedido.prazo)}</span>}
               </span>
             )}

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { SessionRefresh } from './session-refresh'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
@@ -54,6 +55,7 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
 
   return (
     <div className="min-h-screen mesh-bg pb-16 selection:bg-emerald-500/30 selection:text-emerald-400 xl:pb-0">
+      <SessionRefresh />
       {/* Header */}
       <header className="fixed left-0 right-0 top-0 z-50 mx-auto max-w-7xl rounded-none glass md:left-4 md:right-4 md:top-4 md:rounded-2xl">
         <div className="px-4 sm:px-6 lg:px-8">

@@ -3,7 +3,6 @@ import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
-import { RealtimeOrders } from "@/components/providers/realtime-orders";
 
 const outfit = Outfit({ 
   subsets: ["latin"],
@@ -37,7 +36,6 @@ export default function RootLayout({
         >
           {children}
           <Toaster position="top-right" richColors />
-          <RealtimeOrders />
         </ThemeProvider>
       </body>
     </html>

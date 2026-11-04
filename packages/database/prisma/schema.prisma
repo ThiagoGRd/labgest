@@ -53,6 +53,7 @@ model Servico {
 }
 
 model Ordem {
+  pedidosExternos labs_externos_pedidos[]
   id                                                     Int             @id @default(autoincrement())
   clienteId                                              Int?            @map("cliente_id")
   clienteNome                                            String          @map("cliente_nome") @db.VarChar(255)
@@ -387,6 +388,9 @@ model labs_externos {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model labs_externos_pedidos {
+  ordem_id Int?
+  fornecedor_confirmado_em DateTime? @db.Timestamp(6)
+  ordem Ordem? @relation(fields: [ordem_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   id                Int            @id @default(autoincrement())
   lab_id            Int?
   lab_nome          String         @db.VarChar(255)

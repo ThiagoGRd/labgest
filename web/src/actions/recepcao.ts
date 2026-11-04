@@ -1,5 +1,6 @@
 'use server'
 
+
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
@@ -155,9 +156,10 @@ function eventoHistorico(
   }] as Prisma.JsonArray
 }
 
-async function carregarOrdem(ordemId: number) {
+async function carregarOrdem(tx: Prisma.TransactionClient, ordemId: number) {
   if (!Number.isInteger(ordemId) || ordemId <= 0) return null
-  return prisma.ordem.findFirst({ where: { id: ordemId, status: { notIn: ['Entregue', 'Cancelado'] } } })
+  await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+  return tx.ordem.findFirst({ where: { id: ordemId, status: { notIn: ['Entregue', 'Cancelado', 'Pausado'] } } })
 }
 
 export async function enviarParaRecepcao(ordemId: number) {
@@ -165,42 +167,47 @@ export async function enviarParaRecepcao(ordemId: number) {
   if (usuario.tipo === 'recepcao' && !usuario.permissoes.includes('all')) {
     return { success: false, error: 'O envio para a recepção deve ser registrado pelo laboratório.' }
   }
-  const ordem = await carregarOrdem(ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      localizacaoAtual: 'em_transito_recepcao',
-      situacaoLogistica: 'aguardando_recepcao',
-      finalidadeClinica: finalidadeEfetiva(ordem.finalidadeClinica, ordem.status),
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_recepcao', usuario, { local: 'Recepção' }),
-    },
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'no_laboratorio') return { success: false, error: 'Este trabalho já saiu do laboratório. Atualize a recepção.' }
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        localizacaoAtual: 'em_transito_recepcao',
+        situacaoLogistica: 'aguardando_recepcao',
+        finalidadeClinica: finalidadeEfetiva(ordem.finalidadeClinica, ordem.status),
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_recepcao', usuario, { local: 'Recepção' }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true }
   })
-  revalidarRecepcao()
-  return { success: true }
 }
 
 export async function confirmarRecebimentoRecepcao(ordemId: number) {
   const usuario = await requireRecepcao()
-  const ordem = await carregarOrdem(ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
-  if (situacao !== 'aguardando_recepcao') return { success: false, error: 'Este trabalho não está aguardando recebimento.' }
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
+    if (situacao !== 'aguardando_recepcao') return { success: false, error: 'Este trabalho não está aguardando recebimento.' }
 
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      localizacaoAtual: 'recepcao',
-      situacaoLogistica: 'aguardando_distribuicao',
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_recepcao', usuario, { local: 'Recepção' }),
-    },
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        localizacaoAtual: 'recepcao',
+        situacaoLogistica: 'aguardando_distribuicao',
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_recepcao', usuario, { local: 'Recepção' }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true }
   })
-  revalidarRecepcao()
-  return { success: true }
 }
 
 export async function distribuirParaDentista(data: {
@@ -214,88 +221,94 @@ export async function distribuirParaDentista(data: {
   const dentista = data.dentista.trim().slice(0, 255)
   if (!dentista) return { success: false, error: 'Informe o dentista responsável.' }
   if (!['prova', 'instalacao', 'entrega'].includes(data.finalidade)) return { success: false, error: 'Informe uma finalidade válida.' }
-  const ordem = await carregarOrdem(data.ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
-  const corrigindo = situacao === 'com_dentista'
-  if (!['aguardando_distribuicao', 'com_dentista'].includes(situacao)) return { success: false, error: 'O trabalho precisa estar na recepção antes da distribuição.' }
-  if (corrigindo && !data.observacao?.trim()) return { success: false, error: 'Informe o motivo da correção da distribuição.' }
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, data.ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
+    const corrigindo = situacao === 'com_dentista'
+    if (!['aguardando_distribuicao', 'com_dentista'].includes(situacao)) return { success: false, error: 'O trabalho precisa estar na recepção antes da distribuição.' }
+    if (corrigindo && !data.observacao?.trim()) return { success: false, error: 'Informe o motivo da correção da distribuição.' }
 
-  const agendamento = data.agendamento ? new Date(data.agendamento) : null
-  if (agendamento && Number.isNaN(agendamento.getTime())) return { success: false, error: 'Informe um agendamento válido.' }
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: data.ordemId },
-    data: {
-      localizacaoAtual: 'dentista',
-      situacaoLogistica: 'com_dentista',
-      dentistaResponsavel: dentista,
-      finalidadeClinica: data.finalidade,
-      agendamentoClinico: agendamento,
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, corrigindo ? 'corrigiu_distribuicao' : 'entregou_dentista', usuario, {
-        dentista,
-        finalidade: data.finalidade,
-        ...(data.observacao?.trim() ? { observacao: data.observacao.trim().slice(0, 500) } : {}),
-      }),
-    },
+    const agendamento = data.agendamento ? new Date(data.agendamento) : null
+    if (agendamento && Number.isNaN(agendamento.getTime())) return { success: false, error: 'Informe um agendamento válido.' }
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: data.ordemId },
+      data: {
+        localizacaoAtual: 'dentista',
+        situacaoLogistica: 'com_dentista',
+        dentistaResponsavel: dentista,
+        finalidadeClinica: data.finalidade,
+        agendamentoClinico: agendamento,
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, corrigindo ? 'corrigiu_distribuicao' : 'entregou_dentista', usuario, {
+          dentista,
+          finalidade: data.finalidade,
+          ...(data.observacao?.trim() ? { observacao: data.observacao.trim().slice(0, 500) } : {}),
+        }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true }
   })
-  revalidarRecepcao()
-  return { success: true }
 }
 
 export async function receberDoDentista(ordemId: number) {
   const usuario = await requireRecepcao()
-  const ordem = await carregarOrdem(ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'com_dentista') return { success: false, error: 'O trabalho não está registrado com o dentista.' }
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'com_dentista') return { success: false, error: 'O trabalho não está registrado com o dentista.' }
 
-  const ciclo = await prisma.cicloProducao.findFirst({
-    where: { ordemId, status: 'em_prova' },
-    select: { decisao: true },
-    orderBy: { numeroCiclo: 'desc' },
+    const ciclo = await tx.cicloProducao.findFirst({
+      where: { ordemId, status: 'em_prova' },
+      select: { decisao: true },
+      orderBy: { numeroCiclo: 'desc' },
+    })
+    const aguardandoResposta = finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova' && !ciclo?.decisao
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        localizacaoAtual: 'recepcao',
+        situacaoLogistica: aguardandoResposta ? 'aguardando_resultado_dentista' : 'aguardando_envio_laboratorio',
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_do_dentista', usuario, {
+          dentista: ordem.dentistaResponsavel || 'Não informado',
+        }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true, aguardandoResposta }
   })
-  const aguardandoResposta = finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova' && !ciclo?.decisao
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      localizacaoAtual: 'recepcao',
-      situacaoLogistica: aguardandoResposta ? 'aguardando_resultado_dentista' : 'aguardando_envio_laboratorio',
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_do_dentista', usuario, {
-        dentista: ordem.dentistaResponsavel || 'Não informado',
-      }),
-    },
-  })
-  revalidarRecepcao()
-  return { success: true, aguardandoResposta }
 }
 
 export async function enviarRetornoLaboratorio(ordemId: number) {
   const usuario = await requireRecepcao()
-  const ordem = await carregarOrdem(ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
-  if (!['aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(situacao)) return { success: false, error: 'O trabalho ainda não está pronto para retornar ao laboratório.' }
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
+    if (!['aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(situacao)) return { success: false, error: 'O trabalho ainda não está pronto para retornar ao laboratório.' }
 
-  if (finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova') {
-    const ciclo = await prisma.cicloProducao.findFirst({ where: { ordemId, status: 'em_prova' }, select: { decisao: true }, orderBy: { numeroCiclo: 'desc' } })
-    if (!ciclo?.decisao) return { success: false, error: 'O dentista ainda precisa registrar o resultado da prova no portal.' }
-  }
+    if (finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova') {
+      const ciclo = await tx.cicloProducao.findFirst({ where: { ordemId, status: 'em_prova' }, select: { decisao: true }, orderBy: { numeroCiclo: 'desc' } })
+      if (!ciclo?.decisao) return { success: false, error: 'O dentista ainda precisa registrar o resultado da prova no portal.' }
+    }
 
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      localizacaoAtual: 'em_transito_laboratorio',
-      situacaoLogistica: 'em_transito_laboratorio',
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_retorno_laboratorio', usuario, { local: 'Laboratório' }),
-    },
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        localizacaoAtual: 'em_transito_laboratorio',
+        situacaoLogistica: 'em_transito_laboratorio',
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_retorno_laboratorio', usuario, { local: 'Laboratório' }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true }
   })
-  revalidarRecepcao()
-  return { success: true }
 }
 
 export async function confirmarRecebimentoLaboratorio(ordemId: number) {
@@ -303,20 +316,22 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
   if (usuario.tipo === 'recepcao' && !usuario.permissoes.includes('all')) {
     return { success: false, error: 'O recebimento deve ser confirmado pela equipe do laboratório.' }
   }
-  const ordem = await carregarOrdem(ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'em_transito_laboratorio') return { success: false, error: 'O trabalho não está em trânsito para o laboratório.' }
+  return await prisma.$transaction(async (tx) => {
+    const ordem = await carregarOrdem(tx, ordemId)
+    if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+    if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'em_transito_laboratorio') return { success: false, error: 'O trabalho não está em trânsito para o laboratório.' }
 
-  const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      localizacaoAtual: 'laboratorio',
-      situacaoLogistica: 'no_laboratorio',
-      movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_laboratorio', usuario, { local: 'Laboratório' }),
-    },
+    const agora = new Date()
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        localizacaoAtual: 'laboratorio',
+        situacaoLogistica: 'no_laboratorio',
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_laboratorio', usuario, { local: 'Laboratório' }),
+      },
+    })
+    revalidarRecepcao()
+    return { success: true }
   })
-  revalidarRecepcao()
-  return { success: true }
 }

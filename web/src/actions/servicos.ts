@@ -1,5 +1,6 @@
 'use server'
 
+import { calcularCustoMateriais } from '@/lib/servico-custo'
 import { prisma, type Prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin, requireUser } from '@/lib/auth-utils'
@@ -78,11 +79,7 @@ async function prepararDados(data: ServicoInput, servicoId?: number) {
 
   if (itensEstoque.length !== idsMateriais.length) return { success: false as const, error: 'Um dos materiais selecionados não existe ou está inativo.' }
 
-  const precos = new Map(itensEstoque.map((item) => [item.id, Number(item.precoUnitario)]))
-  const custoCalculado = validacao.data.materiais.reduce(
-    (total, material) => total + (precos.get(material.id) ?? 0) * material.quantidade,
-    0,
-  )
+  const custoCalculado = calcularCustoMateriais(validacao.data.materiais, itensEstoque.map(item => ({ id: item.id, precoUnitario: Number(item.precoUnitario) })))
 
   return {
     success: true as const,
@@ -92,7 +89,7 @@ async function prepararDados(data: ServicoInput, servicoId?: number) {
       tipoWorkflow: data.tipoWorkflow,
       preco: data.preco,
       tempoProducao: data.tempoProducao,
-      custoMateriais: idsMateriais.length > 0 ? custoCalculado : data.custoMateriais,
+      custoMateriais: idsMateriais.length > 0 ? custoCalculado! : data.custoMateriais,
       descricao: validacao.data.descricao,
       materiais: validacao.data.materiais.map((material) => ({
         id: material.id,
@@ -120,14 +117,17 @@ export async function getServicos() {
   const estoque = materiaisUsados.size > 0
     ? await prisma.estoque.findMany({
         where: { id: { in: [...materiaisUsados] } },
-        select: { id: true, nome: true, unidade: true },
+        select: { id: true, nome: true, unidade: true, precoUnitario: true, ativo: true },
       })
     : []
   const materiaisPorId = new Map(estoque.map((item) => [item.id, item]))
 
   return servicos.map((servico) => {
     const preco = Number(servico.preco)
-    const custo = Number(servico.custoMateriais || 0)
+    const receita = normalizarMateriais(servico.materiais)
+    const custo = receita.length > 0
+      ? calcularCustoMateriais(receita, estoque.map(item => ({ id: item.id, precoUnitario: Number(item.precoUnitario) })))
+      : Number(servico.custoMateriais || 0)
     const ordensValidas = servico.ordens.filter((ordem) => ordem.status !== 'Cancelado')
     const finalizadas = ordensValidas.filter((ordem) => ordem.dataPedido && ordem.dataFinalizacao)
     const tempoMedioReal = finalizadas.length > 0
@@ -138,6 +138,8 @@ export async function getServicos() {
       : null
     const materiais = normalizarMateriais(servico.materiais).map((material) => ({
       ...material,
+      precoUnitario: materiaisPorId.has(material.id) ? Number(materiaisPorId.get(material.id)!.precoUnitario) : null,
+      ativo: materiaisPorId.get(material.id)?.ativo ?? false,
       nome: materiaisPorId.get(material.id)?.nome || `Material #${material.id}`,
       unidade: materiaisPorId.get(material.id)?.unidade || 'un',
     }))
@@ -152,7 +154,7 @@ export async function getServicos() {
       tempoProducao: servico.tempoProducao || 0,
       materiais,
       custoMateriais: custo,
-      margemLucro: preco > 0 ? Math.round(((preco - custo) / preco) * 100) : 0,
+      margemLucro: custo === null ? null : preco > 0 ? Math.round(((preco - custo) / preco) * 100) : 0,
       ativo: servico.ativo !== false,
       totalPedidos: ordensValidas.length,
       pedidos30Dias: ordensValidas.filter((ordem) => ordem.dataPedido && ordem.dataPedido >= limite30Dias).length,

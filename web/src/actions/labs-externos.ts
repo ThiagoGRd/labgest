@@ -1,5 +1,8 @@
 'use server'
 
+import { registrarEnvioFornecedor } from './workflow-protese'
+import { garantirPedidoNaoArquivado } from '@/lib/labs-externos-vinculo'
+import type { ArchiveQuery } from '@/lib/labs-externos-arquivo'
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -18,6 +21,8 @@ export type ResultadoAcao = { success: true } | { success: false; error: string 
 
 export interface LabExternoPedido {
   id: number
+  ordemId: number | null
+  fornecedorConfirmadoEm: Date | null
   labId: number | null
   labNome: string
   paciente: string
@@ -49,6 +54,8 @@ export interface LabExterno {
 
 interface LabExternoPedidoRow {
   id: number | bigint
+  ordem_id: number | null
+  fornecedor_confirmado_em: Date | null
   lab_id: number | bigint | null
   lab_nome: string
   paciente: string
@@ -69,6 +76,7 @@ interface LabExternoPedidoRow {
 const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe uma data válida.')
 
 const pedidoSchema = z.object({
+  ordemId: z.number().int().positive().optional(),
   labId: z.number().int().positive('Selecione o laboratório.'),
   paciente: z.string().trim().min(2, 'Informe o nome do paciente.').max(255),
   dentista: z.string().trim().max(255).optional(),
@@ -94,10 +102,12 @@ function primeiraMensagem(error: z.ZodError, padrao: string) {
 
 function revalidarLabs() {
   revalidatePath('/labs-externos')
+  revalidatePath('/producao')
+  revalidatePath('/ordens')
 }
 
-async function buscarPedido(id: number) {
-  const linhas = await prisma.$queryRaw<LabExternoPedidoRow[]>`
+async function buscarPedido(id: number, db: ArchiveQuery = prisma) {
+  const linhas = await db.$queryRaw<LabExternoPedidoRow[]>`
     SELECT * FROM labs_externos_pedidos WHERE id = ${id}
   `
   return linhas[0] ?? null
@@ -110,6 +120,28 @@ async function buscarLabAtivo(id: number) {
   return linhas[0] ?? null
 }
 
+// Linkage is immutable: discover order first, then always lock order before external row.
+async function alterarPedidoBloqueado(id: number, fn: (tx: ArchiveQuery, atual: LabExternoPedidoRow) => Promise<ResultadoAcao>) {
+  if (!Number.isSafeInteger(id) || id <= 0) return erro('Pedido inválido.')
+  return prisma.$transaction(async tx => {
+    const anterior = await buscarPedido(id, tx)
+    if (!anterior) return erro('Pedido não encontrado.')
+    if (anterior.ordem_id) await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${anterior.ordem_id} FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM labs_externos_pedidos WHERE id = ${id} FOR UPDATE`
+    const atual = await buscarPedido(id, tx)
+    if (!atual) return erro('Pedido não encontrado.')
+    await garantirPedidoNaoArquivado(tx, id)
+    return fn(tx, atual)
+  })
+}
+
+function validarSituacaoVinculada(atual: LabExternoPedidoRow, situacao: SituacaoPedido) {
+  if (!atual.ordem_id) return null
+  if (situacao === 'Entregue' && !atual.fornecedor_confirmado_em) return 'Confirme o recebimento na Produção antes da entrega externa.'
+  if (atual.data_retorno && (situacao === 'Enviado' || situacao === 'Provando')) return 'O retorno já foi registrado. Um novo envio exige um novo ciclo na Produção.'
+  return null
+}
+
 // ─── Consultas ──────────────────────────────────────────────────────────────
 
 export async function getPedidosLabExterno(labId?: number, arquivados = false): Promise<LabExternoPedido[]> {
@@ -119,7 +151,7 @@ export async function getPedidosLabExterno(labId?: number, arquivados = false): 
     SELECT
       p.*, md5(to_jsonb(p)::text) AS revisao,
       CASE
-        WHEN p.prazo IS NOT NULL AND p.prazo < ${hoje}::date AND p.situacao != 'Entregue'
+        WHEN p.prazo IS NOT NULL AND p.prazo < ${hoje}::date AND p.situacao IN ('Enviado', 'Provando') AND p.data_retorno IS NULL
         THEN (${hoje}::date - p.prazo)::int
         ELSE NULL
       END AS dias_atraso
@@ -240,6 +272,7 @@ export async function criarPedido(input: z.input<typeof pedidoSchema>): Promise<
   const pedido = parsed.data
 
   try {
+    if (pedido.ordemId) return await registrarEnvioFornecedor(pedido.ordemId, '', pedido.labId)
     const lab = await buscarLabAtivo(pedido.labId)
     if (!lab) return erro('Selecione um laboratório válido.')
 
@@ -264,25 +297,7 @@ export async function criarPedido(input: z.input<typeof pedidoSchema>): Promise<
 }
 
 export async function atualizarSituacao(id: number, situacao: SituacaoPedido): Promise<ResultadoAcao> {
-  await requireUser()
-  if (!isSituacao(situacao)) return erro('Situação inválida.')
-
-  try {
-    const atual = await buscarPedido(id)
-    if (!atual) return erro('Pedido não encontrado.')
-
-    const retorno = dataRetornoPara(situacao, paraIso(atual.data_retorno), hojeIso())
-    await prisma.$executeRaw`
-      UPDATE labs_externos_pedidos
-      SET situacao = ${situacao}, data_retorno = ${retorno}::date, updated_at = NOW()
-      WHERE id = ${id}
-    `
-    revalidarLabs()
-    return { success: true }
-  } catch (e) {
-    console.error('Erro ao atualizar situação do pedido:', e)
-    return erro('Não foi possível atualizar a situação do pedido.')
-  }
+  return atualizarPedido(id, { situacao })
 }
 
 export async function marcarRetrabalho(id: number, motivo: string): Promise<ResultadoAcao> {
@@ -290,13 +305,16 @@ export async function marcarRetrabalho(id: number, motivo: string): Promise<Resu
   if (motivo.trim().length < 5) return erro('Explique o motivo do retrabalho.')
 
   try {
-    await prisma.$executeRaw`
+    const resultado = await alterarPedidoBloqueado(id, async tx => {
+      await tx.$executeRaw`
       UPDATE labs_externos_pedidos
       SET is_retrabalho = true, motivo_retrabalho = ${motivo.trim()}, updated_at = NOW()
       WHERE id = ${id}
     `
-    revalidarLabs()
-    return { success: true }
+      return { success: true }
+    })
+    if (resultado.success) revalidarLabs()
+    return resultado
   } catch (e) {
     console.error('Erro ao registrar retrabalho:', e)
     return erro('Não foi possível registrar o retrabalho.')
@@ -307,13 +325,16 @@ export async function marcarRetrabalho(id: number, motivo: string): Promise<Resu
 export async function desmarcarRetrabalho(id: number): Promise<ResultadoAcao> {
   await requireUser()
   try {
-    await prisma.$executeRaw`
+    const resultado = await alterarPedidoBloqueado(id, async tx => {
+      await tx.$executeRaw`
       UPDATE labs_externos_pedidos
       SET is_retrabalho = false, motivo_retrabalho = NULL, updated_at = NOW()
       WHERE id = ${id}
     `
-    revalidarLabs()
-    return { success: true }
+      return { success: true }
+    })
+    if (resultado.success) revalidarLabs()
+    return resultado
   } catch (e) {
     console.error('Erro ao desfazer retrabalho:', e)
     return erro('Não foi possível desfazer o retrabalho.')
@@ -338,43 +359,51 @@ export async function atualizarPedido(id: number, alteracoes: {
   }
 
   try {
-    const atual = await buscarPedido(id)
-    if (!atual) return erro('Pedido não encontrado.')
+    const resultado = await alterarPedidoBloqueado(id, async (tx, atual) => {
+      if (atual.ordem_id && (
+        (alteracoes.labId !== undefined && alteracoes.labId !== Number(atual.lab_id)) ||
+        (alteracoes.dataEnvio !== undefined && alteracoes.dataEnvio !== (paraIso(atual.data_envio) ?? '')) ||
+        (alteracoes.prazo !== undefined && alteracoes.prazo !== (paraIso(atual.prazo) ?? ''))
+      )) return erro('Laboratório e datas do envio vinculado são definidos pela Produção.')
+      const erroSituacao = validarSituacaoVinculada(atual, alteracoes.situacao ?? atual.situacao)
+      if (erroSituacao) return erro(erroSituacao)
 
-    const lab = alteracoes.labId !== undefined && alteracoes.labId !== Number(atual.lab_id)
-      ? await buscarLabAtivo(alteracoes.labId)
-      : null
-    if (alteracoes.labId !== undefined && alteracoes.labId !== Number(atual.lab_id) && !lab) {
-      return erro('Selecione um laboratório válido.')
-    }
+      const lab = alteracoes.labId !== undefined && alteracoes.labId !== Number(atual.lab_id)
+        ? await buscarLabAtivo(alteracoes.labId)
+        : null
+      if (alteracoes.labId !== undefined && alteracoes.labId !== Number(atual.lab_id) && !lab) {
+        return erro('Selecione um laboratório válido.')
+      }
 
-    const texto = (novo: string | undefined, antigo: string | null) =>
-      novo === undefined ? antigo : novo.trim() || null
-    const dataEnvio = alteracoes.dataEnvio === undefined ? paraIso(atual.data_envio) : alteracoes.dataEnvio || null
-    const prazo = alteracoes.prazo === undefined ? paraIso(atual.prazo) : alteracoes.prazo || null
-    if (dataEnvio && prazo && prazo < dataEnvio) return erro('O prazo não pode ser anterior à data de envio.')
+      const texto = (novo: string | undefined, antigo: string | null) =>
+        novo === undefined ? antigo : novo.trim() || null
+      const dataEnvio = alteracoes.dataEnvio === undefined ? paraIso(atual.data_envio) : alteracoes.dataEnvio || null
+      const prazo = alteracoes.prazo === undefined ? paraIso(atual.prazo) : alteracoes.prazo || null
+      if (dataEnvio && prazo && prazo < dataEnvio) return erro('O prazo não pode ser anterior à data de envio.')
 
-    const situacao = alteracoes.situacao ?? atual.situacao
-    const retorno = dataRetornoPara(situacao, paraIso(atual.data_retorno), hojeIso())
-    const labId = lab ? lab.id : atual.lab_id
-    const labNome = lab ? lab.nome : atual.lab_nome
+      const situacao = alteracoes.situacao ?? atual.situacao
+      const retorno = alteracoes.situacao === undefined ? paraIso(atual.data_retorno) : dataRetornoPara(situacao, paraIso(atual.data_retorno), hojeIso())
+      const labId = lab ? lab.id : atual.lab_id
+      const labNome = lab ? lab.nome : atual.lab_nome
 
-    await prisma.$executeRaw`
-      UPDATE labs_externos_pedidos SET
-        lab_id       = ${labId},
-        lab_nome     = ${labNome},
-        paciente     = ${alteracoes.paciente?.trim() ?? atual.paciente},
-        dentista     = ${texto(alteracoes.dentista, atual.dentista)},
-        data_envio   = ${dataEnvio}::date,
-        prazo        = ${prazo}::date,
-        servico      = ${texto(alteracoes.servico, atual.servico)},
-        situacao     = ${situacao},
-        data_retorno = ${retorno}::date,
-        updated_at   = NOW()
-      WHERE id = ${id}
-    `
-    revalidarLabs()
-    return { success: true }
+      await tx.$executeRaw`
+        UPDATE labs_externos_pedidos SET
+          lab_id       = ${labId},
+          lab_nome     = ${labNome},
+          paciente     = ${alteracoes.paciente?.trim() ?? atual.paciente},
+          dentista     = ${texto(alteracoes.dentista, atual.dentista)},
+          data_envio   = ${dataEnvio}::date,
+          prazo        = ${prazo}::date,
+          servico      = ${texto(alteracoes.servico, atual.servico)},
+          situacao     = ${situacao},
+          data_retorno = ${retorno}::date,
+          updated_at   = NOW()
+        WHERE id = ${id}
+      `
+      return { success: true }
+    })
+    if (resultado.success) revalidarLabs()
+    return resultado
   } catch (e) {
     console.error('Erro ao atualizar pedido de laboratório externo:', e)
     return erro('Não foi possível salvar o pedido.')
@@ -395,6 +424,8 @@ function normalizar(row: LabExternoPedidoRow): LabExternoPedido {
     revisao:          row.revisao,
     arquivoVersao:    0,
     arquivado:        false,
+    ordemId:          row.ordem_id ?? null,
+    fornecedorConfirmadoEm: row.fornecedor_confirmado_em ?? null,
     labId:            row.lab_id ? Number(row.lab_id) : null,
     labNome:          row.lab_nome,
     paciente:         row.paciente,

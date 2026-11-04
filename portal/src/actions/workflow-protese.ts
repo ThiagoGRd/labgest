@@ -1,5 +1,7 @@
 'use server'
 
+import { erroTransicaoOrdem } from '@labgest/shared'
+
 import { Prisma, prisma } from '@labgest/database'
 import {
   calcularPrazoPasso,
@@ -8,6 +10,7 @@ import {
   isTipoProtese,
   statusParaPassoProtese,
 } from '@/lib/workflow-config'
+import { resolveClienteIdentity } from '@/lib/cliente-identity'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
@@ -15,13 +18,14 @@ function historicoComEvento(historico: Prisma.JsonValue, evento: Prisma.JsonObje
   return [...(Array.isArray(historico) ? historico : []), evento] as Prisma.JsonArray
 }
 
-export async function concluirEtapaClinica(ordemId: number) {
+export async function concluirEtapaClinica(ordemId: number, etapaEsperada: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return { success: false, error: 'Não autorizado' }
 
   const resultado = await prisma.$transaction(async (tx) => {
-    const cliente = await tx.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }, select: { id: true } })
+    const identity = await resolveClienteIdentity(user)
+    const cliente = identity.ok ? identity.cliente : null
     if (!cliente) return { success: false, error: 'Cliente não encontrado' }
 
     // Share the web's creation lock before taking the invoice snapshot. Restrict
@@ -33,7 +37,11 @@ export async function concluirEtapaClinica(ordemId: number) {
     })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Fluxo da prótese não identificado' }
 
+    const erroEstado = erroTransicaoOrdem(ordem.status, true)
+    if (erroEstado) return { success: false as const, error: erroEstado }
+    if (!etapaEsperada || ordem.passoFluxoAtual !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
     const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
+    if (ordem.status === 'Finalizado' && !passoAtual.entregaFinal) return { success: false, error: 'A produção já foi finalizada.' }
     if (passoAtual.responsavel !== 'clinica') return { success: false, error: 'Esta etapa deve ser concluída pelo laboratório' }
     if (passoAtual.prova) return { success: false, error: 'Registre o resultado da prova usando Aprovar ou Solicitar ajuste' }
 
@@ -57,8 +65,8 @@ export async function concluirEtapaClinica(ordemId: number) {
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
-          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: agora, dataEntregaReal: agora,
-          cobrancaGeradaEm: agora, prazoEtapaAtual: null,
+          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: ordem.dataFinalizacao ?? agora, dataEntregaReal: agora,
+          cobrancaGeradaEm: ordem.cobrancaGeradaEm ?? agora, prazoEtapaAtual: null,
           historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
             acao: 'entrega_clinica_concluida', etapa: passoAtual.nome, data: agora.toISOString(), por: user.email,
           }),

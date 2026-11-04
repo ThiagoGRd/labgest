@@ -8,6 +8,8 @@ import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagem } from '@/actions/mensagens'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
+import { useMessageSync } from '@/lib/use-message-sync'
+import { mergeMessages } from '@/lib/message-sync'
 
 interface Mensagem {
   id: string
@@ -37,9 +39,15 @@ async function uploadFotoChat(file: File): Promise<string> {
   return urlData.publicUrl
 }
 
-export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
+export function ChatPedido(props: ChatPedidoProps) {
+  return <ChatPedidoContent key={props.ordemId} {...props} />
+}
+
+function ChatPedidoContent({ ordemId, mensagensIniciais }: ChatPedidoProps) {
   const [mensagens, setMensagens] = useState<Mensagem[]>(mensagensIniciais || [])
+  useMessageSync(ordemId, mensagens, setMensagens)
   const [texto, setTexto] = useState('')
+  const requestRef = useRef<{ signature: string; id: string } | null>(null)
   const [loading, setLoading] = useState(false)
   // foto pendente (preview local + URL pós-upload)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
@@ -113,15 +121,18 @@ export function ChatPedido({ ordemId, mensagensIniciais }: ChatPedidoProps) {
 
 
     try {
-      const res = await enviarMensagem(ordemId, currentText, currentFoto || undefined)
+      const signature = JSON.stringify([currentText, currentFoto])
+      if (requestRef.current?.signature !== signature) requestRef.current = { signature, id: crypto.randomUUID() }
+      const res = await enviarMensagem(ordemId, currentText, currentFoto || undefined, requestRef.current.id)
       if (!res.success || !res.mensagem) {
         setSendError(res.error || 'Não foi possível enviar a mensagem. Tente novamente.')
         return
       }
       setTexto('')
+        requestRef.current = null
       removeFoto()
       if (res.mensagem) {
-        setMensagens(prev => [...prev, res.mensagem as Mensagem])
+        setMensagens(prev => mergeMessages(prev, [res.mensagem as Mensagem]))
       }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'Não foi possível enviar a mensagem. Tente novamente.')

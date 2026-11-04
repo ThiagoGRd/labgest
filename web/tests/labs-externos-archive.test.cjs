@@ -136,6 +136,8 @@ function actions(db, { admin = true } = {}) {
       requireUser: async () => user,
       requireAdmin: async () => { if (!admin) throw new Error('Acesso restrito a administradores'); return user },
     },
+    './workflow-protese': {},
+    '@/lib/labs-externos-vinculo': {},
     '@/lib/labs-externos-arquivo': service(),
     '@/lib/labs-externos-utils': { hojeIso: () => '2026-11-04' },
   }
@@ -163,7 +165,7 @@ test('server action only revalidates after an atomic successful commit', async (
   const result = await action.api.alterarArquivoPedido(f.input)
   assert.equal(result.success, true)
   assert.equal(f.state.events.length, 1)
-  assert.equal(action.revalidations(), 1)
+  assert.equal(action.revalidations(), 3)
   const failed = fixture({ failAudit: true })
   const failureAction = actions(failed.db)
   const failure = await failureAction.api.alterarArquivoPedido(failed.input)

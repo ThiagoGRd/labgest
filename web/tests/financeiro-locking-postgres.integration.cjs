@@ -102,13 +102,17 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../s
   if (name === './estoque-bloqueio') return stockLocks
   throw new Error(`Unexpected finalization import ${name}`)
 } })
+const transition = {}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../../packages/shared/src/order-transition.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: transition })
 const clinic = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../../portal/src/actions/workflow-protese.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { exports: clinic, Date, require(name) {
   if (name === '@labgest/database') return { prisma }
   if (name === 'next/cache') return { revalidatePath() {} }
-  if (name === '@/lib/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { email: 'clinic@example.test' } } }) } }) }
+  if (name === '@labgest/shared') return transition
+  if (name === '@/lib/cliente-identity') return { resolveClienteIdentity: async () => ({ ok: true, cliente: { id: 1 } }) }
+  if (name === '@/lib/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { email: 'clinic@example.test', email_confirmed_at: '2026-11-01T00:00:00Z' } } }) } }) }
   if (name === '@/lib/workflow-config') return { isTipoProtese: () => true, getPassoProtese: () => ({ responsavel: 'clinica', entregaFinal: true, nome: 'Synthetic delivery' }) }
   throw new Error(`Unexpected clinic import ${name}`)
 } })
@@ -194,14 +198,17 @@ async function main() {
     for (const pair of ['generate/generate', 'finalize/finalize', 'generate/finalize', 'finalize/generate', 'clinic/finalize', 'finalize/clinic', 'generate/clinic', 'clinic/generate', 'clinic/clinic']) {
       // Reset ALL shared state; a preceding clinic action must not leak dates.
       await pool.query(`TRUNCATE ${schema}.contas_receber, ${schema}.contas_pagar, ${schema}.ordens, ${schema}.movimentos`)
-      await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic', dataFinalizacao: '2026-11-04T12:00:00.000Z', cobrancaGeradaEm: null })])
+      await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, status: 'Finalizado', passoFluxoAtual: 'entrega_clinica', valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic', dataFinalizacao: '2026-11-04T12:00:00.000Z', cobrancaGeradaEm: null })])
       const finalize = () => prisma.$transaction(tx => finalization.garantirEfeitosFinalizacao(tx, 1))
-      const operations = { generate: () => actions.gerarCobrancaAutomatica(1), finalize, clinic: () => clinic.concluirEtapaClinica(1) }
+      const operations = { generate: () => actions.gerarCobrancaAutomatica(1), finalize, clinic: () => clinic.concluirEtapaClinica(1, 'entrega_clinica') }
       const names = pair.split('/')
       const results = await overlap(operations[names[0]], operations[names[1]])
       for (let index = 0; index < names.length; index++) {
         if (names[index] === 'finalize') assert.equal(results[index], undefined)
-        else if (names[index] === 'generate' && index === 1) {
+        else if (names[index] === 'clinic' && index === 1 && names[0] === 'clinic') {
+          assert.equal(results[index].success, false)
+          assert.equal(results[index].error, 'Esta ordem já está encerrada.')
+        } else if (names[index] === 'generate' && index === 1) {
           assert.equal(results[index].success, false)
           assert.equal(results[index].error, 'Já existe uma cobrança para esta ordem.')
         } else assert.equal(results[index].success, true, `${pair}: ${names[index]} must succeed`)

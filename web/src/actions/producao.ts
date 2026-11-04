@@ -1,5 +1,7 @@
 'use server'
 
+import { erroTransicaoOrdem } from '@labgest/shared'
+
 import { Prisma, prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
@@ -71,7 +73,7 @@ export async function getProducao() {
   }
 }
 
-export async function moverOrdem(id: number, novaEtapa: string) {
+export async function moverOrdem(id: number, novaEtapa: string, etapaEsperada: string) {
   await requireUser()
   if (!isEtapaId(novaEtapa) || novaEtapa === 'entregue') {
     return { success: false, error: 'Etapa de produção inválida' }
@@ -80,10 +82,14 @@ export async function moverOrdem(id: number, novaEtapa: string) {
   try {
     const novoStatus = statusParaEtapa(novaEtapa)
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${id} FOR UPDATE`
+
       const ordemAtual = await tx.ordem.findUnique({
         where: { id },
       })
       if (!ordemAtual) return { success: false, error: 'Ordem não encontrada' }
+      const erroEstado = erroTransicaoOrdem(ordemAtual.status, false)
+      if (erroEstado) return { success: false as const, error: erroEstado }
       if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
         return { success: false, error: 'Esta ordem já está encerrada e não pode ser movimentada.' }
       }
@@ -94,6 +100,7 @@ export async function moverOrdem(id: number, novaEtapa: string) {
         }
       }
 
+      if (!etapaEsperada || normalizarEtapa(ordemAtual.etapaAtual || '') !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
       const agora = new Date()
       const historico = (Array.isArray(ordemAtual.historicoEtapas) ? ordemAtual.historicoEtapas : []) as Prisma.InputJsonObject[]
       const proximoHistorico = [

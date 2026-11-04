@@ -30,6 +30,7 @@ interface PedidoRecente {
 interface DashboardViewProps {
   user: PortalUser
   stats: {
+    aguardando: number
     total: number
     emAndamento: number
     finalizados: number
@@ -78,7 +79,7 @@ export function DashboardView({ user, stats, pedidosRecentes }: DashboardViewPro
 
   const statCards = [
     { name: 'Em Andamento', value: stats.emAndamento.toString(), icon: Clock, color: 'bg-blue-500', shadow: 'shadow-blue-500/20' },
-    { name: 'Aguardando', value: (stats.total - stats.emAndamento - stats.finalizados).toString(), icon: ClipboardList, color: 'bg-amber-500', shadow: 'shadow-amber-500/20' },
+    { name: 'Aguardando', value: stats.aguardando.toString(), icon: ClipboardList, color: 'bg-amber-500', shadow: 'shadow-amber-500/20' },
     { name: 'Finalizados', value: stats.finalizados.toString(), icon: CheckCircle, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20' },
   ]
 

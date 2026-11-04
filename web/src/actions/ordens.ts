@@ -1,5 +1,7 @@
 'use server'
 
+import { erroTransicaoOrdem } from '@labgest/shared'
+
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
@@ -23,6 +25,8 @@ import {
   type TipoWorkflow,
   calcularPrazoPasso,
   getFluxoProtese,
+  getPassoProtese,
+  statusParaPassoProtese,
   inferirTipoProtese,
   isTipoProtese,
 } from '@/lib/workflow-config'
@@ -282,6 +286,8 @@ export async function updateOrdem(id: number, data: {
   material: string
   observacoes: string
   motivoStatus?: string
+  statusEsperado: string
+  etapaEsperada: string
 }) {
   const usuario = await requireUser()
   try {
@@ -303,12 +309,17 @@ export async function updateOrdem(id: number, data: {
       : statusParaEtapa(etapaCanonica)
 
     const resultado = await prisma.$transaction(async (tx) => {
-      const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true } })
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${id} FOR UPDATE`
+
+      const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true, tipoWorkflow: true, passoFluxoAtual: true } })
       if (!ordemAtual) return { success: false as const, error: 'Ordem não encontrada' }
       if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
         return { success: false as const, error: 'Ordens encerradas não podem ser alteradas' }
       }
 
+      if (ordemAtual.status !== data.statusEsperado || normalizarEtapa(ordemAtual.etapaAtual || '') !== normalizarEtapa(data.etapaEsperada || '')) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de salvar.' }
+      if (isTipoProtese(ordemAtual.tipoWorkflow) && normalizarEtapa(ordemAtual.etapaAtual || '') !== etapaCanonica) return { success: false as const, error: 'Use o fluxo específico da prótese para mudar a etapa.' }
+      const statusEfetivo = data.status === 'Pausado' ? 'Pausado' : isTipoProtese(ordemAtual.tipoWorkflow) ? statusParaPassoProtese(getPassoProtese(ordemAtual.tipoWorkflow, ordemAtual.passoFluxoAtual)) : novoStatus
       const agora = new Date()
       const historico = (ordemAtual.historicoEtapas as Prisma.InputJsonObject[]) || []
       if (novoStatus === 'Pausado' && ordemAtual.status !== 'Pausado') {
@@ -324,7 +335,7 @@ export async function updateOrdem(id: number, data: {
           cpfPaciente,
           dataEntrega,
           prioridade: data.prioridade,
-          status: novoStatus,
+          status: statusEfetivo,
           etapaAtual: etapaCanonica,
           corDentes: data.corDentes,
           material: data.material,
@@ -378,6 +389,7 @@ export async function getOrdemById(id: number) {
 
     return {
       id: ordem.id,
+      updatedAt: ordem.updatedAt?.toISOString() || '',
       paciente: ordem.nomePaciente,
       cpfPaciente: ordem.cpfPaciente || '',
       cliente: { id: ordem.cliente?.id, nome: ordem.clienteNome || ordem.cliente?.nome || 'Cliente Desconhecido' },
@@ -461,6 +473,8 @@ export async function deleteOrdem(id: number) {
   await requireUser()
   try {
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${id} FOR UPDATE`
+
       const ordem = await tx.ordem.findUnique({
         where: { id },
         select: {
@@ -503,36 +517,39 @@ export async function cancelarOrdem(id: number, motivo: string) {
   const usuario = await requireUser()
   if (!motivo.trim()) return { success: false, error: 'Informe o motivo do cancelamento' }
 
-  const ordem = await prisma.ordem.findUnique({ where: { id } })
-  if (!ordem) return { success: false, error: 'Ordem não encontrada' }
-  if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
-    return { success: false, error: 'Esta ordem não pode mais ser cancelada' }
-  }
+  return await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${id} FOR UPDATE`
+    const ordem = await tx.ordem.findUnique({ where: { id } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
+      return { success: false, error: 'Esta ordem não pode mais ser cancelada' }
+    }
 
-  const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
-  historico.push({
-    etapa: ordem.etapaAtual || 'recebimento',
-    acao: 'cancelou',
-    motivo: motivo.trim(),
-    data: new Date().toISOString(),
-    por: usuario.email,
+    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
+    historico.push({
+      etapa: ordem.etapaAtual || 'recebimento',
+      acao: 'cancelou',
+      motivo: motivo.trim(),
+      data: new Date().toISOString(),
+      por: usuario.email,
+    })
+
+    await tx.ordem.update({
+      where: { id },
+      data: {
+        status: 'Cancelado',
+        motivoCancelamento: motivo.trim(),
+        canceladoEm: new Date(),
+        canceladoPor: usuario.email,
+        historicoEtapas: historico,
+      },
+    })
+
+    revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/prioridades')
+    return { success: true }
   })
-
-  await prisma.ordem.update({
-    where: { id },
-    data: {
-      status: 'Cancelado',
-      motivoCancelamento: motivo.trim(),
-      canceladoEm: new Date(),
-      canceladoPor: usuario.email,
-      historicoEtapas: historico,
-    },
-  })
-
-  revalidatePath('/ordens')
-  revalidatePath('/producao')
-  revalidatePath('/prioridades')
-  return { success: true }
 }
 
 export async function getDadosNovaOrdem() {
@@ -560,17 +577,23 @@ export async function getDadosNovaOrdem() {
 // Workflow Actions — Avançar / Devolver etapas
 // ============================================================
 
-export async function avancarEtapa(ordemId: number, observacao?: string) {
+export async function avancarEtapa(ordemId: number, observacao?: string, etapaEsperada?: string) {
   await requireUser()
   try {
     console.log('[avancarEtapa] Iniciando para ordem ID:', ordemId)
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+
       const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
       if (!ordem) {
         console.error('[avancarEtapa] Ordem não encontrada:', ordemId)
         return { success: false as const, error: 'Ordem não encontrada' }
       }
 
+      const erroEstado = erroTransicaoOrdem(ordem.status, false)
+      if (erroEstado) return { success: false as const, error: erroEstado }
+      if (isTipoProtese(ordem.tipoWorkflow)) return { success: false as const, error: 'Use o fluxo específico da prótese.' }
+      if (!etapaEsperada || normalizarEtapa(ordem.etapaAtual || '') !== normalizarEtapa(etapaEsperada)) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
       const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
       // Normaliza etapa atual para ID canônico (lida com dados legados)
       const etapaAtualCanonica = normalizarEtapa(ordem.etapaAtual || 'recebimento')
@@ -760,52 +783,59 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
   }
 }
 
-export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
+export async function retornarEtapa(ordemId: number, motivoRetorno: string, etapaEsperada: string) {
   await requireUser()
   try {
     if (!motivoRetorno.trim()) {
       return { success: false, error: 'Informe o motivo da devolução' }
     }
 
-    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    return await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+      const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+      if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
-    const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
-    const etapaAtual = ordem.etapaAtual || 'Recebimento'
-    const retorno = getRetornoEtapa(tipoWorkflow, etapaAtual)
+      const erroEstado = erroTransicaoOrdem(ordem.status, false)
+      if (erroEstado) return { success: false as const, error: erroEstado }
+      if (isTipoProtese(ordem.tipoWorkflow)) return { success: false as const, error: 'Use o fluxo específico da prótese.' }
+      if (!etapaEsperada || normalizarEtapa(ordem.etapaAtual || '') !== normalizarEtapa(etapaEsperada)) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+      const tipoWorkflow = (ordem.tipoWorkflow as TipoWorkflow) || null
+      const etapaAtual = ordem.etapaAtual || 'Recebimento'
+      const retorno = getRetornoEtapa(tipoWorkflow, etapaAtual)
 
-    if (!retorno) return { success: false, error: 'Não é possível retornar desta etapa' }
+      if (!retorno) return { success: false, error: 'Não é possível retornar desta etapa' }
 
-    const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
-    const novaTentativa = (ordem.tentativaAtual || 0) + 1
+      const historico = (ordem.historicoEtapas as Prisma.InputJsonObject[]) || []
+      const novaTentativa = (ordem.tentativaAtual || 0) + 1
 
-    historico.push({
-      etapa: etapaAtual,
-      acao: 'devolveu',
-      para: retorno,
-      data: new Date().toISOString(),
-      motivo: motivoRetorno,
-      tentativa: novaTentativa,
+      historico.push({
+        etapa: etapaAtual,
+        acao: 'devolveu',
+        para: retorno,
+        data: new Date().toISOString(),
+        motivo: motivoRetorno,
+        tentativa: novaTentativa,
+      })
+
+      const progresso = getProgresso(tipoWorkflow, retorno)
+
+      await tx.ordem.update({
+        where: { id: ordemId },
+        data: {
+          etapaAtual: retorno,
+          tentativaAtual: novaTentativa,
+          historicoEtapas: historico,
+          status: statusParaEtapa(retorno),
+          progresso: progresso,
+          checklistEstetico: {},
+        }
+      })
+
+      revalidatePath('/ordens')
+      revalidatePath('/producao')
+      revalidatePath('/prioridades')
+      return { success: true, novaEtapa: retorno, tentativa: novaTentativa }
     })
-
-    const progresso = getProgresso(tipoWorkflow, retorno)
-
-    await prisma.ordem.update({
-      where: { id: ordemId },
-      data: {
-        etapaAtual: retorno,
-        tentativaAtual: novaTentativa,
-        historicoEtapas: historico,
-        status: statusParaEtapa(retorno),
-        progresso: progresso,
-        checklistEstetico: {},
-      }
-    })
-
-    revalidatePath('/ordens')
-    revalidatePath('/producao')
-    revalidatePath('/prioridades')
-    return { success: true, novaEtapa: retorno, tentativa: novaTentativa }
   } catch (error) {
     console.error('Erro ao retornar etapa:', error)
     return { success: false, error: 'Erro ao retornar etapa' }

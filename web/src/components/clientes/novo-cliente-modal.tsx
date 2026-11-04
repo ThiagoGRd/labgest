@@ -125,12 +125,15 @@ export function NovoClienteModal({ isOpen, onClose, onSuccess, cliente }: NovoCl
           </label>
           <Input
             type="email"
+            readOnly={Boolean(cliente?.email?.trim())}
+            aria-describedby="cliente-email-info"
             id="cliente-email"
             name="email"
             value={formData.email}
             onChange={handleChange}
             placeholder="email@exemplo.com"
           />
+          <p id="cliente-email-info" className="mt-1 text-xs text-slate-500">{cliente?.email?.trim() ? 'Email de acesso protegido. Para revisar o vínculo do portal, entre em contato com o laboratório.' : 'Use um email exclusivo deste cadastro. O acesso ao portal exige confirmação do email.'}</p>
         </div>
 
         <div>

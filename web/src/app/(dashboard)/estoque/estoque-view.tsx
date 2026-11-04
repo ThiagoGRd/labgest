@@ -1,6 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { getMovimentacoesEstoque, exportarMovimentacoesEstoque } from '@/actions/estoque'
 import { useRouter } from 'next/navigation'
 import { useReactToPrint } from 'react-to-print'
 import { toast } from 'sonner'
@@ -80,10 +82,29 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
   const [itemModal, setItemModal] = useState<ItemEstoque | 'novo' | null>(null)
   const [itemMovimentacao, setItemMovimentacao] = useState<ItemEstoque | null>(null)
   const [mesMovimentacoes, setMesMovimentacoes] = useState(() => mesAtual(initialData.emitidoEm))
+  const [pagina, setPagina] = useState(1)
+  const [historico, setHistorico] = useState({ movimentacoes: initialData.movimentacoes, total: initialData.historico?.total ?? 0, tamanhoPagina: 100 })
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false)
+  const [erroHistorico, setErroHistorico] = useState('')
+  const [exportando, setExportando] = useState(false)
+  const [periodoRelatorio, setPeriodoRelatorio] = useState('')
+  const [movimentacoesRelatorio, setMovimentacoesRelatorio] = useState<MovimentacaoEstoque[]>([])
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorioEstoque>('posicao')
 
   const itens = initialData.itens || []
-  const movimentacoes = initialData.movimentacoes || []
+  const movimentacoes = historico.movimentacoes
+
+  useEffect(() => {
+    let cancelado = false
+    setCarregandoHistorico(true)
+    setErroHistorico('')
+    getMovimentacoesEstoque(mesMovimentacoes, pagina, search).then(resultado => {
+      if (!cancelado) setHistorico(resultado)
+    }).catch(() => {
+      if (!cancelado) { setHistorico({ movimentacoes: [], total: 0, tamanhoPagina: 100 }); setErroHistorico('Não foi possível carregar o histórico. Tente novamente.'); }
+    }).finally(() => { if (!cancelado) setCarregandoHistorico(false) })
+    return () => { cancelado = true }
+  }, [mesMovimentacoes, pagina, search, initialData])
   const itensAtivos = itens.filter(item => item.ativo)
   const categorias = ['Todos', ...Array.from(new Set(itens.map(item => item.categoria))).sort((a, b) => a.localeCompare(b, 'pt-BR'))]
   const busca = search.trim().toLocaleLowerCase('pt-BR')
@@ -91,16 +112,31 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
     const correspondeBusca = !busca || [item.nome, item.marca, item.fornecedor, item.codigoBarras, item.localizacao].some(valor => valor.toLocaleLowerCase('pt-BR').includes(busca))
     return correspondeBusca && (categoria === 'Todos' || item.categoria === categoria) && (!somenteAlertas || item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))) && (mostrarArquivados || item.ativo)
   })
-  const movimentacoesFiltradas = movimentacoes.filter(item => mesMaceio(item.createdAt) === mesMovimentacoes && (!busca || item.itemNome.toLocaleLowerCase('pt-BR').includes(busca)))
+  const movimentacoesFiltradas = carregandoHistorico ? [] : movimentacoes
+  function mudarMes(mes: string) { if (mes) { setMesMovimentacoes(mes); setPagina(1) } }
+  function mudarBusca(valor: string) { setSearch(valor); setPagina(1) }
   const itensCriticos = itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima).length
   const itensValidade = itensAtivos.filter(item => Boolean(statusValidade(item, initialData.emitidoEm))).length
   const valorTotal = itensAtivos.reduce((total, item) => total + item.quantidade * item.precoUnitario, 0)
   const periodoLabel = new Date(`${mesMovimentacoes}-01T00:00:00Z`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
   const imprimir = useReactToPrint({ contentRef: relatorioRef, documentTitle: `estoque-${tipoRelatorio}-${mesMovimentacoes}` })
-  function gerarRelatorio(tipo: TipoRelatorioEstoque) {
-    setTipoRelatorio(tipo)
-    window.setTimeout(() => imprimir(), 80)
+  async function gerarRelatorio(tipo: TipoRelatorioEstoque) {
+    if (exportando) return
+    setExportando(true)
+    try {
+      const movimentos = tipo === 'movimentacoes' ? await exportarMovimentacoesEstoque(mesMovimentacoes) : []
+      flushSync(() => { setTipoRelatorio(tipo); setMovimentacoesRelatorio(movimentos); setPeriodoRelatorio(periodoLabel) })
+      imprimir()
+    } catch { toast.error('Não foi possível gerar o relatório completo.') }
+    finally { setExportando(false) }
+  }
+  async function exportarMes() {
+    if (exportando) return
+    setExportando(true)
+    try { exportarMovimentacoes(await exportarMovimentacoesEstoque(mesMovimentacoes), mesMovimentacoes) }
+    catch { toast.error('Não foi possível exportar o mês completo.') }
+    finally { setExportando(false) }
   }
   function concluirAcao(mensagem: string) {
     setItemModal(null); setItemMovimentacao(null); toast.success(mensagem); router.refresh()
@@ -113,6 +149,7 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
 
       <Header title="Estoque" subtitle="Cadastro, movimentações, alertas e relatórios" action={{ label: 'Novo item', onClick: () => setItemModal('novo') }} />
       <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6">
+        {exportando && <p role="status">Preparando exportação completa…</p>}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Indicador icon={Package} label="Itens ativos" valor={String(itensAtivos.length)} detalhe={`${itens.length - itensAtivos.length} arquivados`} cor="indigo" />
           <Indicador icon={AlertTriangle} label="Estoque crítico" valor={String(itensCriticos)} detalhe="No mínimo ou abaixo" cor="red" />
@@ -124,23 +161,28 @@ export function EstoqueView({ initialData }: { initialData: GestaoEstoqueData })
           <TabsList className="h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto"><TabsTrigger value="itens">Itens</TabsTrigger><TabsTrigger value="movimentacoes">Movimentações</TabsTrigger><TabsTrigger value="relatorios">Relatórios</TabsTrigger></TabsList>
 
           <TabsContent value="itens" className="space-y-4">
-            <Card><CardContent className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center"><Busca value={search} onChange={setSearch} /><div className="flex flex-wrap gap-2">{categorias.map(opcao => <button key={opcao} type="button" onClick={() => setCategoria(opcao)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${categoria === opcao ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300'}`}>{opcao}</button>)}</div><label className="flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"><input type="checkbox" checked={somenteAlertas} onChange={event => setSomenteAlertas(event.target.checked)} /> Alertas</label><label className="flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={mostrarArquivados} onChange={event => setMostrarArquivados(event.target.checked)} /> Arquivados</label></CardContent></Card>
+            <Card><CardContent className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center"><Busca value={search} onChange={mudarBusca} /><div className="flex flex-wrap gap-2">{categorias.map(opcao => <button key={opcao} type="button" onClick={() => setCategoria(opcao)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${categoria === opcao ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300'}`}>{opcao}</button>)}</div><label className="flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"><input type="checkbox" checked={somenteAlertas} onChange={event => setSomenteAlertas(event.target.checked)} /> Alertas</label><label className="flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={mostrarArquivados} onChange={event => setMostrarArquivados(event.target.checked)} /> Arquivados</label></CardContent></Card>
             <Card>{itensFiltrados.length === 0 ? <EmptyState title="Nenhum item encontrado" description="Ajuste os filtros ou cadastre um novo material." /> : <div className="overflow-x-auto"><table className="w-full min-w-[1050px]"><thead><tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="px-5 py-4">Material</th><th className="px-5 py-4">Categoria</th><th className="px-5 py-4 text-center">Saldo</th><th className="px-5 py-4">Situação</th><th className="px-5 py-4 text-right">Custo unit.</th><th className="px-5 py-4">Fornecedor</th><th className="px-5 py-4">Validade</th><th className="px-5 py-4 text-right">Ações</th></tr></thead><tbody className="divide-y">{itensFiltrados.map(item => <LinhaItem key={item.id} item={item} emitidoEm={initialData.emitidoEm} onEditar={() => setItemModal(item)} onMovimentar={() => setItemMovimentacao(item)} />)}</tbody></table></div>}</Card>
           </TabsContent>
 
           <TabsContent value="movimentacoes" className="space-y-4">
-            <Card><CardContent className="flex flex-col gap-3 p-4 sm:flex-row"><Busca value={search} onChange={setSearch} placeholder="Buscar material no histórico..." /><Input type="month" value={mesMovimentacoes} onChange={event => setMesMovimentacoes(event.target.value)} className="sm:w-48" /><Button variant="outline" onClick={() => exportarMovimentacoes(movimentacoesFiltradas, mesMovimentacoes)}><Download className="h-4 w-4" />Exportar CSV</Button></CardContent></Card>
-            <Card>{movimentacoesFiltradas.length === 0 ? <EmptyState icon={FileClock} title="Sem movimentações neste período" description="Entradas, saídas, ajustes e consumos automáticos aparecerão aqui." /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px]"><thead><tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="px-5 py-4">Data</th><th className="px-5 py-4">Material</th><th className="px-5 py-4">Tipo</th><th className="px-5 py-4">Quantidade</th><th className="px-5 py-4">Saldo</th><th className="px-5 py-4">Motivo</th><th className="px-5 py-4">Responsável</th></tr></thead><tbody className="divide-y">{movimentacoesFiltradas.map(item => <LinhaMovimentacao key={item.id} item={item} />)}</tbody></table></div>}</Card>
+            <Card><CardContent className="flex flex-col gap-3 p-4 sm:flex-row"><Busca value={search} onChange={mudarBusca} placeholder="Buscar material no histórico..." /><Input type="month" value={mesMovimentacoes} onChange={event => mudarMes(event.target.value)} className="sm:w-48" /><Button variant="outline" onClick={() => exportarMes()}><Download className="h-4 w-4" />Exportar mês completo</Button></CardContent></Card>
+            <div className="flex flex-wrap items-center gap-3 text-sm" aria-live="polite">
+              <span>{carregandoHistorico ? 'Carregando histórico…' : erroHistorico || `${historico.total} movimentos encontrados · Página ${pagina} de ${Math.max(1, Math.ceil(historico.total / historico.tamanhoPagina))}`}</span>
+              <Button variant="outline" disabled={carregandoHistorico || pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</Button>
+              <Button variant="outline" disabled={carregandoHistorico || pagina * historico.tamanhoPagina >= historico.total} onClick={() => setPagina(pagina + 1)}>Próxima</Button>
+            </div>
+            <Card>{movimentacoesFiltradas.length === 0 ? <EmptyState icon={FileClock} title={carregandoHistorico ? "Carregando histórico" : erroHistorico ? "Histórico indisponível" : "Sem movimentações neste período"} description="Entradas, saídas, ajustes e consumos automáticos aparecerão aqui." /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px]"><thead><tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="px-5 py-4">Data</th><th className="px-5 py-4">Material</th><th className="px-5 py-4">Tipo</th><th className="px-5 py-4">Quantidade</th><th className="px-5 py-4">Saldo</th><th className="px-5 py-4">Motivo</th><th className="px-5 py-4">Responsável</th></tr></thead><tbody className="divide-y">{movimentacoesFiltradas.map(item => <LinhaMovimentacao key={item.id} item={item} />)}</tbody></table></div>}</Card>
           </TabsContent>
 
           <TabsContent value="relatorios" className="space-y-4">
-            <Card><CardHeader><CardTitle>Relatórios gerenciais</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-3"><RelatorioCard icon={Package} titulo="Posição atual" descricao="Saldos, mínimos, validade, localização e valor total." onPrint={() => gerarRelatorio('posicao')} onCsv={() => exportarPosicao(itensAtivos)} /><RelatorioCard icon={AlertTriangle} titulo="Alertas" descricao="Itens críticos, esgotados, vencidos ou próximos da validade." onPrint={() => gerarRelatorio('alertas')} onCsv={() => exportarPosicao(itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))), 'alertas-estoque.csv')} /><RelatorioCard icon={ArrowLeftRight} titulo="Movimentações" descricao={`Entradas, saídas e ajustes de ${periodoLabel}.`} onPrint={() => gerarRelatorio('movimentacoes')} onCsv={() => exportarMovimentacoes(movimentacoesFiltradas, mesMovimentacoes)} extra={<Input type="month" value={mesMovimentacoes} onChange={event => setMesMovimentacoes(event.target.value)} />} /></CardContent></Card>
+            <Card><CardHeader><CardTitle>Relatórios gerenciais</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-3"><RelatorioCard icon={Package} titulo="Posição atual" descricao="Saldos, mínimos, validade, localização e valor total." onPrint={() => gerarRelatorio('posicao')} onCsv={() => exportarPosicao(itensAtivos)} /><RelatorioCard icon={AlertTriangle} titulo="Alertas" descricao="Itens críticos, esgotados, vencidos ou próximos da validade." onPrint={() => gerarRelatorio('alertas')} onCsv={() => exportarPosicao(itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))), 'alertas-estoque.csv')} /><RelatorioCard icon={ArrowLeftRight} titulo="Movimentações" descricao={`Todos os movimentos de ${periodoLabel}, sem os filtros de busca.`} onPrint={() => gerarRelatorio('movimentacoes')} onCsv={() => exportarMes()} extra={<Input type="month" value={mesMovimentacoes} onChange={event => mudarMes(event.target.value)} />} /></CardContent></Card>
             <Card><CardHeader><CardTitle>Leitura gerencial</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-3"><ResumoGestao titulo="Reposição imediata" valor={`${itensCriticos} itens`} texto="Priorize os materiais no estoque mínimo ou abaixo." /><ResumoGestao titulo="Risco de perda" valor={`${itensValidade} itens`} texto="Consuma primeiro os lotes vencidos ou com até 30 dias." /><ResumoGestao titulo="Capital imobilizado" valor={moeda(valorTotal)} texto="Custo estimado de todo o saldo ativo cadastrado." /></CardContent></Card>
           </TabsContent>
         </Tabs>
       </div>
 
-      <div className="fixed left-[-10000px] top-0 bg-white"><RelatorioEstoque ref={relatorioRef} tipo={tipoRelatorio} itens={tipoRelatorio === 'alertas' ? itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))) : itensAtivos} movimentacoes={movimentacoesFiltradas} periodo={periodoLabel} emitidoEm={initialData.emitidoEm} /></div>
+      <div className="fixed left-[-10000px] top-0 bg-white"><RelatorioEstoque ref={relatorioRef} tipo={tipoRelatorio} itens={tipoRelatorio === 'alertas' ? itensAtivos.filter(item => item.quantidade <= item.quantidadeMinima || Boolean(statusValidade(item, initialData.emitidoEm))) : itensAtivos} movimentacoes={movimentacoesRelatorio} periodo={periodoRelatorio} emitidoEm={initialData.emitidoEm} /></div>
     </DashboardLayout>
   )
 }

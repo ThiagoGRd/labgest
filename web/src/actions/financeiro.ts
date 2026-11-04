@@ -121,12 +121,10 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 export async function getFinanceiroPageData(filtroMes?: string) {
   await requireUser()
   const hoje = new Date()
-  const mesValido = /^\d{4}-\d{2}$/.test(filtroMes ?? '') ? filtroMes! : null
+  const mesValido = /^\d{4}-(0[1-9]|1[0-2])$/.test(filtroMes ?? '') ? filtroMes! : null
   const [ano, mes] = mesValido
     ? mesValido.split('-').map(Number)
     : [hoje.getFullYear(), hoje.getMonth() + 1]
-  const inicio = new Date(ano, mes - 1, 1)
-  const fim = new Date(ano, mes, 0, 23, 59, 59)
   const { inicio: inicioReceber, fimExclusivo } = limitesMesReceber(ano, mes)
 
   const [receberNoPeriodo, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, vencidasGlobais] = await Promise.all([
@@ -136,11 +134,11 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       orderBy: [{ status: 'asc' }, { dataVencimento: 'asc' }],
     }),
     prisma.contaPagar.findMany({
-      where: { dataVencimento: { gte: inicio, lte: fim } },
+      where: { dataVencimento: { gte: inicioReceber, lt: fimExclusivo } },
       orderBy: [{ status: 'asc' }, { dataVencimento: 'asc' }],
     }),
     prisma.movimentacaoFinanceira.findMany({
-      where: { dataMovimentacao: { gte: inicio, lte: fim }, estornadaEm: null },
+      where: { dataMovimentacao: { gte: inicioReceber, lt: fimExclusivo }, estornadaEm: null },
       include: {
         contaReceber: { select: { descricao: true, clienteNome: true } },
         contaPagar: { select: { descricao: true, fornecedor: true } },
@@ -215,7 +213,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
 
   const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
   for (const conta of mesesPagar) {
-    meses.add(`${conta.dataVencimento.getFullYear()}-${String(conta.dataVencimento.getMonth() + 1).padStart(2, '0')}`)
+    meses.add(mesDataFinanceira(conta.dataVencimento))
   }
 
   for (const conta of mesesReceber) {

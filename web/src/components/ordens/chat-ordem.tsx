@@ -7,6 +7,8 @@ import { Modal } from '@/components/ui/modal'
 import { Send, MessageSquare, Loader2, Camera, X, ZoomIn } from 'lucide-react'
 import { enviarMensagemLab } from '@/actions/mensagens'
 import Image from 'next/image'
+import { useMessageSync } from '@/lib/use-message-sync'
+import { mergeMessages } from '@/lib/message-sync'
 
 export interface Mensagem {
   id: string
@@ -41,9 +43,15 @@ async function uploadFotoChatLab(file: File, supabaseUrl: string): Promise<strin
   return urlData.publicUrl
 }
 
-export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdemProps) {
+export function ChatOrdem(props: ChatOrdemProps) {
+  return <ChatOrdemContent key={props.ordemId} {...props} />
+}
+
+function ChatOrdemContent({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdemProps) {
   const [mensagens, setMensagens] = useState<Mensagem[]>(mensagensIniciais || [])
+  useMessageSync(ordemId, mensagens, setMensagens)
   const [texto, setTexto] = useState('')
+  const requestRef = useRef<{ signature: string; id: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const sendingRef = useRef(false)
@@ -113,10 +121,13 @@ export function ChatOrdem({ ordemId, mensagensIniciais, supabaseUrl }: ChatOrdem
     setLoading(true)
     setError('')
     try {
-      const res = await enviarMensagemLab(ordemId, texto, fotoUrl || undefined)
+      const signature = JSON.stringify([texto, fotoUrl])
+      if (requestRef.current?.signature !== signature) requestRef.current = { signature, id: crypto.randomUUID() }
+      const res = await enviarMensagemLab(ordemId, texto, fotoUrl || undefined, requestRef.current.id)
       if (res.success && res.mensagem) {
-        setMensagens(prev => [...prev, res.mensagem])
+        setMensagens(prev => mergeMessages(prev, [res.mensagem]))
         setTexto('')
+        requestRef.current = null
         removeFoto()
       } else {
         setError(res.error || 'Não foi possível enviar a mensagem. Tente novamente.')

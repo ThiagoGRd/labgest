@@ -15,7 +15,7 @@ interface PedidoHistorico {
   servico: string
   status: string
   dataEntrega: string
-  dataFinalizacao: string
+  dataEncerramento: string | null
   valor: number
 }
 
@@ -33,7 +33,8 @@ function getStatusVariant(status: string) {
   return map[status] || 'default'
 }
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return 'Não registrada'
   return new Date(dateStr).toLocaleDateString('pt-BR')
 }
 
@@ -53,7 +54,7 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
     <PortalLayout user={user}>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Histórico de Pedidos</h1>
-        <p className="text-slate-500 dark:text-slate-400">Consulte seus casos finalizados e entregues</p>
+        <p className="text-slate-500 dark:text-slate-400">Consulte seus casos finalizados, entregues e cancelados</p>
       </div>
 
       <Card className="mb-6 dark:bg-zinc-900 dark:border-zinc-800">
@@ -75,7 +76,7 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50">
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Data Finalização</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Data Encerramento</th>
                 <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">ID</th>
                 <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Paciente</th>
                 <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-4">Serviço</th>
@@ -96,7 +97,7 @@ export function HistoricoView({ user, pedidos }: HistoricoViewProps) {
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-                        {formatDate(pedido.dataFinalizacao)}
+                        {formatDate(pedido.dataEncerramento)}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">#{pedido.id}</td>

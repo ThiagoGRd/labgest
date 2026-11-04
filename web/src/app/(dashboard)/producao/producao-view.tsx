@@ -365,7 +365,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     setMovendoOrdem(true)
     const { ordem, toEtapa } = pendingMove
     try {
-      const result = await moverOrdem(ordem.id, toEtapa)
+      const result = await moverOrdem(ordem.id, toEtapa, ordem.etapa)
       if (!result.success) throw new Error(result.error || 'Não foi possível mover a ordem.')
       toast.success('Ordem movimentada.')
       setChecklistOpen(false)

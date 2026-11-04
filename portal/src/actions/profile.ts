@@ -1,33 +1,18 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { requireClienteIdentity, resolveClienteIdentity } from '@/lib/cliente-identity'
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 
-async function getClienteLogado() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user || !user.email) return null
-
-  const cliente = await prisma.cliente.findFirst({
-    where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true }
-  })
-
-  return { user, cliente }
-}
-
 export async function getProfile() {
-  const logado = await getClienteLogado()
-  
-  if (!logado?.cliente) return null
+  const cliente = await requireClienteIdentity()
 
   return {
-    nome: logado.cliente.nome,
-    email: logado.cliente.email,
-    telefone: logado.cliente.telefone,
-    cro: logado.cliente.cro,
-    endereco: logado.cliente.endereco,
+    nome: cliente.nome,
+    email: cliente.email,
+    telefone: cliente.telefone,
+    cro: cliente.cro,
+    endereco: cliente.endereco,
   }
 }
 
@@ -37,16 +22,14 @@ export async function updateProfile(data: {
   cro: string
   endereco: string
 }) {
-  const logado = await getClienteLogado()
-  
-  if (!logado?.cliente) {
-    return { success: false, error: 'Cliente não encontrado' }
-  }
+  const identity = await resolveClienteIdentity()
+  if (!identity.ok) return { success: false, error: identity.error }
+  const cliente = identity.cliente
 
   try {
     // Atualiza no banco de dados
     await prisma.cliente.update({
-      where: { id: logado.cliente.id },
+      where: { id: cliente.id },
       data: {
         nome: data.nome,
         telefone: data.telefone,
@@ -55,16 +38,7 @@ export async function updateProfile(data: {
       }
     })
 
-    // Tenta atualizar metadata no Auth também (opcional, mas bom pra manter sync)
-    const supabase = await createClient()
-    await supabase.auth.updateUser({
-      data: {
-        full_name: data.nome,
-        cro: data.cro
-      }
-    })
-
-    revalidatePath('/perfil')
+    revalidatePath('/', 'layout')
     return { success: true }
   } catch (error) {
     console.error('Erro ao atualizar perfil:', error)

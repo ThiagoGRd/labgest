@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { requireClienteIdentity } from '@/lib/cliente-identity'
 import { prisma } from '@labgest/database'
 
 export interface NotificacaoPortal {
@@ -18,23 +18,14 @@ function isRegistro(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
 }
 
-async function getClienteLogado() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !user.email) return null
-  const cliente = await prisma.cliente.findFirst({ where: { email: { equals: user.email, mode: 'insensitive' }, ativo: true } })
-  return { user, cliente }
-}
-
 export async function getNotificacoesPortal() {
-  const logado = await getClienteLogado()
-  if (!logado?.cliente) return []
+  const cliente = await requireClienteIdentity()
 
   const notificacoes: NotificacaoPortal[] = []
 
   // 1. Mensagens não lidas do laboratório (role = 'lab')
   const ordensComMensagens = await prisma.ordem.findMany({
-    where: { clienteId: logado.cliente.id },
+    where: { clienteId: cliente.id },
     select: { id: true, nomePaciente: true, mensagens: true }
   })
 
@@ -62,7 +53,7 @@ export async function getNotificacoesPortal() {
 
   // 2. Ordens em Prova aguardando avaliação
   const ordensProva = await prisma.ordem.findMany({
-    where: { clienteId: logado.cliente.id, status: 'Em Prova' },
+    where: { clienteId: cliente.id, status: 'Em Prova' },
     select: { id: true, nomePaciente: true }
   })
 
@@ -81,7 +72,7 @@ export async function getNotificacoesPortal() {
   // 3. Contas pendentes
   const faturasAbertas = await prisma.contaReceber.count({
     where: {
-      clienteId: logado.cliente.id,
+      clienteId: cliente.id,
       status: { notIn: ['Recebido', 'Pago', 'Cancelado'] }
     }
   })

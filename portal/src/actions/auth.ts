@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { prisma } from '@labgest/database'
+import { resolveClienteIdentity } from '@/lib/cliente-identity'
 import { redirect } from 'next/navigation'
 
 export async function login(formData: FormData) {
@@ -22,15 +22,10 @@ export async function login(formData: FormData) {
     return { error: 'Email ou senha inválidos' }
   }
 
-  const cliente = data.user.email
-    ? await prisma.cliente.findFirst({
-        where: { email: { equals: data.user.email, mode: 'insensitive' }, ativo: true },
-        select: { id: true },
-      })
-    : null
-  if (!cliente) {
+  const identity = await resolveClienteIdentity(data.user)
+  if (!identity.ok) {
     await supabase.auth.signOut()
-    return { error: 'Seu cadastro não está ativo no portal' }
+    return { error: identity.error }
   }
 
   redirect('/dashboard')
@@ -40,7 +35,6 @@ export async function cadastro(formData: FormData) {
   const nome = formData.get('nome') as string
   const email = String(formData.get('email') || '').trim().toLowerCase()
   const password = formData.get('password') as string
-  const telefone = formData.get('telefone') as string
   const cro = formData.get('cro') as string
 
   if (!email || !password || !nome || !cro) {
@@ -69,44 +63,11 @@ export async function cadastro(formData: FormData) {
     return { error: 'Erro ao criar usuário' }
   }
 
-  // 2. Criar registro na tabela de Clientes (público)
-  try {
-    // Verifica se já existe cliente com esse email (pode ter sido cadastrado pelo lab antes)
-    const existingCliente = await prisma.cliente.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } }
-    })
+  // Public signup creates credentials only. Commercial enrollment and suspension
+  // remain laboratory decisions, even when Auth returns an immediate session.
+  await supabase.auth.signOut()
+  return { message: 'Solicitação de acesso recebida. Confirme seu email, se receber a mensagem de confirmação, e peça ao laboratório para revisar e ativar seu cadastro. Depois, faça login.' }
 
-    if (existingCliente) {
-      // Se já existe, atualiza os dados
-      await prisma.cliente.update({
-        where: { id: existingCliente.id },
-        data: {
-          nome, // Atualiza nome se necessário
-          telefone,
-          cro, // Garante CRO atualizado
-          ativo: true
-        }
-      })
-    } else {
-      // Se não existe, cria novo
-      await prisma.cliente.create({
-        data: {
-          nome,
-          email,
-          telefone,
-          cro,
-          ativo: true,
-          endereco: '', // Endereço pode ser preenchido depois no perfil
-        }
-      })
-    }
-  } catch (dbError) {
-    console.error('Erro ao criar cliente no banco:', dbError)
-    await supabase.auth.signOut()
-    return { error: 'A conta de acesso foi criada, mas o cadastro da clínica falhou. Entre em contato com o laboratório.' }
-  }
-
-  redirect('/dashboard')
 }
 
 export async function logout() {
