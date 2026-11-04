@@ -14,8 +14,8 @@ function matches(row, where = {}) {
 }
 function table(rows) { return { findMany: async (q={}) => rows.filter(r=>matches(r,q.where)), aggregate: async q => {const r=rows.filter(r=>matches(r,q.where));return {_sum:{valor:r.reduce((s,c)=>s+c.valor,0)},_count:r.length}}, count:async()=>0 } }
 function load(file, prisma, Clock = Date) {
- const exports = {}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Date:Clock,Intl,console,process:{env:{}},require:n=>{
- if(n==='@labgest/shared')return load('packages/shared/src/date-civil.ts',prisma,Clock);if(n==='@labgest/database')return {prisma};if(n==='@/lib/cliente-identity')return {requireClienteIdentity:async()=>({id:1})};if(n==='@/lib/auth-utils')return {requireUser:async()=>({nome:'test',permissoes:[]})};if(n==='@google/generative-ai')return {GoogleGenerativeAI:class{}};if(n==='next/cache')return {revalidatePath(){throw Error('mutation')}};if(n.startsWith('@/lib/'))return load('web/src/'+n.slice(2)+'.ts',prisma,Clock);if(['zod','node:crypto'].includes(n))return require(n);throw Error(n)
+ const exports = {}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,Date:Clock,Intl,console,process:{env:{}},require:n=>{
+ if(n==='react/jsx-runtime')return require(n);if(n==='./financeiro-view')return {FinanceiroView:'FinanceiroView'};if(n==='@/actions/financeiro')return load('web/src/actions/financeiro.ts',prisma,Clock);if(n==='@labgest/shared')return load('packages/shared/src/date-civil.ts',prisma,Clock);if(n==='@labgest/database')return {prisma};if(n==='@/lib/cliente-identity')return {requireClienteIdentity:async()=>({id:1})};if(n==='@/lib/auth-utils')return {requireUser:async()=>({nome:'test',permissoes:[]})};if(n==='@google/generative-ai')return {GoogleGenerativeAI:class{}};if(n==='next/cache')return {revalidatePath(){throw Error('mutation')}};if(n.startsWith('@/lib/'))return load('web/src/'+n.slice(2)+'.ts',prisma,Clock);if(['zod','node:crypto'].includes(n))return require(n);throw Error(n)
  }});return exports
 }
 function base() {return {ordem:{...table([]),groupBy:async()=>[]},cicloProducao:table([]),cliente:{...table([{id:1,nome:'Renamed'},{id:2,nome:'Same'}]),findUnique:async q=>q.where.id===1?{id:1,nome:'Same'}:null},contaReceber:table([]),contaPagar:table([]),contaFinanceira:table([]),movimentacaoFinanceira:table([])}}
@@ -65,4 +65,36 @@ for (const [instant, overdue] of [
   assert.equal(admin.receber[2].status,'Recebido')
   assert.equal(admin.pagar[2].status,'Pago')
   assert.equal(admin.resumo.vencidoReceber, overdue ? 160 : 0)
+})
+
+for (const [instant,expected] of [
+  ['2026-11-01T01:30:00.000Z','2026-10'],
+  ['2026-11-01T03:00:00.000Z','2026-11'],
+  ['2027-01-01T01:30:00.000Z','2026-12'],
+]) test(`F5 omitted finance month follows laboratory calendar through actual page ${instant}`,async()=>{
+  class Clock extends Date { constructor(...args) { super(...(args.length ? args : [instant])) } }
+  const p=base(), action=load('web/src/actions/financeiro.ts',p,Clock)
+  const page=load('web/src/app/(dashboard)/financeiro/page.tsx',p,Clock).default
+  const direct=await action.getFinanceiroPageData()
+  assert.equal(direct.periodo,expected)
+  assert.deepEqual(Array.from(direct.mesesDisponiveis),[expected])
+  const rendered=await page({searchParams:Promise.resolve({})})
+  assert.equal(rendered.props.dados.periodo,expected)
+  const explicit=await page({searchParams:Promise.resolve({mes:'2026-09',criterio:'competencia'})})
+  assert.equal(explicit.props.dados.periodo,'2026-09')
+  assert.equal(explicit.props.criterioReceber,'competencia')
+})
+for (const [instant, expected] of [
+  ['2026-11-01T01:30:00.000Z', '2026-10'],
+  ['2026-11-01T03:00:00.000Z', '2026-11'],
+  ['2027-01-01T01:30:00.000Z', '2026-12'],
+]) test(`F5 both report defaults agree in laboratory calendar ${instant}`, async () => {
+  class Clock extends Date { constructor(...args) { super(...(args.length ? args : [instant])) } }
+  const reports = load('web/src/actions/relatorios.ts', base(), Clock)
+  const ranking = await reports.getRelatorioFinanceiro()
+  const statement = await reports.getRelatorioOrdensEntregues()
+  assert.equal(ranking.periodoRanking, expected)
+  assert.equal(statement.mes, expected)
+  assert.equal((await reports.getRelatorioFinanceiro('2026-09')).periodoRanking, '2026-09')
+  assert.equal((await reports.getRelatorioOrdensEntregues('2026-09')).mes, '2026-09')
 })

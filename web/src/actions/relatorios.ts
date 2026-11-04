@@ -112,7 +112,7 @@ export async function getRelatorioOrdensEntregues(mesInformado?: string, cliente
   await requireUser()
 
   const hoje = new Date()
-  const mesPadrao = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+  const mesPadrao = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit' }).format(hoje)
   const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(mesInformado || '') ? mesInformado! : mesPadrao
   const [ano, numeroMes] = mes.split('-').map(Number)
   const proximoMes = numeroMes === 12

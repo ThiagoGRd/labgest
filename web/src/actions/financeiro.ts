@@ -126,11 +126,11 @@ export async function gerarCobrancaAutomatica(ordemId: number) {
 
 export async function getFinanceiroPageData(filtroMes?: string) {
   await requireUser()
-  const hoje = new Date()
+  const hoje = dataCivilDoLaboratorio()
   const mesValido = /^\d{4}-(0[1-9]|1[0-2])$/.test(filtroMes ?? '') ? filtroMes! : null
   const [ano, mes] = mesValido
     ? mesValido.split('-').map(Number)
-    : [hoje.getFullYear(), hoje.getMonth() + 1]
+    : [hoje.getUTCFullYear(), hoje.getUTCMonth() + 1]
   const { inicio: inicioReceber, fimExclusivo } = limitesMesReceber(ano, mes)
 
   const [receberNoPeriodo, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, vencidasGlobais] = await Promise.all([
@@ -217,7 +217,7 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const vencidoReceber = vencidasGlobais.reduce((s, c) => s + Math.max(0, Number(c.valor) - Number(c.valorRecebido)), 0)
   const resultadoProjetado = resumoReceberMes.valorPrevisto - resumoPagarMes.valorPrevisto
 
-  const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
+  const meses = new Set<string>([mesDataFinanceira(hoje)])
   for (const conta of mesesPagar) {
     meses.add(mesDataFinanceira(conta.dataVencimento))
   }
