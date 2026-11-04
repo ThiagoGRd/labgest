@@ -80,7 +80,7 @@ async function main() {
     url.hostname = addresses[0].address.includes(':') ? `[${addresses[0].address}]` : addresses[0].address
     prisma = new PrismaClient({ datasources: { db: { url: url.href } } })
     actions = load('actions/financeiro.ts')
-    const endpoint = (await prisma.$queryRaw`SELECT inet_server_addr()::text AS address`)[0]
+    const endpoint = (await prisma.$queryRaw`SELECT host(inet_server_addr()) AS address`)[0]
     assert.ok(['127.0.0.1', '::1'].includes(endpoint.address))
     assert.equal((await prisma.$queryRaw`SELECT current_database() AS db, current_schema() AS schema`)[0].db, 'labgest_finance_test')
     assert.equal((await prisma.$queryRaw`SELECT current_schema() AS schema`)[0].schema, 'labgest_prisma_test')

@@ -147,7 +147,7 @@ async function connectLocal() {
   assert.ok(addresses.length && addresses.every(row => row.address === '127.0.0.1' || row.address === '::1'), 'All resolved addresses must be loopback')
   // Pin the verified address; do not pass the caller URL to pg for reparsing.
   pool = new Pool({ host: addresses[0].address, port: Number(url.port || 5432), user: decodeURIComponent(url.username), password: decodeURIComponent(url.password), database: 'labgest_finance_test', ssl: false, application_name: schema, max: 5, connectionTimeoutMillis: 3000 })
-  const target = (await pool.query('SELECT current_database() AS db, inet_server_addr()::text AS address')).rows[0]
+  const target = (await pool.query('SELECT current_database() AS db, host(inet_server_addr()) AS address')).rows[0]
   assert.equal(target.db, 'labgest_finance_test')
   assert.ok(['127.0.0.1', '::1'].includes(target.address))
 }
