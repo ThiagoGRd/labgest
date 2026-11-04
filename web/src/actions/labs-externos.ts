@@ -376,16 +376,10 @@ export async function atualizarPedido(id: number, alteracoes: {
 
 export async function excluirPedido(id: number): Promise<ResultadoAcao> {
   await requireUser()
-  try {
-    await prisma.$executeRaw`
-      DELETE FROM labs_externos_pedidos WHERE id = ${id}
-    `
-    revalidarLabs()
-    return { success: true }
-  } catch (e) {
-    console.error('Erro ao excluir pedido de laboratório externo:', e)
-    return erro('Não foi possível excluir o pedido.')
-  }
+  if (!Number.isSafeInteger(id) || id <= 0) return erro('Pedido inválido.')
+  // Legacy endpoint: keep authenticated callers safe until audited, reversible
+  // archival and reconciliation checks exist. Never physically delete orders.
+  return erro('Exclusão indisponível: o cancelamento seguro exige histórico e conferência financeira e de estoque. Nenhum pedido foi removido.')
 }
 
 function normalizar(row: LabExternoPedidoRow): LabExternoPedido {

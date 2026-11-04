@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import { Building2, ClipboardList, Plus, Search, X } from 'lucide-react'
 import {
   criarPedido, criarLab, atualizarSituacao, marcarRetrabalho, desmarcarRetrabalho, atualizarPedido,
@@ -60,6 +60,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   const [retrabalhoId, setRetrabalhoId] = useState<number | null>(null)
   const [movendoId, setMovendoId] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
+  const salvandoPedido = useRef(false)
 
   const contagens: Record<SituacaoPedido, number> = {
     Enviado: stats.total_enviados,
@@ -86,7 +87,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   }, [filtro, busca, labFiltro, pedidos, atrasados, retrabalhos])
 
   // Executa uma ação do servidor e mostra o resultado ao usuário (sucesso ou motivo do erro).
-  function executar(acao: () => Promise<ResultadoAcao>, mensagemSucesso: string, aoConcluir?: () => void) {
+  function executar(acao: () => Promise<ResultadoAcao>, mensagemSucesso: string, aoConcluir?: () => void, aoFinalizar?: () => void) {
     startTransition(async () => {
       try {
         const resultado = await acao()
@@ -99,6 +100,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
       } catch {
         toast.error('Não foi possível concluir a ação. Tente novamente.')
       } finally {
+        aoFinalizar?.()
         setMovendoId(null)
       }
     })
@@ -115,10 +117,14 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs 
   }
 
   function salvarPedido(data: PedidoFormData) {
+    // A ref locks synchronously, before React renders the pending button state.
+    if (salvandoPedido.current) return
+    salvandoPedido.current = true
     executar(
       () => (pedidoEditando ? atualizarPedido(pedidoEditando.id, data) : criarPedido(data)),
       pedidoEditando ? 'Pedido atualizado.' : 'Pedido cadastrado.',
       () => { setShowModal(false); setPedidoEditando(undefined) },
+      () => { salvandoPedido.current = false },
     )
   }
 
