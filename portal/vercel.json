@@ -1,4 +1,9 @@
 {
   "framework": "nextjs",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ../packages"
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ../packages",
+  "git": {
+    "deploymentEnabled": {
+      "codex/validate-receivables-october-20261104": false
+    }
+  }
 }

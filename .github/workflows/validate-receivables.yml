@@ -1,0 +1,99 @@
+name: Validate receivables (isolated)
+
+on:
+  push:
+    branches: [codex/validate-receivables-october-20261104]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-receivables-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/unused
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:1/unused
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:1
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-not-a-secret
+      NEXT_PUBLIC_PORTAL_URL: http://127.0.0.1:3001
+    steps:
+      - name: Checkout validation commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Remove environment files before executing project code
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f -- packages/database/.env
+          find . -path './.git' -prune -o -type f -name '.env*' -exec rm -f -- {} +
+          test ! -e packages/database/.env
+          # The repository tracks dependencies from another operating system.
+          # Recreate dependencies on this runner; never execute the tracked copies.
+          find . -type d -name node_modules -prune -exec rm -rf -- {} +
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
+
+      - name: Generate Prisma types (no database connection)
+        run: npm run db:generate
+
+      - name: Full web TypeScript check
+        id: types
+        continue-on-error: true
+        run: ./node_modules/.bin/tsc --noEmit -p web/tsconfig.json
+
+      - name: Complete unit and shared tests
+        id: tests
+        continue-on-error: true
+        run: ./node_modules/.bin/tsx --test web/src/lib/*.test.ts packages/shared/test/*.test.ts
+
+      - name: Receivables integration and date tests in both timezones
+        id: timezones
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for timezone in UTC America/Sao_Paulo; do
+            TZ="$timezone" node --test web/tests/financeiro-periodo.test.mjs
+            TZ="$timezone" ./node_modules/.bin/tsx --test web/src/lib/periodo-receber.test.ts
+          done
+
+      - name: Lint workspaces
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Build Next web (no deployment)
+        id: build
+        continue-on-error: true
+        run: npm run build:web
+
+      - name: Require all validation steps to pass
+        if: always()
+        env:
+          TYPES: ${{ steps.types.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          TIMEZONES: ${{ steps.timezones.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for result in "$TYPES" "$TESTS" "$TIMEZONES" "$LINT" "$BUILD"; do
+            test "$result" = success || exit 1
+          done
