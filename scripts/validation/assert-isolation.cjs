@@ -11,7 +11,9 @@ for (const file of ['vercel.json', 'web/vercel.json', 'portal/vercel.json']) {
   assert.deepEqual(config.git.deploymentEnabled, { [branch]: false })
   assert.match(config.ignoreCommand, /VERCEL_GIT_COMMIT_REF/)
 }
-const expected = process.argv.includes('--prisma')
+const expected = process.argv.includes('--prisma-trigger')
+  ? 'postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_order_prisma_test?schema=public'
+  : process.argv.includes('--prisma')
   ? 'postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_finance_test?schema=labgest_prisma_test'
   : 'postgresql://synthetic:synthetic@127.0.0.1:1/labgest_unused_test'
 assert.equal(process.env.DATABASE_URL, expected)
