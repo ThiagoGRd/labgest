@@ -19,3 +19,15 @@ export function filtroReceberPeriodo(inicio: Date, fimExclusivo: Date) {
   const intervalo = { gte: inicio, lt: fimExclusivo }
   return { OR: [{ dataVencimento: intervalo }, { dataCompetencia: intervalo }] }
 }
+
+/** Prisma retorna @db.Date à meia-noite UTC, independentemente do fuso do servidor. */
+export function limitesMesReceber(ano: number, mes: number) {
+  return {
+    inicio: new Date(Date.UTC(ano, mes - 1, 1)),
+    fimExclusivo: new Date(Date.UTC(ano, mes, 1)),
+  }
+}
+
+export function mesDataFinanceira(data: Date): string {
+  return data.toISOString().slice(0, 7)
+}

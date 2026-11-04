@@ -8,7 +8,7 @@ import { requireUser } from '@/lib/auth-utils'
 import { parseDateLocal } from '@/lib/date-utils'
 import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 import { resumirDespesasMensais } from '@/lib/regra-despesa-mensal'
-import { contasNoPeriodo, filtroReceberPeriodo } from '@/lib/periodo-receber'
+import { contasNoPeriodo, filtroReceberPeriodo, limitesMesReceber, mesDataFinanceira } from '@/lib/periodo-receber'
 
 const contaSchema = z.object({
   tipo: z.enum(['receber', 'pagar']),
@@ -144,11 +144,11 @@ export async function getFinanceiroPageData(filtroMes?: string) {
     : [hoje.getFullYear(), hoje.getMonth() + 1]
   const inicio = new Date(ano, mes - 1, 1)
   const fim = new Date(ano, mes, 0, 23, 59, 59)
-  const fimExclusivo = new Date(ano, mes, 1)
+  const { inicio: inicioReceber, fimExclusivo } = limitesMesReceber(ano, mes)
 
   const [receberNoPeriodo, pagar, movimentacoes, contasFinanceiras, clientes, mesesReceber, mesesPagar, vencidasGlobais] = await Promise.all([
     prisma.contaReceber.findMany({
-      where: filtroReceberPeriodo(inicio, fimExclusivo),
+      where: filtroReceberPeriodo(inicioReceber, fimExclusivo),
       include: { cliente: { select: { nome: true } }, ordem: { select: { nomePaciente: true, servicoNome: true } } },
       orderBy: [{ status: 'asc' }, { dataVencimento: 'asc' }],
     }),
@@ -175,8 +175,8 @@ export async function getFinanceiroPageData(filtroMes?: string) {
     }),
   ])
 
-  const receber = contasNoPeriodo(receberNoPeriodo, inicio, fimExclusivo, 'vencimento')
-  const receberCompetenciaIds = new Set(contasNoPeriodo(receberNoPeriodo, inicio, fimExclusivo, 'competencia').map((conta) => conta.id))
+  const receber = contasNoPeriodo(receberNoPeriodo, inicioReceber, fimExclusivo, 'vencimento')
+  const receberCompetenciaIds = new Set(contasNoPeriodo(receberNoPeriodo, inicioReceber, fimExclusivo, 'competencia').map((conta) => conta.id))
   const receberVencimentoIds = new Set(receber.map((conta) => conta.id))
   const contasReceber = receberNoPeriodo.map((conta) => {
     const valor = Number(conta.valor)
@@ -231,13 +231,14 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   const resultadoProjetado = resumoReceberMes.valorPrevisto - resumoPagarMes.valorPrevisto
 
   const meses = new Set<string>([`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`])
-  for (const conta of [...mesesReceber, ...mesesPagar]) {
+  for (const conta of mesesPagar) {
     meses.add(`${conta.dataVencimento.getFullYear()}-${String(conta.dataVencimento.getMonth() + 1).padStart(2, '0')}`)
   }
 
   for (const conta of mesesReceber) {
+    meses.add(mesDataFinanceira(conta.dataVencimento))
     if (conta.dataCompetencia) {
-      meses.add(`${conta.dataCompetencia.getFullYear()}-${String(conta.dataCompetencia.getMonth() + 1).padStart(2, '0')}`)
+      meses.add(mesDataFinanceira(conta.dataCompetencia))
     }
   }
   meses.add(`${ano}-${String(mes).padStart(2, '0')}`)

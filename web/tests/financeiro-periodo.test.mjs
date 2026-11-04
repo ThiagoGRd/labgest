@@ -28,7 +28,7 @@ function loadSource(path, mocks) {
   return exports
 }
 
-const date = (month, day) => new Date(2026, month - 1, day, 12)
+const date = (month, day) => new Date(Date.UTC(2026, month - 1, day))
 const account = (id, competence, due, status = 'Pendente', received = 0) => ({
   id, dataCompetencia: competence, dataVencimento: due, status, valor: 100,
   valorRecebido: received, clienteNome: 'Cliente fictício', descricao: `Conta ${id}`,
@@ -39,6 +39,8 @@ const records = [
   account(3, date(10, 20), date(10, 20), 'Cancelado'),
   account(4, null, date(10, 15)),
   account(5, date(12, 1), date(1, 10)),
+  account(6, date(10, 1), date(11, 1)),
+  account(7, date(11, 1), date(1, 1)),
 ]
 
 function matches(record, where = {}) {
@@ -76,7 +78,7 @@ test('competence list reveals October charges while due totals, paid/cancelled s
   const october = await action.getFinanceiroPageData('2026-10')
   assert.equal(authorized, 1)
   assert.deepEqual(Array.from(october.receber, c => c.id), [3, 4])
-  assert.deepEqual(Array.from(october.receberCompetencia, c => c.id), [1, 2, 3])
+  assert.deepEqual(Array.from(october.receberCompetencia, c => c.id), [1, 2, 3, 6])
   assert.equal(october.receberCompetencia.find(c => c.id === 2).status, 'Recebido')
   assert.equal(october.receberCompetencia.find(c => c.id === 2).restante, 0)
   assert.equal(october.receberCompetencia.find(c => c.id === 3).status, 'Cancelado')
@@ -85,12 +87,16 @@ test('competence list reveals October charges while due totals, paid/cancelled s
   assert.equal(october.resumo.entradas, 50)
   assert.equal(october.movimentacoes.length, 1)
   assert.ok(october.mesesDisponiveis.includes('2026-12')) // competence-only month
+  const receivableQuery = calls.find(c => c.name === 'receber').query.where
+  assert.equal(receivableQuery.OR[0].dataVencimento.gte.toISOString(), '2026-10-01T00:00:00.000Z')
+  assert.equal(receivableQuery.OR[1].dataCompetencia.lt.toISOString(), '2026-11-01T00:00:00.000Z')
   const cashQuery = calls.find(c => c.name === 'caixa').query.where
   assert.ok('dataMovimentacao' in cashQuery)
   assert.ok(!('dataCompetencia' in cashQuery))
+  assert.equal(cashQuery.dataMovimentacao.gte.getTime(), new Date(2026, 9, 1).getTime())
   const november = await action.getFinanceiroPageData('2026-11')
-  assert.deepEqual(Array.from(november.receber, c => c.id), [1])
-  assert.equal(november.receberCompetencia.length, 0)
+  assert.deepEqual(Array.from(november.receber, c => c.id), [1, 6])
+  assert.deepEqual(Array.from(november.receberCompetencia, c => c.id), [7])
   assert.equal(november.resumo.entradas, 0)
   const empty = await action.getFinanceiroPageData('2026-08')
   assert.ok(empty.mesesDisponiveis.includes('2026-08'))
