@@ -13,7 +13,7 @@ BEGIN
     AND tgname = 'update_ordens_updated_at' AND NOT tgisinternal
     AND tgtype = 19 AND tgenabled = 'O' AND tgqual IS NULL
     AND tgnargs = 0 AND tgattr::text = '';
-  IF legacy_function IS NULL OR legacy_function <> pg_catalog.to_regprocedure('public.update_updated_at_column()') THEN
+  IF legacy_function IS NULL OR legacy_function IS DISTINCT FROM pg_catalog.to_regprocedure('public.update_updated_at_column()') THEN
     RAISE EXCEPTION 'Unexpected legacy order trigger; inspect before migration';
   END IF;
   IF NOT EXISTS (

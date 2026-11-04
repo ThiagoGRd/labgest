@@ -21,6 +21,12 @@ async function main(){const admin=new Client({...config,database:'postgres'});le
  assert.ok(legacy.getTime()<Date.parse('2099-01-01'));results.push('Exact legacy trigger reproduces explicit future revision rollback')
  if(process.argv.includes('--legacy')){assert.ok(legacy.getTime()>Date.parse('2099-01-01'),'legacy trigger must preserve monotonic revision');return}
  const sql=fs.readFileSync(migration,'utf8');hashes[path.relative(root,migration)]=crypto.createHash('sha256').update(sql).digest('hex')
+ await c.query('ALTER FUNCTION public.update_updated_at_column() RENAME TO unexpected_timestamp_function')
+ assert.equal((await c.query("SELECT to_regprocedure('public.update_updated_at_column()') f")).rows[0].f,null)
+ await assert.rejects(c.query(sql),/legacy order trigger/i);await c.query('ROLLBACK')
+ assert.equal((await c.query("SELECT to_regprocedure('public.labgest_ordens_monotonic_updated_at()') f")).rows[0].f,null)
+ await c.query('ALTER FUNCTION public.unexpected_timestamp_function() RENAME TO update_updated_at_column')
+ results.push('Missing expected shared-function name rejects an unexpected same-body trigger function without migration effects')
  await c.query('ALTER TABLE ordens DISABLE TRIGGER update_ordens_updated_at')
  await assert.rejects(c.query(sql),/legacy order trigger/i);await c.query('ROLLBACK')
  assert.equal((await c.query("SELECT to_regprocedure('public.labgest_ordens_monotonic_updated_at()') f")).rows[0].f,null)
