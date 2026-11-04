@@ -365,7 +365,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
     setMovendoOrdem(true)
     const { ordem, toEtapa } = pendingMove
     try {
-      const result = await moverOrdem(ordem.id, toEtapa, ordem.etapa)
+      const result = await moverOrdem(ordem.id, toEtapa, ordem.etapa, ordem.updatedAt)
       if (!result.success) throw new Error(result.error || 'Não foi possível mover a ordem.')
       toast.success('Ordem movimentada.')
       setChecklistOpen(false)
@@ -499,6 +499,7 @@ export function ProducaoView({ initialOrdens }: ProducaoViewProps) {
           isOpen={true}
           onClose={() => setAbrirCicloOrdem(null)}
           ordemId={abrirCicloOrdem.id}
+          revisaoEsperada={abrirCicloOrdem.updatedAt}
           paciente={abrirCicloOrdem.paciente}
           servico={abrirCicloOrdem.servico}
           numeroCicloAtual={(abrirCicloOrdem.cicloNumero || 0) + 1}

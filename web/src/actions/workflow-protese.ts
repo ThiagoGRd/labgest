@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { dataCivilDoLaboratorio, erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { Prisma, prisma } from '@labgest/database'
 import {
@@ -99,6 +99,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         tipoWorkflow: tipo as TipoProteseId,
         passoFluxoAtual: passo.id,
         etapaAtual: passo.macroetapa,
@@ -106,7 +107,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
         status,
         progresso,
         prazoEtapaAtual: calcularPrazoPasso(agora, passo, ordem.arcadas),
-        dataFinalizacao: statusCalculado === 'Finalizado' && status !== 'Pausado' ? agora : null,
+        dataFinalizacao: statusCalculado === 'Finalizado' && status !== 'Pausado' ? dataCivilDoLaboratorio(agora) : null,
         ...(vaiParaClinica ? {
           localizacaoAtual: 'em_transito_recepcao',
           situacaoLogistica: 'aguardando_recepcao',
@@ -136,7 +137,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
   return resultado
 }
 
-export async function concluirEtapaLaboratorial(ordemId: number, etapaEsperada: string) {
+export async function concluirEtapaLaboratorial(ordemId: number, etapaEsperada: string, revisaoEsperada: string) {
   const usuario = await requireUser()
 
   const resultado = await prisma.$transaction(async (tx) => {
@@ -147,6 +148,7 @@ export async function concluirEtapaLaboratorial(ordemId: number, etapaEsperada: 
     if (erroEstado) return { success: false as const, error: erroEstado }
 
     if (!etapaEsperada || ordem.passoFluxoAtual !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+    if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de continuar.' }
     const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
     if (passoAtual.responsavel !== 'laboratorio') return { success: false, error: 'Esta etapa deve ser concluída pela clínica' }
 
@@ -188,11 +190,12 @@ export async function concluirEtapaLaboratorial(ordemId: number, etapaEsperada: 
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
         subetapaAtual: proximo.nome,
         status: novoStatus,
-        dataFinalizacao: novoStatus === 'Finalizado' ? agora : null,
+        dataFinalizacao: novoStatus === 'Finalizado' ? dataCivilDoLaboratorio(agora) : null,
         prazoEtapaAtual: calcularPrazoPasso(agora, proximo, ordem.arcadas),
         ...(vaiParaClinica ? {
           localizacaoAtual: 'em_transito_recepcao',
@@ -276,9 +279,10 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
     if (passo.responsavel !== 'fornecedor' || !ordem.dataEnvioFornecedor || ordem.dataRecebimentoFornecedor) return { success: false, error: 'O envio ao fornecedor ainda não foi registrado' }
 
     const agora = new Date()
-    const vinculado = await confirmarPedidoFornecedor(tx, ordemId)
-    const retorno = vinculado?.dataRetorno || agora
-    const atrasado = Boolean(ordem.prazoFornecedor && retorno > ordem.prazoFornecedor)
+    const vinculado = await confirmarPedidoFornecedor(tx, ordemId, agora)
+    // External return is a civil date without a known hour. The Production
+    // receipt and its deadline check use the actual confirmation event instead.
+    const atrasado = Boolean(ordem.prazoFornecedor && agora > ordem.prazoFornecedor)
     if (atrasado && !justificativaAtraso?.trim()) throw new Error('Informe a justificativa do fornecedor para o atraso')
 
     const proximo = getProximoPassoProtese(ordem.tipoWorkflow, passo.id)
@@ -287,7 +291,7 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
-        dataRecebimentoFornecedor: retorno,
+        dataRecebimentoFornecedor: agora,
         justificativaAtrasoFornecedor: justificativaAtraso?.trim() || null,
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
@@ -296,6 +300,7 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
         prazoEtapaAtual: calcularPrazoPasso(agora, proximo, ordem.arcadas),
         historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
           acao: 'recebeu_fornecedor', fornecedor: ordem.fornecedorEstrutura || 'Fornecedor', atrasado,
+          dataRetornoLaboratorio: vinculado?.dataRetorno?.toISOString().slice(0, 10) ?? null,
           justificativa: justificativaAtraso?.trim() || null, data: agora.toISOString(), por: usuario.email || 'laboratorio',
         }),
       },

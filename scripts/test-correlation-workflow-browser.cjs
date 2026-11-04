@@ -1,0 +1,31 @@
+/* Actual WorkflowModal + UI primitives in Chromium; synthetic actions, blocked network. */
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const tooling=process.env.LABGEST_TEST_TOOLS||path.resolve(__dirname,'../node_modules');
+const {build}=require(path.join(tooling,'esbuild'));
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'/opt/codex/cua_node/lib/node_modules/playwright');
+(async()=>{
+const root=path.resolve(__dirname,'../web');
+const built=await build({stdin:{loader:'tsx',resolveDir:root,contents:`import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{WorkflowModal}from'./src/components/ordens/workflow-modal';import{CHECKLIST_VAZIO}from'./src/lib/workflow-config';
+window.calls=[];window.mode='success';window.successes=0;window.checklistKeys=Object.keys(CHECKLIST_VAZIO);
+const orders=[1,2].map(id=>({id,updatedAt:'2026-11-04T12:00:00.00'+id+'Z',paciente:'Synthetic '+id,cliente:{nome:'Synthetic clinic'},servico:'Synthetic service',status:'Em Prova',etapaAtual:'em_prova',tipoWorkflow:'protocolo',tentativaAtual:0,historicoEtapas:[],checklistEstetico:{}}));
+function App(){const[ordem,setOrdem]=useState(orders[0]);const[open,setOpen]=useState(false);return <><button onClick={()=>{setOrdem(orders[0]);setOpen(true)}}>Open A</button><button onClick={()=>{setOrdem(orders[1]);setOpen(true)}}>Open B</button><WorkflowModal isOpen={open} ordem={ordem} onClose={()=>setOpen(false)} onSuccess={()=>window.successes++}/></>};createRoot(document.getElementById('root')).render(<App/>);`},bundle:true,write:false,tsconfig:path.join(root,'tsconfig.json'),jsx:'automatic',nodePaths:[tooling],define:{'process.env.NODE_ENV':'"test"'},plugins:[{name:'isolated-actions',setup(b){
+ b.onResolve({filter:/^@labgest\/shared$/},()=>({path:path.resolve(root,'../packages/shared/src/index.ts')}));
+ b.onResolve({filter:/^@\/actions\/ordens$/},a=>({path:a.path,namespace:'synthetic'}));
+ b.onLoad({filter:/.*/,namespace:'synthetic'},()=>({contents:`const call=async(name,args)=>{window.calls.push({name,args});return window.mode==='success'?{success:true}:{success:false,error:'A ordem foi alterada. Atualize antes de tentar novamente.'}};export const avancarEtapa=(...args)=>call('advance',args);export const retornarEtapa=(...args)=>call('return',args);export const atualizarChecklist=(...args)=>call('autosave',args);`}));
+ b.onResolve({filter:/^@\/components\/ordens\/photo-comparison$/},a=>({path:a.path,namespace:'photo'}));
+ b.onLoad({filter:/.*/,namespace:'photo'},()=>({contents:'export const PhotoComparison=()=>null'}));
+}}]});
+const bundle=built.outputFiles[0].text;
+const server=http.createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/app.js'?'text/javascript':'text/html');res.end(req.url==='/app.js'?bundle:'<div id="root"></div><script src="/app.js"></script>')});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;let browser;
+try{browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||'/usr/bin/chromium',args:['--no-sandbox']});const page=await browser.newPage();page.setDefaultTimeout(5000);const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort());await page.goto(base);
+const boxes=page.getByRole('checkbox'),advance=page.getByRole('button',{name:'Avançar Etapa',exact:true});
+async function allChecked(){for(let i=0;i<await boxes.count();i++)await boxes.nth(i).check()}
+async function noChecks(){assert((await boxes.count())>0);for(let i=0;i<await boxes.count();i++)assert.equal(await boxes.nth(i).isChecked(),false)}
+await page.getByRole('button',{name:'Open A',exact:true}).click();await noChecks();assert.equal(await advance.isDisabled(),true);await allChecked();assert.equal(await page.evaluate(()=>window.calls.length),0);assert.equal(await advance.isEnabled(),true);await advance.click();await page.waitForFunction(()=>window.successes===1);await page.getByRole('dialog').waitFor({state:'hidden'});
+const first=await page.evaluate(()=>window.calls[0]);assert.equal(first.name,'advance');assert.equal(first.args[0],1);assert.equal(first.args[2],'em_prova');assert.equal(first.args[3],'2026-11-04T12:00:00.001Z');const keys=await page.evaluate(()=>window.checklistKeys);assert.deepEqual(Object.keys(first.args[4]).sort(),keys.sort());assert(Object.values(first.args[4]).every(v=>v===true));console.log('PASS checkbox draft never autosaves; advance sends full fifth argument and current revision atomically');
+await page.getByRole('button',{name:'Open B',exact:true}).click();await noChecks();assert.equal(await advance.isDisabled(),true);console.log('PASS successful A then B has no inherited checklist');
+await page.evaluate(()=>window.mode='stale');await allChecked();await advance.click();await page.getByRole('alert').filter({hasText:'A ordem foi alterada'}).waitFor();assert.equal(await boxes.count(),keys.length);for(let i=0;i<await boxes.count();i++)assert.equal(await boxes.nth(i).isChecked(),true);const stale=await page.evaluate(()=>window.calls[1]);assert.equal(stale.args[0],2);assert.equal(stale.args[3],'2026-11-04T12:00:00.002Z');assert.equal(await page.evaluate(()=>window.successes),1);console.log('PASS stale response displays feedback and preserves draft without success');
+await page.getByRole('button',{name:'Fechar',exact:true}).last().click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.getByRole('button',{name:'Open B',exact:true}).click();await noChecks();assert.equal(await page.getByRole('alert').count(),0);assert.equal(await advance.isDisabled(),true);await boxes.nth(0).check();await page.getByRole('button',{name:'Fechar',exact:true}).last().click();await page.getByRole('button',{name:'Open B',exact:true}).click();await noChecks();assert.equal(await page.evaluate(()=>window.calls.length),2);assert.deepEqual(errors,[]);console.log('PASS close/reopen discards cancelled draft and stale feedback without server writes');
+}finally{if(browser)await browser.close();await new Promise(r=>server.close(r))}
+})().catch(e=>{console.error(e);process.exitCode=1});

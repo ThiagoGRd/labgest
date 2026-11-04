@@ -11,6 +11,7 @@ import { SUBETAPAS_POR_WORKFLOW, getWorkflowForServico } from '@/lib/workflow-co
 interface AbrirCicloModalProps {
   isOpen: boolean
   onClose: () => void
+  revisaoEsperada: string
   ordemId: number
   paciente: string
   servico: string
@@ -26,7 +27,7 @@ const etapasPadrao = [
   'Outro',
 ]
 
-export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, numeroCicloAtual }: AbrirCicloModalProps) {
+export function AbrirCicloModal({ isOpen, onClose, ordemId, revisaoEsperada, paciente, servico, numeroCicloAtual }: AbrirCicloModalProps) {
   const router = useRouter()
   const tipoWorkflow = getWorkflowForServico(servico)
   const etapasOpcoes = tipoWorkflow
@@ -41,7 +42,7 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
     setLoading(true)
     setError('')
     try {
-      const result = await abrirCiclo(ordemId, prazoDias, etapa)
+      const result = await abrirCiclo(ordemId, prazoDias, etapa, revisaoEsperada)
       if (!result.success) {
         setError(result.error || 'Não foi possível iniciar o ciclo.')
         return

@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { dataCivilDoLaboratorio, erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { Prisma, prisma } from '@labgest/database'
 import {
@@ -18,7 +18,7 @@ function historicoComEvento(historico: Prisma.JsonValue, evento: Prisma.JsonObje
   return [...(Array.isArray(historico) ? historico : []), evento] as Prisma.JsonArray
 }
 
-export async function concluirEtapaClinica(ordemId: number, etapaEsperada: string) {
+export async function concluirEtapaClinica(ordemId: number, etapaEsperada: string, revisaoEsperada: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return { success: false, error: 'Não autorizado' }
@@ -40,6 +40,7 @@ export async function concluirEtapaClinica(ordemId: number, etapaEsperada: strin
     const erroEstado = erroTransicaoOrdem(ordem.status, true)
     if (erroEstado) return { success: false as const, error: erroEstado }
     if (!etapaEsperada || ordem.passoFluxoAtual !== etapaEsperada) return { success: false as const, error: 'A etapa foi alterada. Atualize a ordem antes de continuar.' }
+    if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false as const, error: 'A ordem foi alterada. Atualize antes de continuar.' }
     const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
     if (ordem.status === 'Finalizado' && !passoAtual.entregaFinal) return { success: false, error: 'A produção já foi finalizada.' }
     if (passoAtual.responsavel !== 'clinica') return { success: false, error: 'Esta etapa deve ser concluída pelo laboratório' }
@@ -55,8 +56,8 @@ export async function concluirEtapaClinica(ordemId: number, etapaEsperada: strin
             clienteId: ordem.clienteId,
             clienteNome: ordem.clienteNome,
             valor: ordem.valorFinal,
-            dataCompetencia: agora,
-            dataVencimento: new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()),
+            dataCompetencia: dataCivilDoLaboratorio(agora),
+            dataVencimento: dataCivilDoLaboratorio(agora),
             status: 'Pendente',
             observacoes: `Gerado automaticamente na entrega clínica da OS #${ordemId}`,
           },
@@ -65,7 +66,8 @@ export async function concluirEtapaClinica(ordemId: number, etapaEsperada: strin
       await tx.ordem.update({
         where: { id: ordemId },
         data: {
-          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: ordem.dataFinalizacao ?? agora, dataEntregaReal: agora,
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
+          status: 'Entregue', etapaAtual: 'entregue', dataFinalizacao: ordem.dataFinalizacao ?? dataCivilDoLaboratorio(agora), dataEntregaReal: agora,
           cobrancaGeradaEm: ordem.cobrancaGeradaEm ?? agora, prazoEtapaAtual: null,
           historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
             acao: 'entrega_clinica_concluida', etapa: passoAtual.nome, data: agora.toISOString(), por: user.email,
@@ -81,6 +83,7 @@ export async function concluirEtapaClinica(ordemId: number, etapaEsperada: strin
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
         subetapaAtual: proximo.nome,

@@ -156,7 +156,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     {!pausada && passo.responsavel === 'clinica' ? <div className="mt-4 space-y-2 rounded-lg bg-sky-50 p-2 text-xs font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300"><p className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 shrink-0" />{rotuloLocalizacaoTrabalho(ordem.situacaoLogistica, ordem.dentistaResponsavel, ordem.localizacaoAtual)}</p><p className="text-center">{passo.prova ? 'Aguardando resultado da prova no portal' : 'Aguardando a clínica concluir no portal'}</p></div> : null}
 
                     {!pausada && passo.responsavel === 'laboratorio' && (
-                      <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id, ordem.passoFluxoAtual || ''))}>
+                      <Button type="button" className="mt-4 w-full bg-violet-600 text-white hover:bg-violet-700" disabled={processando === ordem.id} onClick={() => executar(ordem.id, () => concluirEtapaLaboratorial(ordem.id, ordem.passoFluxoAtual || '', ordem.updatedAt))}>
                         <CheckCircle2 className="h-4 w-4" /> {processando === ordem.id ? 'Atualizando...' : 'Concluir etapa'}
                       </Button>
                     )}
@@ -178,6 +178,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     {!pausada && passo.responsavel === 'fornecedor' && ordem.dataEnvioFornecedor && !ordem.dataRecebimentoFornecedor && (
                       <div className="mt-4 space-y-2">
                         <p className="text-xs text-slate-600 dark:text-slate-300">Fornecedor: <strong>{ordem.fornecedorEstrutura}</strong></p>
+                        <p className="text-xs text-slate-500">O horário desta confirmação define o recebimento na Produção e a verificação de atraso. A data em que o laboratório marcou Pronto é preservada separadamente.</p>
                         {atrasado && <><label htmlFor={`justificativa-${ordem.id}`} className="text-xs font-semibold text-red-700 dark:text-red-300">Justificativa do atraso</label><textarea id={`justificativa-${ordem.id}`} value={justificativas[ordem.id] || ''} onChange={(event) => setJustificativas((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="O que o fornecedor informou?" rows={2} className="w-full resize-none rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/20" /></>}
                         <Button type="button" className="w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={processando === ordem.id || (atrasado && !justificativas[ordem.id]?.trim())} onClick={() => executar(ordem.id, () => confirmarRecebimentoFornecedor(ordem.id, justificativas[ordem.id]))}>Confirmar recebimento</Button>
                       </div>

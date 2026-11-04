@@ -29,7 +29,14 @@ export async function alterarMensagens(ordemId: number, clienteId: number | unde
     const ordem = await tx.ordem.findFirst({ where: { id: ordemId, ...(clienteId === undefined ? {} : { clienteId }) } })
     if (!ordem) return false
     const atuais = (Array.isArray(ordem.mensagens) ? ordem.mensagens : []) as Prisma.InputJsonValue[]
-    await tx.ordem.update({ where: { id: ordemId }, data: { mensagens: alterar(atuais) as Prisma.InputJsonArray } })
+    // Snapshot before invoking the callback, including callbacks that mutate the
+    // array in place. Repeated receipts/retries must not touch the order revision.
+    const anterior = JSON.stringify(atuais)
+    const seguintes = alterar(atuais)
+    if (JSON.stringify(seguintes) === anterior) return true
+    // A genuine message/receipt change still updates updatedAt conservatively:
+    // an open workflow form must refresh its revision before its next mutation.
+    await tx.ordem.update({ where: { id: ordemId }, data: { mensagens: seguintes as Prisma.InputJsonArray } })
     return true
   })
 }
@@ -38,7 +45,7 @@ export function recibos(mensagens: Prisma.InputJsonValue[], ids: string[], desti
   const vistos = new Set(ids)
   return mensagens.map(m => {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return m
-    if (typeof m.id !== 'string' || !vistos.has(m.id) || m.role !== (destinatario === 'lab' ? 'dentista' : 'lab')) return m
+    if (!('id' in m) || !('role' in m) || typeof m.id !== 'string' || !vistos.has(m.id) || m.role !== (destinatario === 'lab' ? 'dentista' : 'lab')) return m
     return { ...m, [destinatario === 'lab' ? 'lidoPeloLab' : 'lidoPeloDentista']: true }
   })
 }

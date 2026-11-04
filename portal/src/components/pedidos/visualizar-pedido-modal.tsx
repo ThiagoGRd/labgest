@@ -60,6 +60,7 @@ interface FichaClinicaPortal {
 }
 
 interface Pedido {
+  updatedAt: string
   id: number
   paciente: string
   servico: string
@@ -146,7 +147,7 @@ export function VisualizarPedidoModal({ isOpen, onClose, pedido }: VisualizarPed
   const handleConcluirEtapaClinica = async () => {
     setConcluindoEtapa(true)
     try {
-      const resultado = await concluirEtapaClinica(pedido.id, pedido.passoFluxoAtual || '')
+      const resultado = await concluirEtapaClinica(pedido.id, pedido.passoFluxoAtual || '', pedido.updatedAt)
       if (!resultado.success) {
         toast.error(resultado.error || 'Não foi possível concluir a etapa')
         return

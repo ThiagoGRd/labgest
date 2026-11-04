@@ -272,7 +272,10 @@ export async function criarPedido(input: z.input<typeof pedidoSchema>): Promise<
   const pedido = parsed.data
 
   try {
-    if (pedido.ordemId) return await registrarEnvioFornecedor(pedido.ordemId, '', pedido.labId)
+    if (pedido.ordemId) {
+      const resultado = await registrarEnvioFornecedor(pedido.ordemId, '', pedido.labId)
+      return resultado.success ? { success: true } : erro(resultado.error || 'Não foi possível enviar a ordem ao fornecedor.')
+    }
     const lab = await buscarLabAtivo(pedido.labId)
     if (!lab) return erro('Selecione um laboratório válido.')
 

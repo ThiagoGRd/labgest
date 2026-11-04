@@ -1,6 +1,6 @@
 'use server'
 
-import { erroTransicaoOrdem } from '@labgest/shared'
+import { erroTransicaoOrdem, proximaRevisaoOrdem } from '@labgest/shared'
 
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
@@ -17,7 +17,7 @@ import {
 } from '@/lib/workflow-config'
 
 // Abre um novo ciclo quando o trabalho entra no lab
-export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: string) {
+export async function abrirCiclo(ordemId: number, prazoDias: number, etapa: string | undefined, revisaoEsperada: string) {
   await requireUser()
 
   if (!Number.isInteger(prazoDias) || prazoDias <= 0) {
@@ -28,11 +28,13 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
     await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
     const [totalCiclos, ordem] = await Promise.all([
       tx.cicloProducao.count({ where: { ordemId } }),
-      tx.ordem.findUnique({ where: { id: ordemId }, select: { etapaAtual: true, status: true, tipoWorkflow: true } }),
+      tx.ordem.findUnique({ where: { id: ordemId }, select: { etapaAtual: true, status: true, tipoWorkflow: true, updatedAt: true } }),
     ])
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
     const erroEstado = erroTransicaoOrdem(ordem.status, false)
     if (erroEstado) return { success: false as const, error: erroEstado }
+    if (!revisaoEsperada || ordem.updatedAt?.toISOString() !== revisaoEsperada) return { success: false, error: 'A ordem foi alterada. Atualize antes de iniciar o ciclo.' }
+    if (!['confeccao', 'ajuste'].includes(normalizarEtapa(ordem.etapaAtual || ''))) return { success: false, error: 'A ordem não está em uma etapa de confecção ou ajuste.' }
     const cicloAtivo = await tx.cicloProducao.findFirst({ where: { ordemId: ordemId, status: { in: ['no_lab', 'em_prova'] } }, orderBy: { numeroCiclo: 'desc' }, select: { id: true } })
     if (cicloAtivo) return { success: false, error: 'A ordem já possui um ciclo ativo.' }
     if (isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Use o fluxo específico da prótese.' }
@@ -59,6 +61,7 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
       tx.ordem.update({
         where: { id: ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
           etapaAtual: macroetapa,
           subetapaAtual: subetapa,
           status: statusParaEtapa(macroetapa),
@@ -100,6 +103,7 @@ export async function enviarParaProva(cicloId: number) {
     await tx.ordem.update({
       where: { id: ciclo.ordemId },
       data: {
+          updatedAt: proximaRevisaoOrdem(cicloAtual.ordem.updatedAt),
         status: 'Em Prova',
         etapaAtual: 'em_prova',
         subetapaAtual: ciclo.etapa,
@@ -137,6 +141,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
     if (!cicloAtual) return { success: false, error: 'Ciclo de produção não encontrado' }
     const erroEstado = erroTransicaoOrdem(cicloAtual.ordem.status, false)
     if (erroEstado) return { success: false as const, error: erroEstado }
+    if (cicloAtual.ordem.status !== 'Em Prova' || normalizarEtapa(cicloAtual.ordem.etapaAtual || '') !== 'em_prova') return { success: false, error: 'A ordem não está mais nesta prova.' }
     const cicloAtivo = await tx.cicloProducao.findFirst({ where: { ordemId: cicloAtual.ordemId, status: { in: ['no_lab', 'em_prova'] } }, orderBy: { numeroCiclo: 'desc' }, select: { id: true } })
     if (!cicloAtivo || cicloAtivo.id !== cicloId) return { success: false, error: 'Este ciclo não é mais o ciclo ativo da ordem.' }
     if (cicloAtual.status !== 'em_prova' || cicloAtual.dataRetorno) return { success: false, error: 'Este retorno já foi registrado ou não está em prova.' }
@@ -153,6 +158,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
     if (isTipoProtese(cicloAtual.ordem.tipoWorkflow)) {
       const tipo = cicloAtual.ordem.tipoWorkflow
       const passoAtual = getPassoProtese(tipo, cicloAtual.ordem.passoFluxoAtual)
+      if (cicloAtual.etapa !== passoAtual.nome) return { success: false, error: 'O ciclo não corresponde à prova atual da prótese.' }
       if (!passoAtual.prova) return { success: false, error: 'A etapa atual não corresponde a uma prova.' }
       if (passoAtual.prova) {
         const destino = cicloAtual.decisao === 'aprovado'
@@ -188,6 +194,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
           tx.ordem.update({
             where: { id: cicloAtual.ordemId },
             data: {
+          updatedAt: proximaRevisaoOrdem(cicloAtual.ordem.updatedAt),
               passoFluxoAtual: destino.id,
               etapaAtual: cicloAtual.decisao === 'ajustes' ? 'ajuste' : destino.macroetapa,
               subetapaAtual: cicloAtual.decisao === 'ajustes' ? `Ajuste: ${destino.nome}` : destino.nome,
@@ -218,6 +225,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
         tx.ordem.update({
           where: { id: cicloAtual.ordemId },
           data: {
+          updatedAt: proximaRevisaoOrdem(cicloAtual.ordem.updatedAt),
             status: 'Em Produção',
             etapaAtual: 'acabamento',
             subetapaAtual: 'Acabamento e polimento',
@@ -259,6 +267,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
       tx.ordem.update({
         where: { id: cicloAtual.ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(cicloAtual.ordem.updatedAt),
           etapaAtual: 'ajuste',
           subetapaAtual: subetapa,
           status: 'Em Produção',
@@ -309,6 +318,7 @@ export async function concluirAjusteSemNovaProva(cicloId: number) {
       tx.ordem.update({
         where: { id: ciclo.ordemId },
         data: {
+          updatedAt: proximaRevisaoOrdem(ciclo.ordem.updatedAt),
           etapaAtual: 'acabamento',
           subetapaAtual: 'Acabamento e polimento',
           status: 'Em Produção',

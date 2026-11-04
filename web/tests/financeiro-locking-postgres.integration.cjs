@@ -9,6 +9,9 @@ const vm = require('node:vm')
 const ts = require('typescript')
 const { Pool } = require('pg')
 const { lookup } = require('node:dns/promises')
+const sharedRules = {}
+for (const file of ['order-transition', 'date-civil']) vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../../packages/shared/src/' + file + '.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: sharedRules, Date })
+
 const url = new URL(process.argv[2] || 'http://missing')
 assert.ok(['postgres:', 'postgresql:'].includes(url.protocol))
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
@@ -34,7 +37,7 @@ function hydrate(record) {
 function table(client, name) {
   return {
     async findUnique({ where }) { return hydrate((await client.query(`SELECT payload FROM ${name} WHERE id=$1`, [where.id])).rows[0]?.payload) },
-    async update({ where, data }) { return (await client.query(`UPDATE ${name} SET payload=payload || $2::jsonb WHERE id=$1 RETURNING payload`, [where.id, JSON.stringify(data)])).rows[0].payload },
+    async update({ where, data }) { return (await client.query(`UPDATE ${name} SET payload=payload || $2::jsonb WHERE id=$1 RETURNING payload`, [where.id, JSON.stringify(name === 'ordens' ? { ...data, updatedAt: data.updatedAt || new Date() } : data)])).rows[0].payload },
   }
 }
 const prisma = { async $transaction(fn) {
@@ -87,7 +90,8 @@ vm.runInNewContext(code, { exports: actions, Date, console: actionConsole, requi
   if (name === 'next/cache') return { revalidatePath() {} }
   if (name === '@/lib/auth-utils') return { requireUser: async () => ({ id: 1, nome: 'Synthetic operator' }) }
   if (name === '@/lib/date-utils') return { parseDateLocal: value => new Date(`${value}T12:00:00Z`) }
-  if (name.startsWith('@/lib/')) return {}
+  if (name === '@/lib/data-civil') return sharedRules
+    if (name.startsWith('@/lib/')) return {}
   if (['node:crypto', 'zod'].includes(name)) return require(name)
   throw new Error(`Unexpected import ${name}`)
 } })
@@ -99,6 +103,7 @@ const finalization = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/finalizacao-ordem.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { exports: finalization, Date, require(name) {
+  if (name === './data-civil') return sharedRules
   if (name === './estoque-bloqueio') return stockLocks
   throw new Error(`Unexpected finalization import ${name}`)
 } })
@@ -110,7 +115,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../.
 }).outputText, { exports: clinic, Date, require(name) {
   if (name === '@labgest/database') return { prisma }
   if (name === 'next/cache') return { revalidatePath() {} }
-  if (name === '@labgest/shared') return transition
+  if (name === '@labgest/shared') return sharedRules
   if (name === '@/lib/cliente-identity') return { resolveClienteIdentity: async () => ({ ok: true, cliente: { id: 1 } }) }
   if (name === '@/lib/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { email: 'clinic@example.test', email_confirmed_at: '2026-11-01T00:00:00Z' } } }) } }) }
   if (name === '@/lib/workflow-config') return { isTipoProtese: () => true, getPassoProtese: () => ({ responsavel: 'clinica', entregaFinal: true, nome: 'Synthetic delivery' }) }
@@ -198,9 +203,9 @@ async function main() {
     for (const pair of ['generate/generate', 'finalize/finalize', 'generate/finalize', 'finalize/generate', 'clinic/finalize', 'finalize/clinic', 'generate/clinic', 'clinic/generate', 'clinic/clinic']) {
       // Reset ALL shared state; a preceding clinic action must not leak dates.
       await pool.query(`TRUNCATE ${schema}.contas_receber, ${schema}.contas_pagar, ${schema}.ordens, ${schema}.movimentos`)
-      await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, status: 'Finalizado', passoFluxoAtual: 'entrega_clinica', valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic', dataFinalizacao: '2026-11-04T12:00:00.000Z', cobrancaGeradaEm: null })])
+      await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, status: 'Finalizado', passoFluxoAtual: 'entrega_clinica', updatedAt: '2026-11-04T12:00:00.000Z', valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic', dataFinalizacao: '2026-11-04T12:00:00.000Z', cobrancaGeradaEm: null })])
       const finalize = () => prisma.$transaction(tx => finalization.garantirEfeitosFinalizacao(tx, 1))
-      const operations = { generate: () => actions.gerarCobrancaAutomatica(1), finalize, clinic: () => clinic.concluirEtapaClinica(1, 'entrega_clinica') }
+      const operations = { generate: () => actions.gerarCobrancaAutomatica(1), finalize, clinic: () => clinic.concluirEtapaClinica(1, 'entrega_clinica', '2026-11-04T12:00:00.000Z') }
       const names = pair.split('/')
       const results = await overlap(operations[names[0]], operations[names[1]])
       for (let index = 0; index < names.length; index++) {
@@ -208,6 +213,9 @@ async function main() {
         else if (names[index] === 'clinic' && index === 1 && names[0] === 'clinic') {
           assert.equal(results[index].success, false)
           assert.equal(results[index].error, 'Esta ordem já está encerrada.')
+        } else if (names[index] === 'clinic' && index === 1 && names[0] === 'finalize') {
+          assert.equal(results[index].success, false)
+          assert.equal(results[index].error, 'A ordem foi alterada. Atualize antes de continuar.')
         } else if (names[index] === 'generate' && index === 1) {
           assert.equal(results[index].success, false)
           assert.equal(results[index].error, 'Já existe uma cobrança para esta ordem.')

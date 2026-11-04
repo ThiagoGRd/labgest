@@ -266,7 +266,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
     if (!ordemParaCancelar) return
     setActionLoading(true)
     try {
-      const result = await cancelarOrdem(ordemParaCancelar.id, motivo)
+      const result = await cancelarOrdem(ordemParaCancelar.id, motivo, ordemParaCancelar.updatedAt || '')
       if (!result.success) {
         toast.error(result.error || 'Não foi possível cancelar a ordem.')
         return

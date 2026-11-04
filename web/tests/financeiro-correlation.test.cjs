@@ -13,9 +13,9 @@ function matches(row, where = {}) {
   })
 }
 function table(rows) { return { findMany: async (q={}) => rows.filter(r=>matches(r,q.where)), aggregate: async q => {const r=rows.filter(r=>matches(r,q.where));return {_sum:{valor:r.reduce((s,c)=>s+c.valor,0)},_count:r.length}}, count:async()=>0 } }
-function load(file, prisma) {
- const exports = {}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Date,Intl,console,process:{env:{}},require:n=>{
- if(n==='@labgest/database')return {prisma};if(n==='@/lib/auth-utils')return {requireUser:async()=>({nome:'test',permissoes:[]})};if(n==='@google/generative-ai')return {GoogleGenerativeAI:class{}};if(n==='next/cache')return {revalidatePath(){throw Error('mutation')}};if(n.startsWith('@/lib/'))return load('web/src/'+n.slice(2)+'.ts',prisma);if(['zod','node:crypto'].includes(n))return require(n);throw Error(n)
+function load(file, prisma, Clock = Date) {
+ const exports = {}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,Date:Clock,Intl,console,process:{env:{}},require:n=>{
+ if(n==='@labgest/shared')return load('packages/shared/src/date-civil.ts',prisma,Clock);if(n==='@labgest/database')return {prisma};if(n==='@/lib/cliente-identity')return {requireClienteIdentity:async()=>({id:1})};if(n==='@/lib/auth-utils')return {requireUser:async()=>({nome:'test',permissoes:[]})};if(n==='@google/generative-ai')return {GoogleGenerativeAI:class{}};if(n==='next/cache')return {revalidatePath(){throw Error('mutation')}};if(n.startsWith('@/lib/'))return load('web/src/'+n.slice(2)+'.ts',prisma,Clock);if(['zod','node:crypto'].includes(n))return require(n);throw Error(n)
  }});return exports
 }
 function base() {return {ordem:{...table([]),groupBy:async()=>[]},cicloProducao:table([]),cliente:{...table([{id:1,nome:'Renamed'},{id:2,nome:'Same'}]),findUnique:async q=>q.where.id===1?{id:1,nome:'Same'}:null},contaReceber:table([]),contaPagar:table([]),contaFinanceira:table([]),movimentacaoFinanceira:table([])}}
@@ -43,4 +43,26 @@ test('F5 payer and ledger civil month boundaries match receiver',async()=>{
 })
 test('F2 conflicting linked order never exposes another clinic patient',async()=>{
  const p=base();p.contaReceber=table([{...charge(1,1,'Same'),ordemId:99,descricao:'Safe charge',ordem:{clienteId:2,nomePaciente:'SECRET OTHER PATIENT',servicoNome:'OTHER SERVICE',dataEntrega:date('2026-11-01')}}]);const r=await load('web/src/actions/relatorios.ts',p).getRelatorioOrdensEntregues('2026-11',1);assert.equal(r.itens[0].paciente,'Vínculo da ordem requer revisão');assert.equal(r.itens[0].ordemId,null);assert.equal(r.itens[0].servico,'Vínculo da ordem requer revisão')
+})
+
+for (const [instant, overdue] of [
+  ['2026-11-01T02:59:59.999Z', false],
+  ['2026-11-01T03:00:00.000Z', false],
+  ['2026-11-02T02:59:59.999Z', false],
+  ['2026-11-02T03:00:00.000Z', true],
+]) test(`F5 admin and portal due-today agree at laboratory midnight ${instant}`, async () => {
+  class Clock extends Date { constructor(...args) { super(...(args.length ? args : [instant])) } }
+  const p = base()
+  const rows = [0,40,100].map((received,i) => ({...charge(i+1,1,'Clinic'), valorRecebido:received, dataCompetencia:null, status: received === 100 ? 'Recebido' : 'Pendente'}))
+  p.contaReceber = table(rows)
+  p.contaPagar = table(rows.map(r=>({...r, valorPago:r.valorRecebido, status:r.valorRecebido === 100 ? 'Pago' : 'Pendente'})))
+  const admin = await load('web/src/actions/financeiro.ts',p,Clock).getFinanceiroPageData('2026-11')
+  const portal = await load('portal/src/actions/financeiro.ts',p,Clock).getContasCliente()
+  const expected = [overdue ? 'Vencido' : 'Pendente', overdue ? 'Parcial atrasado' : 'Parcial']
+  assert.deepEqual(Array.from(portal.pendentes,c=>c.status),expected)
+  assert.deepEqual(Array.from(admin.receber.slice(0,2),c=>c.status),expected)
+  assert.deepEqual(Array.from(admin.pagar.slice(0,2),c=>c.status),expected)
+  assert.equal(admin.receber[2].status,'Recebido')
+  assert.equal(admin.pagar[2].status,'Pago')
+  assert.equal(admin.resumo.vencidoReceber, overdue ? 160 : 0)
 })

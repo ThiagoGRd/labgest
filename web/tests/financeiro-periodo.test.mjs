@@ -20,6 +20,7 @@ function loadSource(path, mocks) {
     require(name) {
       if (name in mocks) return mocks[name]
       if (name.startsWith('@/components/') && mocks.components) return mocks.components
+      if (name === '@labgest/shared') return loadSource('../../packages/shared/src/date-civil.ts', mocks)
       if (name.startsWith('@/lib/')) return loadSource(`${name.slice(2)}.ts`, mocks)
       if (name === 'node:crypto' || name === 'zod' || name === 'react/jsx-runtime') return require(name)
       throw new Error(`Unexpected import: ${name}`)
@@ -93,7 +94,7 @@ test('competence list reveals October charges while due totals, paid/cancelled s
   const cashQuery = calls.find(c => c.name === 'caixa').query.where
   assert.ok('dataMovimentacao' in cashQuery)
   assert.ok(!('dataCompetencia' in cashQuery))
-  assert.equal(cashQuery.dataMovimentacao.gte.getTime(), new Date(2026, 9, 1).getTime())
+  assert.equal(cashQuery.dataMovimentacao.gte.toISOString(), '2026-10-01T00:00:00.000Z')
   const november = await action.getFinanceiroPageData('2026-11')
   assert.deepEqual(Array.from(november.receber, c => c.id), [1, 6])
   assert.deepEqual(Array.from(november.receberCompetencia, c => c.id), [7])
