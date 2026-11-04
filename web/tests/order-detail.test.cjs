@@ -77,3 +77,13 @@ test('detail rejects unauthenticated reads before accessing linked financial dat
  const actions=loader({'@labgest/database':{prisma:{ordem:{findUnique:async()=>{reads++;return null}}}},'next/cache':{},'@/lib/auth-utils':{requireUser:async()=>{throw Error('unauthenticated')}},'@/lib/finalizacao-ordem':{},'@/lib/exclusao-ordem':{}})('@/actions/ordens')
  await assert.rejects(actions.getOrdemById(1),/unauthenticated/);assert.equal(reads,0)
 })
+
+for (const [name,ficha,expected] of [
+ ['null step',{...detalhe,passoFluxoAtual:null},'Não informado'],
+ ['unknown step',{...detalhe,passoFluxoAtual:'passo_desconhecido'},'passo_desconhecido'],
+ ['missing ficha',undefined,'Não informado'],
+]) test(`valid workflow with ${name} never invents the first step`,()=>{
+ const html=render({...ordem,ficha})
+ assert.ok(!html.includes('Moldagem de estudo'))
+ assert.match(html,new RegExp('Passo detalhado</dt><dd[^>]*>'+expected+'</dd>'))
+})

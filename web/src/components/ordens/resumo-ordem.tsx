@@ -1,5 +1,5 @@
 import { Badge, type BadgeProps } from '@/components/ui/badge'
-import { etapaLabel, getPassoProtese, getProgresso, isEtapaId, isTipoProtese, FLUXOS_PROTESE } from '@/lib/workflow-config'
+import { etapaLabel, getProgresso, isEtapaId, isTipoProtese, FLUXOS_PROTESE } from '@/lib/workflow-config'
 import { formatCurrency, formatDate } from '@/lib/date-utils'
 import { rotuloLocalizacaoTrabalho } from '@/lib/recepcao-utils'
 
@@ -73,7 +73,7 @@ export function ResumoOrdem({ ordem }: { ordem: OrdemResumo }) {
   const status = ficha ? ficha.status : ordem.status
   const etapa = ficha ? ficha.etapaAtual : ordem.etapaAtual
   const tipo = isTipoProtese(ordem.tipoWorkflow) ? ordem.tipoWorkflow : null
-  const passo = tipo ? getPassoProtese(tipo, ficha?.passoFluxoAtual) : null
+  const passo = tipo ? FLUXOS_PROTESE[tipo].passos.find(passo => passo.id === ficha?.passoFluxoAtual) : undefined
   const etapaNome = etapa ? (isEtapaId(etapa) ? etapaLabel(etapa) : etapa) : 'Etapa não informada'
   const progresso = etapa && isEtapaId(etapa) && etapa !== 'entregue' ? getProgresso(null, etapa) : null
 

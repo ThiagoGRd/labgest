@@ -35,15 +35,23 @@ Resultados finais:
 
 - `node_modules/.bin/tsc --noEmit --incremental false -p web/tsconfig.json`: passou.
 - `npm run lint --workspace=web`: passou, sem avisos. Aviso do novo arquivo de fixtures corrigido.
-- `node --test web/tests/*.test.cjs web/tests/*.test.mjs`: **50/50 passaram** (44 estabelecidos + 6 novos).
+- `node --test web/tests/*.test.cjs web/tests/*.test.mjs`: **53/53 passaram** (44 estabelecidos + 9 novos).
 - `node_modules/.bin/tsx --test web/src/lib/*.test.ts packages/shared/test/*.test.ts`: **35/35 passaram**.
-- `ORDER_DETAIL_QA=/workspace/labgest-order-qa node web/tests/order-detail-browser.cjs`: **Chromium 1280 e 390 px passou**, Tailwind real compilado de globals.css, timezone do navegador America/Sao_Paulo. Cobertura: ativa/finalizada/entregue/cancelada/pausada, etapa/localização/datas ausentes, valor zero, cobrança parcial/cancelada por timestamp, limites de data civil/instante, histórico, fotos/links de arquivos, envio de conversa local, fechar/reabrir/trocar OS, abertura/fechamento nos quatro contextos e Voltar de Prioridades.
+- `ORDER_DETAIL_QA=/workspace/labgest-order-qa node web/tests/order-detail-browser.cjs`: **Chromium 1280 e 390 px passou**, Tailwind real compilado de globals.css, timezone do navegador America/Sao_Paulo. Cobertura: ativa/finalizada/entregue/cancelada/pausada, etapa/localização/datas ausentes, valor zero, cobrança parcial/cancelada por timestamp, limites de data civil/instante, histórico, fotos/links de arquivos, envio de conversa local, fechar/reabrir/trocar OS, abertura/fechamento nas quatro filas contextuais de Prioridades/Produção e Voltar de Prioridades.
 - VisualizarOrdemModal, ResumoOrdem, ChatOrdem, Radix e STLViewer reais. STL carregou uma geometria sintética local e criou canvas; iluminação/Stage substituída por cena local para evitar o HDR externo. Foto e PDF sintéticos locais. Ações substituídas por spies/funções bloqueadas; envio de chat validou OS e texto. **Zero requisições externas de browser e zero erros de página**.
 - Harness estabelecido `attention-browser.cjs` com CSS real: passou em 1280/390 px (atalhos, histórico, filtros, relatórios e modais da base).
 - `node web/tests/labs-externos-archive-browser.integration.cjs`: passou com ações/shell sintéticos; módulo não alterado.
 - `git diff --check`: passou. Patch será acompanhado de confirmação de aplicabilidade sobre a base.
 
 A base 1737ad72 já havia passado typecheck/lint e a suite estabelecida na cópia sanitizada. Não apareceram falhas de produto novas. As duas integrações PostgreSQL do módulo de arquivo externo continuam fora da execução bem-sucedida: requerem pacote pg e banco descartável específico; falha de pré-requisito já registrada na base, não reproduzida como se fosse falha da ficha. Nenhuma infraestrutura foi criada para esse escopo.
+
+## Correção após revisão independente
+
+O resumo agora resolve o passo detalhado por correspondência exata do ID dentro do fluxo. Não usa o fallback de getPassoProtese; o helper global não foi alterado. Fluxo válido com passo nulo ou ficha ausente mostra “Não informado”; ID desconhecido preserva seu texto; o caso normal continua “Montagem dos dentes”. Três regressões falharam antes da correção (6 passaram/3 falharam, order-step-red.log) e passaram depois (9/9, order-step-green.log). Os quatro casos também foram verificados no modal real em Chromium desktop/mobile com Tailwind real e capturas locais.
+
+`motivoPausa` já era serializado por getOrdemById na base 1737ad72 (`motivoPausa: ordem.motivoPausa`); não depende somente do fixture e não exigiu mudança na consulta.
+
+Precisão da cobertura: order-detail-browser abre o harness isolado da ficha e quatro filas nas páginas de Prioridades/Produção. Isso não equivale a quatro telas reais. Não se alega abertura desta ficha em Dashboard/Ordens; o harness estabelecido valida seus próprios atalhos/relatórios e modais da base, sem ampliar essa alegação.
 
 ## QA visual interna e limites
 

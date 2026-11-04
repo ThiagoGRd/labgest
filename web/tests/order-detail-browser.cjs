@@ -53,6 +53,10 @@ async function main(){
   for(const width of [1280,390]){
    await page.setViewportSize({width,height:900});await page.goto(origin+'/ficha-teste');await page.getByText('Abrir OS 1',{exact:true}).click();await page.getByRole('dialog').waitFor();await fit()
    assert.ok(await page.getByRole('region',{name:'Resumo da OS'}).isVisible());await shot('resumo-'+width)
+   for(const [scenario,expected] of [['null','Não informado'],['unknown','passo_desconhecido'],['missing','Não informado'],['normal','Montagem dos dentes']]){
+    await page.evaluate(scenario=>{const o=window.orders[1];window.originalFicha??=structuredClone(o.ficha);o.ficha=scenario==='missing'?undefined:{...window.originalFicha,passoFluxoAtual:scenario==='null'?null:scenario==='unknown'?'passo_desconhecido':'montagem_dentes'};window.selectOrder(1)},scenario)
+    const step=page.getByText('Passo detalhado',{exact:true}).locator('..').locator('dd');await step.getByText(expected,{exact:true}).waitFor();assert.equal(await step.textContent(),expected);assert.equal(await page.getByText('Moldagem de estudo',{exact:true}).count(),0);await step.scrollIntoViewIfNeeded();await shot('passo-'+scenario+'-'+width)
+   }
    for(const status of ['Em Produção','Finalizado','Entregue','Cancelado','Pausado']){
     await page.evaluate(status=>{const o=window.orders[1];o.status=status;o.ficha.status=status;o.motivoPausa=status==='Pausado'?'Aguardando material sintético':null;o.ficha.dataFinalizacao=['Finalizado','Entregue'].includes(status)?'2026-11-10T00:00:00Z':null;o.ficha.dataEntregaReal=status==='Entregue'?'2026-11-12T15:00:00Z':null;window.selectOrder(1)},status);await page.getByRole('region',{name:'Resumo da OS'}).getByText(status,{exact:true}).waitFor()
     assert.ok((await page.getByRole('region',{name:'Resumo da OS'}).textContent()).includes(status));assert.ok((await page.getByRole('region',{name:'Localização física'}).textContent()).includes('No laboratório'))
