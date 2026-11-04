@@ -18,6 +18,7 @@ function fixture(tipo, initial = 0) {
   let movements = initial ? [{ valor: initial, [foreignKey]: 1, estornadaEm: null }] : []
   let queue = Promise.resolve()
   let locks = 0
+  const updates = []
   const prisma = { async $transaction(fn) {
     let release
     let locked = false
@@ -25,7 +26,7 @@ function fixture(tipo, initial = 0) {
     const check = () => assert.ok(locked, 'account must be locked before reading/writing financial state')
     const table = {
       async findUnique() { check(); await Promise.resolve(); return { ...localAccount } },
-      async update({ data }) { check(); Object.assign(localAccount, data); return { ...localAccount } },
+      async update({ data }) { check(); updates.push({ ...data }); Object.assign(localAccount, data); return { ...localAccount } },
     }
     const tx = {
       async $queryRaw(strings, ...values) {
@@ -65,10 +66,10 @@ function fixture(tipo, initial = 0) {
   } })
   return {
     pay: (valor = 80) => exports.liquidarConta({ id: 1, tipo, valor, data: '2026-11-04', formaPagamento: 'Pix' }),
-    cancel: () => exports.cancelarConta(1, tipo, 'Synthetic cancellation'),
+    cancel: (reason = 'Synthetic cancellation') => exports.cancelarConta(1, tipo, reason),
     reverse: () => exports.estornarBaixa(1, tipo, 'Synthetic reversal'),
     edit: () => exports.editarConta(1, tipo, { descricao: 'Synthetic account', valor: 50, vencimento: '2026-11-04' }),
-    state: () => ({ account, movements, locks }),
+    state: () => ({ account, movements, locks, updates }),
     consistent() {
       assert.equal(account[field], movements.filter(m => !m.estornadaEm).reduce((sum, m) => sum + m.valor, 0))
       assert.ok(account[field] <= account.valor)
@@ -78,6 +79,25 @@ function fixture(tipo, initial = 0) {
 }
 
 for (const tipo of ['receber', 'pagar']) {
+  for (const concurrent of [false, true]) test(`${tipo}: ${concurrent ? 'concurrent' : 'sequential'} repeated cancellation preserves first audit`, async () => {
+    const f = fixture(tipo)
+    const first = f.cancel('First cancellation reason')
+    const results = concurrent
+      ? await Promise.all([first, f.cancel('Second cancellation reason')])
+      : [await first, await f.cancel('Second cancellation reason')]
+    assert.equal(results[0].success, true)
+    assert.equal(results[1].success, false)
+    assert.equal(results[1].error, 'Esta conta já está cancelada.')
+    const { account, updates, locks, movements } = f.state()
+    assert.equal(locks, 2)
+    assert.equal(updates.length, 1, 'The repeated request must not update any audit field')
+    assert.equal(account.motivoCancelamento, 'First cancellation reason')
+    assert.equal(account.canceladoPor, updates[0].canceladoPor)
+    assert.equal(account.canceladoEm, updates[0].canceladoEm)
+    assert.equal(account.status, 'Cancelado')
+    assert.equal(movements.length, 0)
+    f.consistent()
+  })
   test(`${tipo}: simultaneous 80 + 80 on 100 accepts one settlement`, async () => {
     const f = fixture(tipo)
     const results = await Promise.all([f.pay(), f.pay()])

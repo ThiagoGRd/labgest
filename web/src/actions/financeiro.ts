@@ -459,10 +459,12 @@ export async function cancelarConta(id: number, tipo: 'receber' | 'pagar', motiv
       await bloquearConta(tx, id, tipo)
       if (tipo === 'receber') {
         const conta = await tx.contaReceber.findUnique({ where: { id } })
+        if (conta?.status === 'Cancelado') return { success: false, error: 'Esta conta já está cancelada.' }
         if (!conta || Number(conta.valorRecebido) > 0) return { success: false, error: 'Uma conta com recebimentos precisa ter as baixas estornadas antes.' }
         await tx.contaReceber.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
       } else {
         const conta = await tx.contaPagar.findUnique({ where: { id } })
+        if (conta?.status === 'Cancelado') return { success: false, error: 'Esta conta já está cancelada.' }
         if (!conta || Number(conta.valorPago) > 0) return { success: false, error: 'Uma conta com pagamentos precisa ter as baixas estornadas antes.' }
         await tx.contaPagar.update({ where: { id }, data: { status: 'Cancelado', canceladoEm: new Date(), canceladoPor: usuario.nome, motivoCancelamento: motivo.trim() } })
       }
