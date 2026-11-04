@@ -11,10 +11,7 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres:16-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
-        env:
+    env:
           POSTGRES_USER: labgest_archive_test
           POSTGRES_PASSWORD: synthetic-only
           POSTGRES_DB: labgest_archive_test
@@ -67,6 +64,20 @@ jobs:
         run: |
           node -e 'for(const name of ["prisma","@prisma/client"]){if(require(name+"/package.json").version!=="6.19.2")process.exit(1)}'
           npm run db:generate
+      - name: Start disposable PostgreSQL on actual loopback
+        id: pgsetup
+        run: |
+          docker run --detach --rm --name labgest5-pg --network host \
+            -e POSTGRES_USER=labgest_archive_test \
+            -e POSTGRES_PASSWORD=synthetic-only \
+            -e POSTGRES_DB=labgest_archive_test \
+            postgres:16-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938 \
+            -c listen_addresses=127.0.0.1
+          for attempt in $(seq 1 60); do
+            if docker exec labgest5-pg pg_isready -h 127.0.0.1 -U labgest_archive_test -d labgest_archive_test; then exit 0; fi
+            sleep 1
+          done
+          exit 1
       - name: Explicit web typecheck
         id: webtypes
         continue-on-error: true
@@ -131,6 +142,11 @@ jobs:
         id: portalbuild
         continue-on-error: true
         run: npm run build:portal
+      - name: Remove disposable PostgreSQL
+        id: pgcleanup
+        if: always()
+        run: |
+          if docker container inspect labgest5-pg >/dev/null 2>&1; then docker rm --force labgest5-pg; fi
       - name: Require every validation check to pass
         if: always()
         env:
@@ -138,7 +154,7 @@ jobs:
         run: |
           node - <<'JS'
           const steps=JSON.parse(process.env.RESULTS);
-          const required=['webtypes','portaltypes','unit','node','dates','postgres','prisma','browser','lint','webbuild','portalbuild'];
+          const required=['pgsetup','pgcleanup','webtypes','portaltypes','unit','node','dates','postgres','prisma','browser','lint','webbuild','portalbuild'];
           for(const id of required)console.log(`${id}: ${steps[id]?.outcome || 'not run'}`);
           if(required.some(id=>steps[id]?.outcome!=='success'))process.exit(1);
           JS
