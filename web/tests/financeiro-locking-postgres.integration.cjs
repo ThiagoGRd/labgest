@@ -8,11 +8,14 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 const { Pool } = require('pg')
+const { lookup } = require('node:dns/promises')
 const url = new URL(process.argv[2] || 'http://missing')
 assert.ok(['postgres:', 'postgresql:'].includes(url.protocol))
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
 assert.equal(url.pathname, '/labgest_finance_test', 'Disposable synthetic DB only')
-const pool = new Pool({ connectionString: url.href, max: 5 })
+assert.equal(url.search, '', 'Connection overrides are forbidden')
+assert.equal(url.hash, '', 'URL fragments are forbidden')
+let pool
 const schema = `finance_lock_${process.pid}`
 const source = fs.readFileSync(path.join(__dirname, '../src/actions/financeiro.ts'), 'utf8')
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -21,9 +24,16 @@ let pauseFirst
 let firstLocked
 let releaseFirst
 let lockCount = 0
+const unexpectedErrors = []
+const actionConsole = { error(...args) { unexpectedErrors.push(args.map(String).join(' ')) } }
+const dateFields = new Set(['dataFinalizacao', 'dataEntregaReal', 'dataCompetencia', 'dataVencimento', 'dataRecebimento', 'dataPagamento', 'canceladoEm', 'estornadaEm', 'estoqueBaixadoEm', 'cobrancaGeradaEm', 'createdAt', 'updatedAt'])
+function hydrate(record) {
+  if (!record) return record
+  return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, dateFields.has(key) && value != null ? new Date(value) : value]))
+}
 function table(client, name) {
   return {
-    async findUnique({ where }) { return (await client.query(`SELECT payload FROM ${name} WHERE id=$1`, [where.id])).rows[0]?.payload },
+    async findUnique({ where }) { return hydrate((await client.query(`SELECT payload FROM ${name} WHERE id=$1`, [where.id])).rows[0]?.payload) },
     async update({ where, data }) { return (await client.query(`UPDATE ${name} SET payload=payload || $2::jsonb WHERE id=$1 RETURNING payload`, [where.id, JSON.stringify(data)])).rows[0].payload },
   }
 }
@@ -32,6 +42,7 @@ const prisma = { async $transaction(fn) {
   try {
     await client.query('BEGIN')
     await client.query(`SET LOCAL search_path TO ${schema}`)
+    await client.query("SET LOCAL statement_timeout TO '7000ms'")
     const tx = {
       async $queryRaw(strings, ...values) {
         const rows = (await client.query(query(strings, values))).rows
@@ -71,7 +82,7 @@ const prisma = { async $transaction(fn) {
   finally { client.release() }
 } }
 const actions = {}
-vm.runInNewContext(code, { exports: actions, Date, console, require(name) {
+vm.runInNewContext(code, { exports: actions, Date, console: actionConsole, require(name) {
   if (name === '@labgest/database') return { prisma, Prisma: { PrismaClientKnownRequestError: class extends Error {} } }
   if (name === 'next/cache') return { revalidatePath() {} }
   if (name === '@/lib/auth-utils') return { requireUser: async () => ({ id: 1, nome: 'Synthetic operator' }) }
@@ -80,10 +91,17 @@ vm.runInNewContext(code, { exports: actions, Date, console, require(name) {
   if (['node:crypto', 'zod'].includes(name)) return require(name)
   throw new Error(`Unexpected import ${name}`)
 } })
+const stockLocks = {}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/estoque-bloqueio.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: stockLocks })
 const finalization = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/finalizacao-ordem.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, { exports: finalization, Date })
+}).outputText, { exports: finalization, Date, require(name) {
+  if (name === './estoque-bloqueio') return stockLocks
+  throw new Error(`Unexpected finalization import ${name}`)
+} })
 const clinic = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../../portal/src/actions/workflow-protese.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -94,9 +112,49 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../.
   if (name === '@/lib/workflow-config') return { isTipoProtese: () => true, getPassoProtese: () => ({ responsavel: 'clinica', entregaFinal: true, nome: 'Synthetic delivery' }) }
   throw new Error(`Unexpected clinic import ${name}`)
 } })
+async function overlap(first, second) {
+  lockCount = 0
+  const locked = new Promise(resolve => { firstLocked = resolve })
+  pauseFirst = new Promise(resolve => { releaseFirst = resolve })
+  const jobs = [Promise.resolve().then(first)]
+  // Attach handlers immediately: a transaction may fail before taking its lock.
+  const settled = [jobs[0].then(value => ({ value }), error => ({ error }))]
+  let failure, timer
+  try {
+    await Promise.race([locked, jobs[0].then(() => { throw new Error('First operation did not hold its lock') }), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('First lock timed out')), 5000) })])
+    clearTimeout(timer)
+    jobs.push(Promise.resolve().then(second))
+    settled.push(jobs[1].then(value => ({ value }), error => ({ error })))
+    let waiting = false
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline) {
+      const result = await pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM %FOR UPDATE' LIMIT 1", [schema])
+      if (result.rowCount) { waiting = true; break }
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    assert.ok(waiting, 'Second operation must wait on a row lock in this test pool')
+  } catch (error) { failure = error }
+  finally { clearTimeout(timer); releaseFirst(); pauseFirst = null }
+  const results = await Promise.all(settled)
+  if (failure) throw failure
+  for (const result of results) if (result.error) throw result.error
+  assert.deepEqual(unexpectedErrors, [], 'Unexpected server-action console.error must fail the regression')
+  return results.map(result => result.value)
+}
+async function connectLocal() {
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  const addresses = await lookup(hostname, { all: true })
+  assert.ok(addresses.length && addresses.every(row => row.address === '127.0.0.1' || row.address === '::1'), 'All resolved addresses must be loopback')
+  // Pin the verified address; do not pass the caller URL to pg for reparsing.
+  pool = new Pool({ host: addresses[0].address, port: Number(url.port || 5432), user: decodeURIComponent(url.username), password: decodeURIComponent(url.password), database: 'labgest_finance_test', ssl: false, application_name: schema, max: 5, connectionTimeoutMillis: 3000 })
+  const target = (await pool.query('SELECT current_database() AS db, inet_server_addr()::text AS address')).rows[0]
+  assert.equal(target.db, 'labgest_finance_test')
+  assert.ok(['127.0.0.1', '::1'].includes(target.address))
+}
 async function main() {
   let created = false
   try {
+    await connectLocal()
     await pool.query(`CREATE SCHEMA ${schema}`); created = true
     for (const name of ['contas_receber', 'contas_pagar', 'ordens']) await pool.query(`CREATE TABLE ${schema}.${name}(id integer PRIMARY KEY, payload jsonb NOT NULL, cliente_id integer DEFAULT 1)`)
     await pool.query(`CREATE TABLE ${schema}.movimentos(id serial PRIMARY KEY, payload jsonb NOT NULL)`)
@@ -113,25 +171,19 @@ async function main() {
         reverse: () => actions.estornarBaixa(1, tipo, 'Synthetic reversal'),
         edit: () => actions.editarConta(1, tipo, { descricao: 'Synthetic edit', valor: 50, vencimento: '2026-11-04' }),
       }
-      lockCount = 0
-      const locked = new Promise(resolve => { firstLocked = resolve })
-      pauseFirst = new Promise(resolve => { releaseFirst = resolve })
-      const a = operations[first]()
-      await Promise.race([locked, new Promise((_, reject) => setTimeout(() => reject(new Error('First action did not lock')), 5000).unref())])
-      const b = operations[second]()
-      try {
-        let waiting = false
-        const deadline = Date.now() + 3000
-        while (Date.now() < deadline) {
-          const result = await pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM contas_%' LIMIT 1")
-          if (result.rowCount) { waiting = true; break }
-          await new Promise(resolve => setTimeout(resolve, 20))
-        }
-        assert.ok(waiting, 'Second action must actually wait for PostgreSQL row lock')
-      } finally { releaseFirst() }
-      const results = await Promise.all([a, b])
+      const results = await overlap(operations[first], operations[second])
       assert.equal(results[0].success, true)
       assert.equal(results[1].success, [first, second].includes('reverse'))
+      if (!results[1].success) {
+        const expected = second === 'cancel'
+          ? tipo === 'receber' ? 'Uma conta com recebimentos precisa ter as baixas estornadas antes.' : 'Uma conta com pagamentos precisa ter as baixas estornadas antes.'
+          : second === 'edit'
+            ? tipo === 'receber' ? 'O valor não pode ser menor que o total já recebido.' : 'O valor não pode ser menor que o total já pago.'
+            : first === 'cancel'
+              ? tipo === 'receber' ? 'Conta indisponível para recebimento.' : 'Conta indisponível para pagamento.'
+              : 'O valor informado ultrapassa o saldo da conta.'
+        assert.equal(results[1].error, expected, 'Only the expected business rejection is acceptable')
+      }
       const account = (await pool.query(`SELECT payload FROM ${schema}.contas_${tipo}`)).rows[0].payload
       const movements = (await pool.query(`SELECT payload FROM ${schema}.movimentos`)).rows.map(r => r.payload)
       assert.equal(account[field], movements.filter(m => !m.estornadaEm).reduce((sum, m) => sum + m.valor, 0))
@@ -139,24 +191,28 @@ async function main() {
       if (account.status === 'Cancelado') assert.equal(account[field], 0)
       console.log(`PASS ${tipo}: ${first}/${second}`)
     }
-    pauseFirst = null
-    await pool.query(`TRUNCATE ${schema}.contas_receber`)
-    await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic' })])
-    const generated = await Promise.all([actions.gerarCobrancaAutomatica(1), actions.gerarCobrancaAutomatica(1)])
-    assert.equal(generated.filter(result => result.success).length, 1)
-    assert.equal(Number((await pool.query(`SELECT count(*) FROM ${schema}.contas_receber`)).rows[0].count), 1)
-    console.log('PASS automatic generation: one invoice for concurrent requests')
-    for (const pair of ['finalize/finalize', 'generate/finalize', 'clinic/finalize', 'generate/clinic', 'clinic/clinic']) {
-      await pool.query(`TRUNCATE ${schema}.contas_receber`)
+    for (const pair of ['generate/generate', 'finalize/finalize', 'generate/finalize', 'finalize/generate', 'clinic/finalize', 'finalize/clinic', 'generate/clinic', 'clinic/generate', 'clinic/clinic']) {
+      // Reset ALL shared state; a preceding clinic action must not leak dates.
+      await pool.query(`TRUNCATE ${schema}.contas_receber, ${schema}.contas_pagar, ${schema}.ordens, ${schema}.movimentos`)
+      await pool.query(`INSERT INTO ${schema}.ordens VALUES(1,$1,1)`, [JSON.stringify({ id: 1, clienteId: 1, valorFinal: 100, servicoNome: 'Synthetic', nomePaciente: 'Synthetic', dataFinalizacao: '2026-11-04T12:00:00.000Z', cobrancaGeradaEm: null })])
       const finalize = () => prisma.$transaction(tx => finalization.garantirEfeitosFinalizacao(tx, 1))
       const operations = { generate: () => actions.gerarCobrancaAutomatica(1), finalize, clinic: () => clinic.concluirEtapaClinica(1) }
-      await Promise.all(pair.split('/').map(name => operations[name]()))
+      const names = pair.split('/')
+      const results = await overlap(operations[names[0]], operations[names[1]])
+      for (let index = 0; index < names.length; index++) {
+        if (names[index] === 'finalize') assert.equal(results[index], undefined)
+        else if (names[index] === 'generate' && index === 1) {
+          assert.equal(results[index].success, false)
+          assert.equal(results[index].error, 'Já existe uma cobrança para esta ordem.')
+        } else assert.equal(results[index].success, true, `${pair}: ${names[index]} must succeed`)
+      }
       assert.equal(Number((await pool.query(`SELECT count(*) FROM ${schema}.contas_receber`)).rows[0].count), 1)
-      console.log(`PASS ${pair}: one invoice`)
+      assert.deepEqual(unexpectedErrors, [])
+      console.log(`PASS ${pair}: observed order-lock wait; both outcomes checked; one invoice`)
     }
   } finally {
     if (created) await pool.query(`DROP SCHEMA ${schema} CASCADE`)
-    await pool.end()
+    await pool?.end()
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

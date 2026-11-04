@@ -3,6 +3,7 @@
 import { prisma } from '@labgest/database'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
+import { bloquearItensEstoque } from '@/lib/estoque-bloqueio'
 
 export interface ItemEstoqueInput {
   nome: string
@@ -219,6 +220,7 @@ export async function registrarMovimentacaoEstoque(data: {
     if (data.valorUnitario != null && !numeroValido(data.valorUnitario)) throw new Error('Informe um valor unitário válido')
 
     await prisma.$transaction(async tx => {
+      await bloquearItensEstoque(tx, [data.estoqueId])
       const item = await tx.estoque.findUnique({ where: { id: data.estoqueId } })
       if (!item) throw new Error('Item de estoque não encontrado')
       if (item.ativo === false) throw new Error('Reative o item antes de movimentar o estoque')
@@ -275,7 +277,11 @@ export async function abaterEstoquePorServico(servicoId: number) {
     if (!servico || !Array.isArray(servico.materiais)) return { success: true, message: 'Sem materiais vinculados' }
 
     await prisma.$transaction(async tx => {
-      for (const material of servico.materiais as Array<{ id?: number; quantidade?: number }>) {
+      const materiais = servico.materiais as Array<{ id?: number; quantidade?: number }>
+      await bloquearItensEstoque(tx, materiais
+        .filter(material => material.id && material.quantidade && material.quantidade > 0)
+        .map(material => material.id!))
+      for (const material of materiais) {
         if (!material.id || !material.quantidade || material.quantidade <= 0) continue
         const item = await tx.estoque.findUnique({ where: { id: material.id } })
         if (!item) continue

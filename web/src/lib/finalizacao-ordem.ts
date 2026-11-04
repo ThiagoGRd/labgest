@@ -1,4 +1,5 @@
 import type { Prisma } from '@labgest/database'
+import { bloquearItensEstoque } from './estoque-bloqueio'
 
 export async function garantirEfeitosFinalizacao(
   tx: Prisma.TransactionClient,
@@ -29,6 +30,9 @@ export async function garantirEfeitosFinalizacao(
     const materiais = Array.isArray(ordem.servico?.materiais)
       ? ordem.servico.materiais as Array<{ id?: number; quantidade?: number }>
       : []
+    await bloquearItensEstoque(tx, materiais
+      .filter(material => material.id && material.quantidade)
+      .map(material => material.id!))
     for (const material of materiais) {
       if (material.id && material.quantidade) {
         const item = await tx.estoque.findUnique({ where: { id: material.id } })
