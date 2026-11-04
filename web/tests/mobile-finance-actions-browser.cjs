@@ -1,0 +1,41 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+// Real DashboardLayout, provider, sidebar, badges and WhatsNew/Radix; only Next routing and server actions are local spies.
+const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http')
+const {createRequire}=require('node:module'),esbuild=require('esbuild'),{chromium}=require('playwright')
+const web=path.resolve(__dirname,'..'),root=path.dirname(web),req=createRequire(path.join(web,'package.json'))
+const qa=process.env.DAILY_QA||path.join(root,'delivery/daily-qa')
+const states=[['Pendente',0,true],['Vencido',0,true],['Parcial',30,false],['Recebido',100,false],['Pago',100,false],['Cancelado',0,false],['Pago',0,true],['Parcial',0,true]]
+const items=states.map(([status,liquidado],i)=>({id:i+1,descricao:'Fictício '+status+' '+liquidado,valor:100,liquidado,restante:100-liquidado,vencimento:'2026-11-04',status,observacoes:'',cliente:'Clínica QA',fornecedor:'Fornecedor QA',categoria:'Material'}))
+const data={periodo:'2026-11',receber:items,receberCompetencia:items,pagar:items.map(i=>({...i,id:i.id+100})),clientes:[],contasFinanceiras:[],movimentacoes:[],mesesDisponiveis:['2026-11'],resumo:{entradas:0,saidas:0,resultadoRealizado:0,recebidoCompetencia:0,pagoCompetencia:0,previstoReceber:0,totalPrevistoReceber:0,previstoPagar:0,totalPrevistoPagar:0,resultadoProjetado:0,vencidoReceber:0,quantidadeVencidas:0}}
+
+async function main(){let server,browser,runtime;const errors=[],external=[],results=[],requests=[]
+ try{
+ await fs.mkdir(qa,{recursive:true})
+ const build=await esbuild.build({stdin:{contents:`import React from'react';import{createRoot}from'react-dom/client';import{FinanceiroView}from'@/app/(dashboard)/financeiro/financeiro-view';import{VERSAO_ATUAL}from'@/lib/release-notes';window.calls=[];localStorage.setItem('labgest_seen_version',VERSAO_ATUAL);createRoot(document.getElementById('root')).render(<FinanceiroView dados={${JSON.stringify(data)}} criterioReceber="competencia"/>);`,loader:'tsx',resolveDir:web},bundle:true,write:false,platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'local',setup(b){
+ b.onResolve({filter:/^@\/actions\//},a=>({path:path.join(web,'src',a.path.slice(2)+'.ts'),namespace:'action'}));b.onLoad({filter:/.*/,namespace:'action'},async a=>{const src=await fs.readFile(a.path,'utf8');return{contents:[...src.matchAll(/export async function (\w+)/g)].map(m=>m[1]==='cancelarConta'?`export async function cancelarConta(...args){window.calls.push(args);return{success:true}}`:m[1]==='getMensagensNaoLidasLab'?`export async function ${m[1]}(){return 0}`:`export async function ${m[1]}(){throw Error('Unexpected action blocked')}`).join('\n')}})
+ b.onResolve({filter:/^(@supabase\/|@labgest\/database)/},()=>{throw Error('External SDK prohibited')})
+ b.onResolve({filter:/^next\/(link|navigation|image)$/},a=>({path:a.path,namespace:'next'}));b.onLoad({filter:/.*/,namespace:'next'},a=>({contents:a.path==='next/image'?`import React from'react';export default function Image({unoptimized,...props}){return <img {...props}/>} `:a.path==='next/link'?`import React from'react';export default function Link({href,onClick,...props}){return <a {...props} href={href} onClick={e=>{onClick?.(e);if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey){e.preventDefault();history.pushState({},'',href);window.dispatchEvent(new PopStateEvent('popstate'))}}}/>} `:`import{useSyncExternalStore}from'react';const subscribe=f=>{window.addEventListener('popstate',f);return()=>window.removeEventListener('popstate',f)};export function usePathname(){return useSyncExternalStore(subscribe,()=>location.pathname)};export const useRouter=()=>({refresh:()=>{}});`,loader:'jsx',resolveDir:web}))
+ b.onResolve({filter:/^@\//},a=>{const p=path.join(web,'src',a.path.slice(2));return{path:require('node:fs').existsSync(p+'.tsx')?p+'.tsx':p+'.ts'}})
+ }}]})
+ const cssPath=path.join(web,'src/app/globals.css'),css=(await req('postcss')([req('@tailwindcss/postcss')({base:web})]).process(await fs.readFile(cssPath,'utf8'),{from:cssPath})).css
+ server=http.createServer((r,s)=>{requests.push({method:r.method,path:new URL(r.url,'http://127.0.0.1').pathname});if(r.url==='/app.js'){s.setHeader('Content-Type','text/javascript');s.end(build.outputFiles[0].text)}else if(r.url==='/app.css'){s.setHeader('Content-Type','text/css');s.end(css)}else{s.setHeader('Content-Type','text/html');s.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><div id="root"></div><script src="/app.js"></script>')}})
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;runtime={pid:process.pid,origin,backend:'static only; cancel action spy; other actions blocked'}
+ browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']})
+ const context=await browser.newContext();const page=await context.newPage();page.setDefaultTimeout(3000);page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>{if(r.request().url().startsWith(origin+'/'))return r.continue();external.push(r.request().url());return r.abort()})
+ const check=async(name,fn)=>{try{await fn();results.push('PASS '+name)}catch(e){results.push('FAIL '+name+': '+e.stack)}}
+ for(const width of [320,390,768,1280]){
+ await page.setViewportSize({width,height:900});await page.goto(origin+'/financeiro');await page.getByRole('tab',{name:/receber/i}).waitFor()
+ for(const tipo of ['receber','pagar']){
+ await check(width+' '+tipo+' cancellation eligibility, keyboard, dismiss and exact synthetic payload',async()=>{
+ await page.getByRole('tab',{name:tipo==='receber'?/receber/i:/pagar/i}).click();await page.evaluate(()=>window.calls=[]);await page.screenshot({path:path.join(qa,'list-'+tipo+'-'+width+'.png')})
+ for(const [status,liquidado,eligible]of states){const button=page.getByRole('button',{name:'Cancelar Fictício '+status+' '+liquidado,exact:true});assert.equal(await button.count(),eligible?1:0,'eligibility '+status);if(eligible){assert.ok(await button.isVisible());await button.scrollIntoViewIfNeeded();const box=await button.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width,'button within viewport')}}
+ const button=page.getByRole('button',{name:'Cancelar Fictício Pendente 0',exact:true});await page.getByRole('button',{name:'Editar Fictício Pendente 0',exact:true}).focus();await page.keyboard.press('Tab');assert.ok(await button.evaluate(e=>e===document.activeElement),'cancel follows edit in keyboard order');await page.keyboard.press('Enter');const dialog=page.getByRole('dialog',{name:'Cancelar lançamento',exact:true});await dialog.waitFor();await dialog.getByLabel('Motivo do cancelamento').fill('  Motivo fictício  ');await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.deepEqual(await page.evaluate(()=>window.calls),[])
+ await button.click();await dialog.waitFor();await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});assert.deepEqual(await page.evaluate(()=>window.calls),[])
+ await page.getByRole('button',{name:'Cancelar Fictício Vencido 0',exact:true}).click();await dialog.getByLabel('Motivo do cancelamento').fill('  Motivo fictício  ');await page.screenshot({path:path.join(qa,tipo+'-'+width+'.png')});await dialog.getByRole('button',{name:'Cancelar lançamento',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.deepEqual(await page.evaluate(()=>window.calls),[[tipo==='receber'?2:102,tipo,'Motivo fictício']])
+ })
+ }
+ }
+ for(const result of results)console.log(result);assert.deepEqual(external,[]);assert.deepEqual(errors,[]);console.log('External requests: 0; page errors: 0; real components/Tailwind; local cancel action spy; other actions blocked.');console.log(JSON.stringify({runtime,local_requests:requests.length}));if(results.some(r=>r.startsWith('FAIL')))process.exitCode=1
+ }finally{await browser?.close();await new Promise(r=>server?server.close(r):r());await fs.writeFile(path.join(qa,'requests.json'),JSON.stringify({runtime,requests,external,page_errors:errors,servers_closed:true},null,2))}
+}
+main().catch(e=>{console.error(e);process.exitCode=1})
