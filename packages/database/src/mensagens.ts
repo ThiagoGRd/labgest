@@ -1,4 +1,5 @@
 import { prisma, Prisma } from './index'
+import { proximaRevisaoOrdem } from '@labgest/shared'
 
 export interface MensagemOrdem {
   id: string
@@ -36,7 +37,7 @@ export async function alterarMensagens(ordemId: number, clienteId: number | unde
     if (JSON.stringify(seguintes) === anterior) return true
     // A genuine message/receipt change still updates updatedAt conservatively:
     // an open workflow form must refresh its revision before its next mutation.
-    await tx.ordem.update({ where: { id: ordemId }, data: { mensagens: seguintes as Prisma.InputJsonArray } })
+    await tx.ordem.update({ where: { id: ordemId }, data: { mensagens: seguintes as Prisma.InputJsonArray, updatedAt: proximaRevisaoOrdem(ordem.updatedAt) } })
     return true
   })
 }

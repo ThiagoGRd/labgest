@@ -3,9 +3,10 @@ const vm=require('node:vm'), fs=require('node:fs'), assert=require('node:assert/
 function load(path,mocks){ const exports={}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:n=>{if(n in mocks)return mocks[n];throw Error(n)},console,Date,Set});return exports; }
 (async()=>{
 let rows=new Map([[1,{id:1,clienteId:1,mensagens:[]}],[2,{id:2,clienteId:2,mensagens:[]}]]),tail=Promise.resolve();
-const tx={ $queryRaw:async(strings,...args)=> {let row=rows.get(args[0]);return row && (args.length===1||row.clienteId===args[1])?[{id:row.id}]:[]},ordem:{findFirst:async({where})=> {const row=rows.get(where.id);const snapshot=row&&(!where.clienteId||row.clienteId===where.clienteId)?structuredClone(row):null;await new Promise(r=>setImmediate(r));return snapshot},update:async({where,data})=>Object.assign(rows.get(where.id),structuredClone(data))}};
+const tx={ $queryRaw:async(strings,...args)=> {let row=rows.get(args[0]);return row && (args.length===1||row.clienteId===args[1])?[{id:row.id}]:[]},ordem:{findFirst:async({where})=> {const row=rows.get(where.id);const snapshot=row&&(!where.clienteId||row.clienteId===where.clienteId)?structuredClone(row):null;await new Promise(r=>setImmediate(r));return snapshot},update:async({where,data})=>Object.assign(rows.get(where.id),{updatedAt:new Date()},structuredClone(data))}};
 const prisma={...tx,cliente:{findFirst:async()=>({id:1})},$transaction:fn=>{const run=tail.then(()=>fn(tx));tail=run.catch(()=>{});return run}};
 const mocks={'./index':{prisma},'@labgest/database':{prisma},'node:crypto':require('node:crypto'),'next/cache':{revalidatePath(){}},'@/lib/auth-utils':{requireUser:async()=>({id:10,nome:'Lab'})},'@/lib/cliente-identity':{requireClienteIdentity:async()=>({id:1,nome:'Cliente'})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{email:'fake@example.invalid'}}})}})}};
+mocks['@labgest/shared']=load('packages/shared/src/order-transition.ts',mocks);
 if(fs.existsSync('packages/database/src/mensagens.ts'))mocks['@labgest/database/src/mensagens']=load('packages/database/src/mensagens.ts',mocks);
 const lab=load('web/src/actions/mensagens.ts',mocks),portal=load('portal/src/actions/mensagens.ts',mocks);
 await Promise.all([lab.enviarMensagemLab(1,'A'),portal.enviarMensagem(1,'B')]);
@@ -24,5 +25,15 @@ assert.equal(rows.get(1).mensagens.length,4);
 const retryId=require('node:crypto').randomUUID();
 await Promise.all([portal.enviarMensagem(1,'retry',undefined,retryId),portal.enviarMensagem(1,'retry',undefined,retryId)]);
 assert.equal(rows.get(1).mensagens.length,5,'same stable request ID must append only once');
+rows.get(1).updatedAt=new Date('2100-01-01T00:00:00.000Z');
+const future=rows.get(1).updatedAt.getTime();
+const sent=await portal.enviarMensagem(1,'future revision');
+assert.ok(rows.get(1).updatedAt.getTime()>future,'append must advance future revision');
+const afterAppend=rows.get(1).updatedAt.getTime();
+await lab.marcarMensagensLidas(1,[sent.mensagem.id]);
+assert.ok(rows.get(1).updatedAt.getTime()>afterAppend,'new receipt must advance future revision');
+const afterReceipt=rows.get(1).updatedAt.getTime();
+await lab.marcarMensagensLidas(1,[sent.mensagem.id]);
+assert.equal(rows.get(1).updatedAt.getTime(),afterReceipt,'duplicate receipt preserves revision');
 console.log('PASS concurrent app sends, unique IDs, scoped reads/writes/receipts, observed-ID receipt, concurrent receipt/send (transaction double; not PostgreSQL)');
 })().catch(e=>{console.error(e);process.exitCode=1});

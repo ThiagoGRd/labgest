@@ -248,6 +248,7 @@ const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
   await tx.ordem.update({
     where: { id: ordemId },
     data: {
+      updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
       fornecedorEstrutura: nomeFornecedor,
       dataEnvioFornecedor: agora,
       prazoFornecedor: prazo,
@@ -291,6 +292,7 @@ export async function confirmarRecebimentoFornecedor(ordemId: number, justificat
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         dataRecebimentoFornecedor: agora,
         justificativaAtrasoFornecedor: justificativaAtraso?.trim() || null,
         passoFluxoAtual: proximo.id,

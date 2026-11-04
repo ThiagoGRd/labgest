@@ -463,20 +463,23 @@ export async function adicionarFotoCaso(ordemId: number, fotoUrl: string) {
     const logado = await getClienteLogado()
     if (!logado?.cliente) return { success: false, error: 'Não autorizado' }
 
-    const ordem = await prisma.ordem.findFirst({ where: { id: ordemId, clienteId: logado.cliente.id } })
+    return await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} AND cliente_id = ${logado.cliente.id} FOR UPDATE`
+    const ordem = await tx.ordem.findFirst({ where: { id: ordemId, clienteId: logado.cliente.id } })
 
     if (!ordem) throw new Error('Ordem não encontrada')
 
     const fotosAntigas = Array.isArray(ordem.fotosCaso) ? ordem.fotosCaso : []
     const novasFotos = [...fotosAntigas, fotoUrl]
 
-    await prisma.ordem.update({
+    await tx.ordem.update({
       where: { id: ordemId },
-      data: { fotosCaso: novasFotos }
+      data: { fotosCaso: novasFotos, updatedAt: proximaRevisaoOrdem(ordem.updatedAt) }
     })
 
     revalidatePath('/')
     return { success: true }
+    })
   } catch (error) {
     console.error('Erro ao salvar foto:', error)
     return { success: false, error: 'Erro ao salvar a foto do caso' }

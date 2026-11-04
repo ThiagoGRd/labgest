@@ -103,6 +103,7 @@ const finalization = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/finalizacao-ordem.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { exports: finalization, Date, require(name) {
+  if (name === '@labgest/shared') return sharedRules
   if (name === './data-civil') return sharedRules
   if (name === './estoque-bloqueio') return stockLocks
   throw new Error(`Unexpected finalization import ${name}`)

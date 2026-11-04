@@ -22,6 +22,7 @@ function criarTransacao(contasReceber: Array<{ id: number }> = []) {
         consultaOrdem = consulta
         return {
           id: 42,
+          updatedAt: new Date('2099-01-01T00:00:00.000Z'),
           servicoNome: 'Prótese total',
           nomePaciente: 'Paciente teste',
           clienteId: 7,
@@ -59,7 +60,7 @@ test('cria a conta a receber e registra a cobrança na finalização', async () 
   assert.equal(contexto.contasCriadas.length, 1)
   assert.deepEqual(contexto.atualizacoesOrdem.at(-1), {
     where: { id: 42 },
-    data: { cobrancaGeradaEm: finalizadaEm },
+    data: { cobrancaGeradaEm: finalizadaEm, updatedAt: new Date('2099-01-01T00:00:00.002Z') },
   })
 })
 
@@ -101,6 +102,6 @@ for (const [instant, dia] of [
   assert.equal(conta.data.dataVencimento.toISOString(), `${dia}T00:00:00.000Z`)
   assert.ok(conta.data.observacoes.endsWith(dia.split('-').reverse().join('/')))
   assert.deepEqual(contexto.atualizacoesOrdem.at(-1), {
-    where: { id: 42 }, data: { cobrancaGeradaEm: evento },
+    where: { id: 42 }, data: { cobrancaGeradaEm: evento, updatedAt: new Date('2099-01-01T00:00:00.002Z') },
   })
 })
