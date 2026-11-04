@@ -3,6 +3,7 @@
 import { Sidebar } from '@/components/layout/sidebar'
 import { SidebarProvider, useSidebar } from '@/components/providers/sidebar-provider'
 import { cn } from '@/lib/utils'
+import * as Dialog from '@radix-ui/react-dialog'
 import { Menu } from 'lucide-react'
 
 interface DashboardLayoutProps {
@@ -15,7 +16,7 @@ interface DashboardLayoutProps {
 }
 
 function DashboardContent({ children, user }: DashboardLayoutProps) {
-  const { collapsed, toggleMobile } = useSidebar()
+  const { collapsed, isMobile, isOpenMobile, setIsOpenMobile } = useSidebar()
 
   const usuarioExibido = user ?? {
     nome: 'Equipe LabGest',
@@ -24,18 +25,22 @@ function DashboardContent({ children, user }: DashboardLayoutProps) {
   }
 
   return (
+    <Dialog.Root open={isOpenMobile} onOpenChange={setIsOpenMobile} modal={isMobile}>
     <div className="min-h-screen mesh-bg relative overflow-hidden">
       <Sidebar user={usuarioExibido} />
       
       {/* Mobile Top Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-16 glass-panel border-b border-white/20 dark:border-white/10 flex items-center justify-between px-4">
         <div className="flex items-center gap-3 w-full">
-          <button 
-            onClick={toggleMobile}
+          <Dialog.Trigger asChild>
+          <button
+            id="admin-menu-trigger"
+            aria-label="Abrir menu"
             className="p-2 -ml-2 rounded-xl text-foreground hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
           >
             <Menu className="h-6 w-6" />
           </button>
+          </Dialog.Trigger>
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
               <span className="text-white font-black text-xs">LG</span>
@@ -56,6 +61,7 @@ function DashboardContent({ children, user }: DashboardLayoutProps) {
         </div>
       </main>
     </div>
+    </Dialog.Root>
   )
 }
 
