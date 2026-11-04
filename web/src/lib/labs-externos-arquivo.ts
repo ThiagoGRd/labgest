@@ -38,8 +38,11 @@ export async function capacidadeArquivamento(db: ArchiveQuery) {
   if (!schema?.installed) return { installed: false, enabled: false }
   // Permission errors/partial migrations propagate: never silently show archived
   // data as active after the storage has been installed.
-  const [capability] = await db.$queryRaw<Array<{ schema_version: number; enabled: boolean; permitted: boolean }>>`
+  const markers = await db.$queryRaw<Array<{ schema_version: number; enabled: boolean; permitted: boolean; full_visibility: boolean }>>`
     SELECT schema_version, enabled,
+      (NOT pg_catalog.row_security_active('labgest_private.external_order_archive_capability'::regclass)
+       AND NOT pg_catalog.row_security_active('labgest_private.external_order_archive'::regclass)
+       AND NOT pg_catalog.row_security_active('labgest_private.external_order_archive_event'::regclass)) AS full_visibility,
       (has_table_privilege(current_user, 'labgest_private.external_order_archive', 'SELECT')
        AND has_table_privilege(current_user, 'labgest_private.external_order_archive', 'INSERT')
        AND has_table_privilege(current_user, 'labgest_private.external_order_archive', 'UPDATE')
@@ -48,7 +51,20 @@ export async function capacidadeArquivamento(db: ArchiveQuery) {
        AND has_sequence_privilege(current_user, 'labgest_private.external_order_archive_event_id_seq', 'USAGE')) AS permitted
     FROM labgest_private.external_order_archive_capability WHERE id = 1
   `
-  return { installed: true, enabled: capability?.schema_version === 1 && capability.enabled && capability.permitted }
+  const capability = markers[0]
+  if (markers.length !== 1 || !capability || capability.schema_version !== 1
+      || typeof capability.enabled !== 'boolean' || typeof capability.permitted !== 'boolean') {
+    throw new Error('Arquivamento indisponível: marcador instalado ausente ou inválido.')
+  }
+  // ACL permission alone does not establish visibility: RLS can silently return
+  // zero/partial rows. Conservatively refuse all RLS-filtered runtime roles,
+  // including roles with apparently permissive policies. Do not grant BYPASSRLS
+  // to work around this check; support for such roles needs real PostgreSQL tests
+  // and an explicitly reviewed visibility contract before activation.
+  if (capability.full_visibility !== true) {
+    throw new Error('Arquivamento indisponível: visibilidade completa não estabelecida para o papel do banco.')
+  }
+  return { installed: true, enabled: capability.enabled && capability.permitted }
 }
 
 export async function estadosArquivamento(db: ArchiveQuery) {

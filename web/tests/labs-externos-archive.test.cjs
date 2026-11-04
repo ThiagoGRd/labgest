@@ -12,7 +12,7 @@ function service() {
   vm.runInNewContext(source, { exports }, { filename })
   return exports
 }
-function fixture({ installed = true, enabled = true, permitted = true, failAudit = false } = {}) {
+function fixture({ installed = true, enabled = true, permitted = true, failAudit = false, marker = true, schemaVersion = 1, fullVisibility = true } = {}) {
   const state = { archive: null, events: [], committed: 0 }
   const order = { id: 10, situacao: 'Entregue', paciente: 'Paciente fictício', updated_at: '2026-11-04 10:00:00.123456' }
   const revision = 'a'.repeat(32)
@@ -21,9 +21,9 @@ function fixture({ installed = true, enabled = true, permitted = true, failAudit
       async $queryRaw(strings) {
         const sql = strings.join('?')
         if (sql.includes('pg_catalog.pg_class')) return [{ installed }]
-        if (sql.includes('external_order_archive_capability')) return [{ enabled, schema_version: 1, permitted }]
+        if (sql.includes('external_order_archive_capability')) return marker ? [{ enabled, schema_version: schemaVersion, permitted, full_visibility: fullVisibility }] : []
         if (sql.includes('FOR UPDATE')) return [{ snapshot: { ...order }, revisao: revision }]
-        if (sql.includes('external_order_archive')) return target.archive ? [target.archive] : []
+        if (sql.includes('external_order_archive')) return fullVisibility && target.archive ? [target.archive] : []
         throw new Error(`Unexpected SQL: ${sql}`)
       },
       async $executeRaw(strings, ...values) {
@@ -218,4 +218,29 @@ test('restoring a never-archived record is refused without events', async () => 
   const f = fixture()
   await assert.rejects(service().alterarArquivamento(f.db, { ...f.input, action: 'restore' }, actor), /não está arquivado/)
   assert.equal(f.state.events.length, 0)
+})
+
+for (const [label, options] of [
+  ['absent marker', { marker: false }],
+  ['wrong schema marker', { schemaVersion: 2 }],
+  ['ACL-permitted but RLS-invisible role', { permitted: true, fullVisibility: false }],
+]) {
+  test(`installed storage rejects ${label} instead of presenting archived rows as active`, async () => {
+    const f = fixture(options)
+    f.state.archive = { pedido_id: 10, archived: true, version: 1 }
+    await assert.rejects(service().capacidadeArquivamento(f.db), /visibilidade|marcador/)
+    await assert.rejects(service().estadosArquivamento(f.db), /visibilidade|marcador/)
+    await assert.rejects(service().alterarArquivamento(f.db, f.input, actor), /visibilidade|marcador/)
+    assert.equal(f.state.archive.archived, true)
+    assert.equal(f.state.events.length, 0)
+  })
+}
+
+test('a valid disabled marker with complete visibility still reads existing archive state', async () => {
+  const f = fixture({ enabled: false })
+  f.state.archive = { pedido_id: 10, archived: true, version: 1 }
+  const result = await service().estadosArquivamento(f.db)
+  assert.equal(result.enabled, false)
+  assert.equal(result.states.length, 1)
+  assert.equal(result.states[0].archived, true)
 })

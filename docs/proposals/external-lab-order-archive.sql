@@ -1,8 +1,11 @@
 -- PREPARED MIGRATION FOR REVIEW ONLY. NOT EXECUTED BY THIS TASK.
 -- Run only after explicit future migration authorization and local PostgreSQL tests.
 -- Uses the existing trusted server DB role; CURRENT_USER is the migration owner.
--- If the application's existing DB role differs, explicitly grant/policy that
--- verified role before activation. Do not substitute PUBLIC/anon/authenticated.
+-- Runtime currently refuses roles subject to RLS filtering, including ordinary
+-- owners under FORCE RLS. A differing RLS-filtered role needs a reviewed,
+-- PostgreSQL-tested visibility contract before activation; ACL grants alone
+-- are insufficient. Do not grant BYPASSRLS or broaden grants as a workaround.
+-- Do not substitute PUBLIC/anon/authenticated.
 BEGIN;
 
 -- Separate state preserves the four existing clinical situations, including Entregue.
