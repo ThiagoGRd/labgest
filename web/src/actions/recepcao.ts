@@ -1,6 +1,7 @@
 'use server'
 
 
+import { proximaRevisaoOrdem } from '@labgest/shared'
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
@@ -175,6 +176,7 @@ export async function enviarParaRecepcao(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'em_transito_recepcao',
         situacaoLogistica: 'aguardando_recepcao',
         finalidadeClinica: finalidadeEfetiva(ordem.finalidadeClinica, ordem.status),
@@ -199,6 +201,7 @@ export async function confirmarRecebimentoRecepcao(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'recepcao',
         situacaoLogistica: 'aguardando_distribuicao',
         movimentacaoLogisticaEm: agora,
@@ -235,6 +238,7 @@ export async function distribuirParaDentista(data: {
     await tx.ordem.update({
       where: { id: data.ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'dentista',
         situacaoLogistica: 'com_dentista',
         dentistaResponsavel: dentista,
@@ -270,6 +274,7 @@ export async function receberDoDentista(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'recepcao',
         situacaoLogistica: aguardandoResposta ? 'aguardando_resultado_dentista' : 'aguardando_envio_laboratorio',
         movimentacaoLogisticaEm: agora,
@@ -300,6 +305,7 @@ export async function enviarRetornoLaboratorio(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'em_transito_laboratorio',
         situacaoLogistica: 'em_transito_laboratorio',
         movimentacaoLogisticaEm: agora,
@@ -325,6 +331,7 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        updatedAt: proximaRevisaoOrdem(ordem.updatedAt),
         localizacaoAtual: 'laboratorio',
         situacaoLogistica: 'no_laboratorio',
         movimentacaoLogisticaEm: agora,

@@ -862,10 +862,17 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string, etap
 export async function updateChecklistEstetico(ordemId: number, checklist: Partial<ChecklistEstetico>) {
   await requireUser()
   try {
-    await prisma.ordem.update({
+    const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+      const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+      if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+      await tx.ordem.update({
       where: { id: ordemId },
-      data: { checklistEstetico: checklist }
+      data: { checklistEstetico: checklist, updatedAt: proximaRevisaoOrdem(ordem.updatedAt) }
+      })
+      return { success: true }
     })
+    if (!resultado.success) return resultado
     revalidatePath('/ordens')
     return { success: true }
   } catch (error) {
@@ -877,7 +884,9 @@ export async function updateChecklistEstetico(ordemId: number, checklist: Partia
 export async function uploadFotoProva(ordemId: number, fotoUrl: string, numeroProva: number, descricao?: string) {
   await requireUser()
   try {
-    const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
+    return await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
+    const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
     const fotos = (ordem.fotosProva as Prisma.InputJsonObject[]) || []
@@ -889,13 +898,14 @@ export async function uploadFotoProva(ordemId: number, fotoUrl: string, numeroPr
       etapa: ordem.etapaAtual,
     })
 
-    await prisma.ordem.update({
+    await tx.ordem.update({
       where: { id: ordemId },
-      data: { fotosProva: fotos }
+      data: { fotosProva: fotos, updatedAt: proximaRevisaoOrdem(ordem.updatedAt) }
     })
 
     revalidatePath('/ordens')
     return { success: true }
+    })
   } catch (error) {
     console.error('Erro ao upload foto prova:', error)
     return { success: false, error: 'Erro ao salvar foto' }

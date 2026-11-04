@@ -41,10 +41,11 @@ function load(file,mocks){const source=fs.readFileSync(path.join(root,file),'utf
     }
     return result.rows
    },
-   ordem:{findFirst:async({where})=>{const text='SELECT id, cliente_id AS "clienteId", mensagens FROM ordens WHERE id=$1'+(where.clienteId===undefined?'':' AND cliente_id=$2');sql.add(text);const result=await client.query(text,where.clienteId===undefined?[where.id]:[where.id,where.clienteId]);return result.rows[0]||null},update:async({where,data})=>{const text='UPDATE ordens SET mensagens=$1::jsonb, updated_at=clock_timestamp(), write_count=write_count+1 WHERE id=$2';sql.add(text);await client.query(text,[JSON.stringify(data.mensagens),where.id])}}
+   ordem:{findFirst:async({where})=>{const text='SELECT id, cliente_id AS "clienteId", mensagens, updated_at AS "updatedAt" FROM ordens WHERE id=$1'+(where.clienteId===undefined?'':' AND cliente_id=$2');sql.add(text);const result=await client.query(text,where.clienteId===undefined?[where.id]:[where.id,where.clienteId]);return result.rows[0]||null},update:async({where,data})=>{const text='UPDATE ordens SET mensagens=$1::jsonb, updated_at=COALESCE($3::timestamptz,clock_timestamp()), write_count=write_count+1 WHERE id=$2';sql.add(text);await client.query(text,[JSON.stringify(data.mensagens),where.id,data.updatedAt??null])}}
   }}
   const prisma={...adapter(pool),$transaction:async fn=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn(adapter(client));await client.query('COMMIT');return result}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}}};
   const base={'./index':{prisma},'@labgest/database':{prisma},'node:crypto':crypto,'next/cache':{revalidatePath(){}}};
+  base['@labgest/shared']=load('packages/shared/src/order-transition.ts',base);
   base['@labgest/database/src/mensagens']=load('packages/database/src/mensagens.ts',base);
   const lab=load('web/src/actions/mensagens.ts',{...base,'@/lib/auth-utils':{requireUser:async()=>({id:10,nome:'Synthetic lab'})}});
   const labOther=load('web/src/actions/mensagens.ts',{...base,'@/lib/auth-utils':{requireUser:async()=>({id:11,nome:'Other synthetic lab'})}});
@@ -69,6 +70,16 @@ function load(file,mocks){const source=fs.readFileSync(path.join(root,file),'utf
   await assert.rejects(()=>unauthorized.enviarMensagem(1,'denied'),/Identity rejected/);
   const snapshot=await messages();assert.equal((await portal.enviarMensagem(1,'invalid',undefined,'not-a-uuid')).success,false);assert.deepEqual(await messages(),snapshot);
   assert.deepEqual((await messages()).find(m=>m.id==='legacy'),legacy,'historical JSON metadata must be preserved');
-  console.log(JSON.stringify({result:'PASS',method:'actual source + PostgreSQL native SQL adapter; auth identity boundaries simulated, Prisma runtime not used',observedPostgresLockWaits:waits,lockEvidence,cases:['lab/dentist','lab/lab','dentist/dentist','receipt/append unseen remains unread','stable-ID concurrent retry','cross-role and cross-actor replay rejected','foreign-order read/write/receipt denied','resolver denial before mutation','invalid request UUID rejected','historical JSON metadata preserved','repeated or empty receipts preserve updatedAt and write count'],sourceHashes:hashes,executedSql:[...sql]},null,2));
+  const future=new Date('2100-01-01T00:00:00.000Z');
+  await pool.query('UPDATE ordens SET updated_at=$1 WHERE id=1',[future]);
+  const sent=await portal.enviarMensagem(1,'future-revision');assert.equal(sent.success,true);
+  const afterAppend=(await pool.query('SELECT updated_at FROM ordens WHERE id=1')).rows[0].updated_at;
+  assert.ok(afterAppend.getTime()>future.getTime(),'append must advance even a future order revision');
+  await lab.marcarMensagensLidas(1,[sent.mensagem.id]);
+  const afterReceipt=(await pool.query('SELECT updated_at FROM ordens WHERE id=1')).rows[0].updated_at;
+  assert.ok(afterReceipt.getTime()>afterAppend.getTime(),'new receipt must advance future order revision');
+  await lab.marcarMensagensLidas(1,[sent.mensagem.id]);
+  assert.equal((await pool.query('SELECT updated_at FROM ordens WHERE id=1')).rows[0].updated_at.getTime(),afterReceipt.getTime(),'duplicate receipt must preserve future revision');
+  console.log(JSON.stringify({result:'PASS',method:'actual source + PostgreSQL native SQL adapter; auth identity boundaries simulated, Prisma runtime not used',observedPostgresLockWaits:waits,lockEvidence,cases:['lab/dentist','lab/lab','dentist/dentist','receipt/append unseen remains unread','stable-ID concurrent retry','cross-role and cross-actor replay rejected','foreign-order read/write/receipt denied','resolver denial before mutation','invalid request UUID rejected','historical JSON metadata preserved','repeated or empty receipts preserve updatedAt and write count','future revisions strictly increase for append and new receipt, duplicate unchanged'],sourceHashes:hashes,executedSql:[...sql]},null,2));
  }finally{if(pool)await pool.end();if(created)await admin.query('DROP DATABASE labgest_chat_test');await admin.end()}
 })().catch(e=>{console.error(e);process.exitCode=1});

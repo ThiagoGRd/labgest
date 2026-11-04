@@ -28,7 +28,7 @@ function load(relative) {
     exports, Date, console,
     require(name) {
       if (name === '@labgest/database') return { Prisma, prisma }
-      if (name === '@labgest/shared') return load('../../packages/shared/src/date-civil.ts')
+      if (name === '@labgest/shared') return { ...load('../../packages/shared/src/date-civil.ts'), ...load('../../packages/shared/src/order-transition.ts') }
       if (name === '@/lib/auth-utils') return { requireUser: async () => actor }
       if (name === 'next/cache') return { revalidatePath() {} }
       if (name.startsWith('@/lib/')) return load(`${name.slice(2)}.ts`)

@@ -1,4 +1,5 @@
 import type { Prisma } from '@labgest/database'
+import { proximaRevisaoOrdem } from '@labgest/shared'
 import { dataCivilDoLaboratorio } from './data-civil'
 import { bloquearItensEstoque } from './estoque-bloqueio'
 
@@ -22,12 +23,15 @@ export async function garantirEfeitosFinalizacao(
   })
   if (!ordem) throw new Error('Ordem não encontrada durante a finalização')
 
+  let revisaoAtual = ordem.updatedAt
+  const revisaoBaixa = proximaRevisaoOrdem(revisaoAtual)
   const baixaReservada = await tx.ordem.updateMany({
     where: { id: ordemId, estoqueBaixadoEm: null },
-    data: { estoqueBaixadoEm: finalizadaEm },
+    data: { estoqueBaixadoEm: finalizadaEm, updatedAt: revisaoBaixa },
   })
 
   if (baixaReservada.count === 1) {
+    revisaoAtual = revisaoBaixa
     const materiais = Array.isArray(ordem.servico?.materiais)
       ? ordem.servico.materiais as Array<{ id?: number; quantidade?: number }>
       : []
@@ -81,6 +85,6 @@ export async function garantirEfeitosFinalizacao(
 
   await tx.ordem.update({
     where: { id: ordemId },
-    data: { cobrancaGeradaEm: finalizadaEm },
+    data: { cobrancaGeradaEm: finalizadaEm, updatedAt: proximaRevisaoOrdem(revisaoAtual) },
   })
 }

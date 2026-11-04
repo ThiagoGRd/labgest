@@ -53,7 +53,7 @@ const prisma = {
             const order = await table(client, 'ordens').findUnique({ where })
             if (!order) return null
             const invoices = (await client.query("SELECT payload FROM invoices WHERE payload->>'ordemId'=$1", [String(where.id)])).rows.map(row => row.payload)
-            return { ...order, contasReceber: invoices }
+            return { ...order, updatedAt: order.updatedAt ? new Date(order.updatedAt) : undefined, contasReceber: invoices }
           },
           async updateMany({ where, data }) {
             return { count: (await client.query("UPDATE ordens SET payload=payload || $2::jsonb WHERE id=$1 AND payload->>'estoqueBaixadoEm' IS NULL", [where.id, JSON.stringify(data)])).rowCount }
@@ -77,7 +77,7 @@ function load(file) {
   const exports = {}
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, Date, Error, console: { error() {} }, require(name) {
     if (name === '@labgest/database') return { prisma }
-    if (name === '@labgest/shared') return load(path.join(__dirname, '../../packages/shared/src/date-civil.ts'))
+    if (name === '@labgest/shared') return { ...load(path.join(__dirname, '../../packages/shared/src/date-civil.ts')), ...load(path.join(__dirname, '../../packages/shared/src/order-transition.ts')) }
     if (name === 'next/cache') return { revalidatePath() {} }
     if (name === '@/lib/auth-utils') return { requireUser: async () => ({ id: 1, nome: 'Synthetic tester' }) }
     if (name.startsWith('@/')) return load(path.join(sourceRoot, `${name.slice(2)}.ts`))
