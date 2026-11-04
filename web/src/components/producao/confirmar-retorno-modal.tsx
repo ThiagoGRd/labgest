@@ -137,12 +137,12 @@ export function ConfirmarRetornoModal({
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row">
           <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">Cancelar</Button>
           <Button
             onClick={handleConfirmar}
             disabled={loading || retornoInvalido}
-            className={`flex-1 text-white ${isAprovado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            className={`h-auto min-h-10 flex-1 whitespace-normal py-2 text-white ${isAprovado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           >
             <PackageCheck className="h-4 w-4 mr-2" />
             {loading ? 'Registrando...' : isAprovado ? 'Confirmar retorno e iniciar acabamento' : 'Confirmar retorno e iniciar ajustes'}

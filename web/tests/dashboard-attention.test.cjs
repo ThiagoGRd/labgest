@@ -50,3 +50,9 @@ test('shared query predicates preserve paused, null and date boundary semantics'
   assert.equal(h.entregasDoDia(hoje, amanha).dataEntrega.lt, amanha)
   assert.equal(h.entregasDoDia(hoje, amanha).dataEntrega.gte, hoje)
 })
+test('priorities names the unchanged unfiltered report explicitly', () => {
+  const src = read('app/(dashboard)/prioridades/prioridades-view.tsx')
+  assert.ok(src.includes('Relatório geral'))
+  assert.ok(src.includes('respostasDentista: props.respostasDentista'))
+  assert.ok(src.includes('hoje: props.hoje'))
+})

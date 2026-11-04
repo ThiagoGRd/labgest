@@ -409,7 +409,7 @@ export function PrioridadesView(props: PrioridadesViewProps) {
             </div>
             <Button type="button" variant="outline" onClick={() => gerarRelatorio()}>
               <FileText className="h-4 w-4" />
-              Gerar relatório
+              Relatório geral
             </Button>
           </div>
         </div>
