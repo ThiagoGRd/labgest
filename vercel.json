@@ -1,0 +1,8 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "codex/validate-labgest-5-20261104": false
+    }
+  },
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"codex/validate-labgest-5-20261104\" ]; then exit 0; fi; exit 1"
+}

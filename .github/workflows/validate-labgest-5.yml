@@ -1,0 +1,144 @@
+name: LabGest 5 isolated validation
+on:
+  push:
+    branches: [codex/validate-labgest-5-20261104]
+permissions:
+  contents: read
+concurrency:
+  group: labgest5-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
+        env:
+          POSTGRES_USER: labgest_archive_test
+          POSTGRES_PASSWORD: synthetic-only
+          POSTGRES_DB: labgest_archive_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U labgest_archive_test -d labgest_archive_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      DATABASE_URL: postgresql://synthetic:synthetic@127.0.0.1:1/labgest_unused_test
+      DIRECT_URL: postgresql://synthetic:synthetic@127.0.0.1:1/labgest_unused_test
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:1
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-placeholder-not-a-secret
+      NEXT_PUBLIC_PORTAL_URL: http://127.0.0.1:3001
+    steps:
+      - name: Checkout sanitized validation tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !**/node_modules/
+            !**/.env
+            !**/.env.*
+            !**/*.pem
+            !**/*.key
+            !/server.log
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Validate tree, branch guards and synthetic environment
+        run: |
+          node scripts/check-release-secrets.mjs
+          node scripts/validation/assert-isolation.cjs
+          node --test scripts/tests/check-release-secrets.test.mjs
+      - name: Install locked application dependencies
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
+      - name: Install isolated test drivers and Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/labgest-test-drivers" --ignore-scripts --no-audit --no-fund pg@8.16.3 playwright@1.57.0
+          "$RUNNER_TEMP/labgest-test-drivers/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/labgest-test-drivers/node_modules:$GITHUB_WORKSPACE/node_modules" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_MODULE=$RUNNER_TEMP/labgest-test-drivers/node_modules/playwright" >> "$GITHUB_ENV"
+          node -e 'console.log("PLAYWRIGHT_CHROMIUM_EXECUTABLE="+require(process.env.RUNNER_TEMP+"/labgest-test-drivers/node_modules/playwright").chromium.executablePath())' >> "$GITHUB_ENV"
+      - name: Generate pinned Prisma 6.19.2 client
+        run: |
+          node -e 'for(const name of ["prisma","@prisma/client"]){if(require(name+"/package.json").version!=="6.19.2")process.exit(1)}'
+          npm run db:generate
+      - name: Explicit web typecheck
+        id: webtypes
+        continue-on-error: true
+        run: ./node_modules/.bin/tsc --noEmit --incremental false -p web/tsconfig.json
+      - name: Explicit portal typecheck
+        id: portaltypes
+        continue-on-error: true
+        run: ./node_modules/.bin/tsc --noEmit --incremental false -p portal/tsconfig.json
+      - name: Library and shared regressions
+        id: unit
+        continue-on-error: true
+        run: ./node_modules/.bin/tsx --test web/src/lib/*.test.ts packages/shared/test/*.test.ts
+      - name: Source and browser Node regressions
+        id: node
+        continue-on-error: true
+        run: node --test web/tests/*.test.cjs web/tests/*.test.mjs
+      - name: Civil date and competence regressions in both timezones
+        id: dates
+        continue-on-error: true
+        run: |
+          for zone in UTC America/Sao_Paulo; do
+            TZ="$zone" node --test web/tests/financeiro-periodo.test.mjs
+            TZ="$zone" ./node_modules/.bin/tsx --test web/src/lib/periodo-receber.test.ts
+          done
+      - name: Source actions with disposable PostgreSQL
+        id: postgres
+        continue-on-error: true
+        env:
+          LABGEST_TEST_DATABASE_URL: postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_archive_test
+        run: |
+          node scripts/validation/create-disposable-databases.cjs
+          node web/tests/financeiro-locking-postgres.integration.cjs 'postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_finance_test'
+          node web/tests/estoque-locking-postgres.integration.cjs 'postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_stock_test'
+          node web/tests/archive-runtime-diagnostic-postgres.integration.cjs
+          node web/tests/labs-externos-archive-postgres.integration.cjs
+      - name: Genuine generated Prisma runtime on exact disposable schema
+        id: prisma
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_finance_test?schema=labgest_prisma_test
+          DIRECT_URL: postgresql://labgest_archive_test:synthetic-only@127.0.0.1:5432/labgest_finance_test?schema=labgest_prisma_test
+        run: |
+          node scripts/validation/assert-isolation.cjs --prisma
+          ./node_modules/.bin/prisma db push --schema=packages/database/prisma/schema.prisma --skip-generate
+          node web/tests/prisma-finance.integration.cjs "$DATABASE_URL"
+      - name: Chromium component regressions with mocked actions/network
+        id: browser
+        continue-on-error: true
+        run: |
+          node web/tests/admin-browser.integration.cjs
+          node portal/tests/upload-regressions.cjs
+          node web/tests/labs-externos-archive-browser.integration.cjs
+      - name: Lint web and portal
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+      - name: Full web build, no deployment
+        id: webbuild
+        continue-on-error: true
+        run: npm run build:web
+      - name: Full portal build, no deployment
+        id: portalbuild
+        continue-on-error: true
+        run: npm run build:portal
+      - name: Require every validation check to pass
+        if: always()
+        env:
+          RESULTS: ${{ toJSON(steps) }}
+        run: |
+          node - <<'JS'
+          const steps=JSON.parse(process.env.RESULTS);
+          const required=['webtypes','portaltypes','unit','node','dates','postgres','prisma','browser','lint','webbuild','portalbuild'];
+          for(const id of required)console.log(`${id}: ${steps[id]?.outcome || 'not run'}`);
+          if(required.some(id=>steps[id]?.outcome!=='success'))process.exit(1);
+          JS
