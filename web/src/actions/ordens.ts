@@ -368,6 +368,10 @@ export async function getOrdemById(id: number) {
       include: {
         cliente: { select: { id: true, nome: true } },
         servico: { select: { id: true, nome: true } },
+        contasReceber: {
+          select: { id: true, valor: true, valorRecebido: true, status: true, dataVencimento: true, dataRecebimento: true, canceladoEm: true },
+          orderBy: { id: 'desc' },
+        },
       }
     })
 
@@ -390,11 +394,31 @@ export async function getOrdemById(id: number) {
       dataEntrega: ordem.dataEntrega?.toISOString() || new Date().toISOString(),
       etapaAtual: normalizarEtapa(ordem.etapaAtual || 'recebimento'),
       subetapaAtual: ordem.subetapaAtual || '',
-      valor: Number(ordem.valorFinal || ordem.valor),
+      valor: Number(ordem.valorFinal ?? ordem.valor),
       corDentes: ordem.corDentes || '',
       material: ordem.material || '',
       observacoes: ordem.observacoes || '',
       arquivos: (ordem.arquivoStl as string[]) || [],
+      elementos: ordem.elementos || '',
+      // Original facts for the read-only detail; no fallback dates/stages or inferred payments.
+      ficha: {
+        status: ordem.status,
+        etapaAtual: ordem.etapaAtual,
+        passoFluxoAtual: ordem.passoFluxoAtual,
+        dataEntrada: ordem.dataPedido?.toISOString() ?? null,
+        dataEntrega: ordem.dataEntrega?.toISOString() ?? null,
+        dataFinalizacao: ordem.dataFinalizacao?.toISOString() ?? null,
+        dataEntregaReal: ordem.dataEntregaReal?.toISOString() ?? null,
+        prazoEtapaAtual: ordem.prazoEtapaAtual?.toISOString() ?? null,
+        prazoFornecedor: ordem.prazoFornecedor?.toISOString() ?? null,
+        movimentacaoLogisticaEm: ordem.movimentacaoLogisticaEm?.toISOString() ?? null,
+        cobrancas: ordem.contasReceber.map((conta) => ({
+          id: conta.id, valor: Number(conta.valor), valorRecebido: Number(conta.valorRecebido), status: conta.status,
+          dataVencimento: conta.dataVencimento?.toISOString() ?? null,
+          dataRecebimento: conta.dataRecebimento?.toISOString() ?? null,
+          canceladoEm: conta.canceladoEm?.toISOString() ?? null,
+        })),
+      },
       // Workflow fields
       tipoWorkflow: (ordem.tipoWorkflow as TipoWorkflow) || null,
       tentativaAtual: ordem.tentativaAtual || 0,
