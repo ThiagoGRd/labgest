@@ -1,5 +1,7 @@
 'use client'
 
+import { movimentarRecepcaoExterna } from '@/actions/recepcao-externa'
+import { chaveRecepcao, type MovimentoExterno } from '@/lib/recepcao-externa'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -36,6 +38,7 @@ import {
 } from '@/actions/recepcao'
 
 interface RecepcaoViewProps {
+  externosDisponiveis: boolean
   itens: OrdemRecepcao[]
   dentistas: string[]
   emitidoEm: string
@@ -45,6 +48,7 @@ interface RecepcaoViewProps {
 type Filtro = 'todos' | 'receber' | 'recepcao' | 'dentista' | 'retorno' | 'laboratorio'
 
 const SITUACOES: Record<SituacaoLogistica, { label: string; descricao: string; tone: string }> = {
+  conferir_recebimento: { label: 'Conferir recebimento', descricao: 'A chegada física ainda não foi confirmada', tone: 'bg-amber-100 text-amber-800' },
   no_laboratorio: { label: 'No laboratório', descricao: 'Pronto para iniciar a saída', tone: 'bg-slate-100 text-slate-700' },
   aguardando_recepcao: { label: 'Aguardando recepção', descricao: 'Enviado pelo laboratório', tone: 'bg-blue-100 text-blue-700' },
   aguardando_distribuicao: { label: 'Na recepção', descricao: 'Aguardando distribuição', tone: 'bg-amber-100 text-amber-800' },
@@ -61,7 +65,7 @@ const FINALIDADES: Record<FinalidadeClinica, string> = {
 }
 
 function pertenceFiltro(item: OrdemRecepcao, filtro: Filtro) {
-  if (filtro === 'receber') return item.situacao === 'aguardando_recepcao'
+  if (filtro === 'receber') return ['aguardando_recepcao', 'conferir_recebimento'].includes(item.situacao)
   if (filtro === 'recepcao') return ['aguardando_distribuicao', 'aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(item.situacao)
   if (filtro === 'dentista') return item.situacao === 'com_dentista'
   if (filtro === 'retorno') return item.situacao === 'em_transito_laboratorio'
@@ -87,7 +91,7 @@ function horasParado(item: OrdemRecepcao, emitidoEm: string) {
   return Math.max(0, (new Date(emitidoEm).getTime() - new Date(item.movimentadoEm).getTime()) / 3_600_000)
 }
 
-export function RecepcaoView({ itens, dentistas, emitidoEm, usuario }: RecepcaoViewProps) {
+export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDisponiveis }: RecepcaoViewProps) {
   const router = useRouter()
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [busca, setBusca] = useState('')
@@ -113,6 +117,7 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario }: RecepcaoV
         const resultado = await acao()
         if (!resultado.success) {
           toast.error(resultado.error || 'Não foi possível registrar a movimentação.')
+          router.refresh()
           return
         }
         toast.success(sucesso)
@@ -127,8 +132,9 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario }: RecepcaoV
     <DashboardLayout user={{ nome: usuario.nome, email: usuario.email, tipo: usuario.tipo }}>
       <Header title="Recepção e distribuição" subtitle="Custódia dos trabalhos entre laboratório, recepção e dentistas" />
       <main className="mx-auto max-w-[1500px] space-y-5 p-1 sm:p-6">
+        {!externosDisponiveis ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Fluxo dos laboratórios externos indisponível ou ainda não ativado. Esta lista mostra somente os trabalhos internos.</p> : null}
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Resumo icon={PackageCheck} label="Aguardando recebimento" valor={itens.filter((item) => item.situacao === 'aguardando_recepcao').length} tone="blue" />
+          <Resumo icon={PackageCheck} label="Receber ou conferir" valor={itens.filter((item) => pertenceFiltro(item, 'receber')).length} tone="blue" />
           <Resumo icon={MapPin} label="Na recepção" valor={itens.filter((item) => pertenceFiltro(item, 'recepcao')).length} tone="amber" />
           <Resumo icon={Stethoscope} label="Com dentistas" valor={itens.filter((item) => item.situacao === 'com_dentista').length} tone="violet" />
           <Resumo icon={Clock3} label="Parados há mais de 24h" valor={parados} tone={parados ? 'red' : 'slate'} />
@@ -157,7 +163,7 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario }: RecepcaoV
           <section className="grid items-start gap-3 lg:grid-cols-2">
             {filtrados.map((item) => (
               <TrabalhoCard
-                key={item.id}
+                key={chaveRecepcao(item.origem, item.id)}
                 item={item}
                 emitidoEm={emitidoEm}
                 recepcaoSomente={recepcaoSomente}
@@ -177,8 +183,10 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario }: RecepcaoV
           disabled={isPending}
           onClose={() => setDistribuindo(null)}
           onConfirm={(dados) => executar(async () => {
-            const resultado = await distribuirParaDentista({ ordemId: distribuindo.id, ...dados })
-            if (resultado.success) setDistribuindo(null)
+            const resultado = distribuindo.origem === 'externo'
+              ? await executarExterno(distribuindo, { acao: 'distribuir', dentista: dados.dentista, finalidade: dados.finalidade, motivo: dados.observacao })
+              : await distribuirParaDentista({ ordemId: distribuindo.id, ...dados })
+            if (resultado.success || ('code' in resultado && resultado.code === 'CONFLICT')) setDistribuindo(null)
             return resultado
           }, 'Trabalho entregue ao dentista.')}
         />
@@ -205,12 +213,12 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
   return (
     <article className={`rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900 ${horas >= 24 && ['aguardando_recepcao', 'aguardando_distribuicao'].includes(item.situacao) ? 'border-red-300 dark:border-red-800' : ''}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0"><p className="text-xs font-bold text-indigo-600">OS #{item.id}</p><h2 className="truncate text-lg font-bold">{item.paciente}</h2><p className="truncate text-sm text-slate-500">{item.servico} · {item.clinica}</p></div>
+        <div className="min-w-0"><p className="text-xs font-bold text-indigo-600">{item.origem === 'externo' ? 'Externo' : 'Interno · OS'} #{item.id}</p><h2 className="truncate text-lg font-bold">{item.paciente}</h2><p className="truncate text-sm text-slate-500">{item.servico} · {item.clinica}</p></div>
         <Badge className={config.tone}>{config.label}</Badge>
       </div>
       <div className="mt-4 grid gap-2 rounded-xl bg-slate-50 p-3 text-xs dark:bg-white/5 sm:grid-cols-2">
         <p><span className="font-semibold text-slate-500">Etapa:</span> {item.etapa}</p>
-        <p><span className="font-semibold text-slate-500">Finalidade:</span> {FINALIDADES[item.finalidade]}</p>
+        <p><span className="font-semibold text-slate-500">Finalidade:</span> {item.finalidade ? FINALIDADES[item.finalidade] : 'A definir na distribuição'}</p>
         <p><span className="font-semibold text-slate-500">Dentista:</span> {item.dentista || 'Ainda não definido'}</p>
         <p><span className="font-semibold text-slate-500">Agendamento:</span> {formatarData(item.agendamento, true)}</p>
         <p><span className="font-semibold text-slate-500">Entrega prevista:</span> {formatarData(item.entregaPrevista)}</p>
@@ -218,6 +226,7 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
       </div>
       {item.situacao === 'aguardando_resultado_dentista' ? <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-700">O trabalho voltou fisicamente, mas o dentista ainda precisa registrar no portal se foi aprovado ou se precisa de ajuste.</p> : null}
       {item.decisaoDentista ? <p className={`mt-3 rounded-lg p-2 text-xs font-semibold ${item.decisaoDentista === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{item.decisaoDentista === 'aprovado' ? 'Prova aprovada pelo dentista' : `Ajuste solicitado: ${item.observacaoDentista || 'sem observação'}`}</p> : null}
+      {item.origem === 'externo' ? <AcoesExternas item={item} disabled={disabled} onDistribuir={onDistribuir} onExecutar={onExecutar} /> :
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         {item.situacao === 'no_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => enviarParaRecepcao(item.id), 'Envio para a recepção registrado.')} disabled={disabled}><Send className="h-4 w-4" />Enviar à recepção</Button> : null}
         {item.situacao === 'aguardando_recepcao' ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
@@ -226,7 +235,7 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
         {item.situacao === 'aguardando_resultado_dentista' ? <Button size="sm" variant="outline" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><RefreshCw className="h-4 w-4" />Verificar resposta</Button> : null}
         {item.situacao === 'aguardando_envio_laboratorio' ? <Button size="sm" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><Send className="h-4 w-4" />Enviar ao laboratório</Button> : null}
         {item.situacao === 'em_transito_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoLaboratorio(item.id), 'Recebimento no laboratório confirmado.')} disabled={disabled}><Building2 className="h-4 w-4" />Confirmar no laboratório</Button> : null}
-      </div>
+      </div>}
       <p className="mt-2 text-right text-[11px] text-slate-400">{config.descricao}</p>
     </article>
   )
@@ -241,18 +250,40 @@ function DistribuirModal({ item, dentistas, disabled, onClose, onConfirm }: {
 }) {
   const corrigindo = item.situacao === 'com_dentista'
   const [dentista, setDentista] = useState(item.dentista)
-  const [finalidade, setFinalidade] = useState<FinalidadeClinica>(item.finalidade)
+  const [finalidade, setFinalidade] = useState<FinalidadeClinica>(item.finalidade || 'prova')
   const [agendamento, setAgendamento] = useState(paraDataHoraLocal(item.agendamento))
   const [observacao, setObservacao] = useState('')
   return (
-    <Modal isOpen onClose={onClose} title={corrigindo ? 'Corrigir distribuição' : 'Entregar ao dentista'} description={`OS #${item.id} · ${item.paciente}`} size="md" mobileFullscreen dismissible={!disabled}>
+    <Modal isOpen onClose={onClose} title={corrigindo ? 'Corrigir distribuição' : 'Entregar ao dentista'} description={`${item.origem === 'externo' ? 'Externo' : 'OS'} #${item.id} · ${item.paciente}`} size="md" mobileFullscreen dismissible={!disabled}>
       <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); onConfirm({ dentista, finalidade, agendamento: agendamento ? new Date(agendamento).toISOString() : undefined, observacao: observacao || undefined }) }}>
         <div><label htmlFor="dentista-recepcao" className="mb-1 block text-sm font-semibold">Dentista responsável *</label><Input id="dentista-recepcao" list="dentistas-recepcao" value={dentista} onChange={(event) => setDentista(event.target.value)} placeholder="Nome do dentista" required maxLength={255} /><datalist id="dentistas-recepcao">{dentistas.map((nome) => <option key={nome} value={nome} />)}</datalist></div>
         <div><label htmlFor="finalidade-recepcao" className="mb-1 block text-sm font-semibold">Finalidade *</label><select id="finalidade-recepcao" value={finalidade} onChange={(event) => setFinalidade(event.target.value as FinalidadeClinica)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="prova">Prova clínica</option><option value="instalacao">Instalação</option><option value="entrega">Entrega ao paciente</option></select></div>
-        <div><label htmlFor="agendamento-recepcao" className="mb-1 block text-sm font-semibold">Agendamento</label><Input id="agendamento-recepcao" type="datetime-local" value={agendamento} onChange={(event) => setAgendamento(event.target.value)} /><p className="mt-1 text-xs text-slate-500">Pode ser preenchido manualmente enquanto a agenda do Clinicorp não estiver sincronizada.</p></div>
+        {item.origem === 'interno' ? <div><label htmlFor="agendamento-recepcao" className="mb-1 block text-sm font-semibold">Agendamento</label><Input id="agendamento-recepcao" type="datetime-local" value={agendamento} onChange={(event) => setAgendamento(event.target.value)} /><p className="mt-1 text-xs text-slate-500">Pode ser preenchido manualmente enquanto a agenda do Clinicorp não estiver sincronizada.</p></div> : null}
         {corrigindo ? <div><label htmlFor="motivo-correcao" className="mb-1 block text-sm font-semibold">Motivo da correção *</label><textarea id="motivo-correcao" value={observacao} onChange={(event) => setObservacao(event.target.value)} required rows={3} maxLength={500} className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Explique por que a distribuição está sendo alterada." /></div> : null}
         <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={onClose} disabled={disabled}>Cancelar</Button><Button type="submit" disabled={disabled || !dentista.trim()}>{disabled ? 'Salvando...' : corrigindo ? 'Salvar correção' : <><ChevronRight className="h-4 w-4" />Confirmar entrega</>}</Button></div>
       </form>
     </Modal>
   )
+}
+
+async function executarExterno(item: OrdemRecepcao, movimento: Omit<MovimentoExterno, 'expectedVersion'>) {
+  if (item.origem !== 'externo' || !item.externo) return { success: false, error: 'Referência externa inválida. Atualize a página.' }
+  return movimentarRecepcaoExterna({ ...movimento, origem: 'externo', id: item.id,
+    expectedRevision: item.externo.revisao, expectedVersion: item.externo.version })
+}
+function AcoesExternas({ item, disabled, onDistribuir, onExecutar }: {
+  item: OrdemRecepcao; disabled: boolean; onDistribuir: () => void
+  onExecutar: (acao: () => Promise<{ success: boolean; error?: string }>, sucesso: string) => void
+}) {
+  return <div className="mt-4 space-y-3">
+    <p className="text-xs text-slate-500">Controle físico do trabalho externo. Não registra aprovação clínica nem altera o financeiro.</p>
+    <div className="flex flex-wrap justify-end gap-2">
+      {['conferir_recebimento', 'em_transito_laboratorio'].includes(item.situacao) ? <Button disabled={disabled} onClick={() => {
+        if (window.confirm('Você confirma que recebeu fisicamente este trabalho do laboratório externo?')) onExecutar(() => executarExterno(item, { acao: 'receber' }), 'Recebimento externo confirmado.')
+      }}>Confirmar recebimento físico</Button> : null}
+      {['aguardando_distribuicao', 'com_dentista'].includes(item.situacao) ? <Button disabled={disabled} onClick={onDistribuir}>{item.situacao === 'com_dentista' ? 'Corrigir distribuição' : 'Entregar ao dentista'}</Button> : null}
+      {item.situacao === 'com_dentista' ? <Button disabled={disabled} onClick={() => onExecutar(() => executarExterno(item, { acao: 'receber_retorno' }), 'Retorno físico do dentista registrado.')}>Receber do dentista</Button> : null}
+      {item.situacao === 'aguardando_envio_laboratorio' ? <Button disabled={disabled} onClick={() => onExecutar(() => executarExterno(item, { acao: 'enviar_retorno' }), 'Envio físico ao laboratório externo registrado.')}>Enviar ao laboratório externo</Button> : null}
+    </div>
+  </div>
 }

@@ -3,9 +3,11 @@
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { requireRecepcao } from '@/lib/auth-utils'
 
 export type SituacaoLogistica =
+  | 'conferir_recebimento'
   | 'no_laboratorio'
   | 'aguardando_recepcao'
   | 'aguardando_distribuicao'
@@ -17,6 +19,8 @@ export type SituacaoLogistica =
 export type FinalidadeClinica = 'prova' | 'instalacao' | 'entrega'
 
 export interface OrdemRecepcao {
+  origem: 'interno' | 'externo'
+  externo?: { revisao: string; version: number }
   id: number
   paciente: string
   clinica: string
@@ -26,7 +30,7 @@ export interface OrdemRecepcao {
   localizacao: string
   situacao: SituacaoLogistica
   dentista: string
-  finalidade: FinalidadeClinica
+  finalidade: FinalidadeClinica | null
   agendamento: string | null
   movimentadoEm: string | null
   entregaPrevista: string
@@ -110,6 +114,7 @@ export async function getPainelRecepcao() {
   const itens = ordens.map<OrdemRecepcao>((ordem) => {
     const ciclo = ordem.ciclos[0]
     return {
+      origem: 'interno',
       id: ordem.id,
       paciente: ordem.nomePaciente,
       clinica: ordem.clienteNome,
@@ -128,11 +133,30 @@ export async function getPainelRecepcao() {
     }
   })
 
+  let externosDisponiveis = false
+  try {
+    const externos = await consultarCustodiaExterna(prisma)
+    externosDisponiveis = externos.disponivel
+    itens.push(...externos.itens.map<OrdemRecepcao>((p) => ({
+      origem: 'externo', id: Number(p.id), externo: { revisao: p.revisao, version: p.version ?? 0 },
+      paciente: p.paciente, clinica: p.lab_nome, servico: p.servico || 'Serviço não informado',
+      etapa: p.situacao_pedido, status: p.situacao_pedido,
+      localizacao: p.situacao || 'Não confirmada', situacao: p.situacao || 'conferir_recebimento',
+      dentista: p.dentista || '', finalidade: p.finalidade || null,
+      agendamento: null, movimentadoEm: p.movimentado_em?.toISOString() || null,
+      entregaPrevista: p.prazo?.toISOString() || '', decisaoDentista: null, observacaoDentista: null,
+    })))
+  } catch {
+    // Never treat a failed external read as an empty, complete queue.
+    externosDisponiveis = false
+  }
+
   const dentistas = [...new Set(clientes.flatMap((cliente) => [cliente.dentista, cliente.nome]).filter((nome): nome is string => Boolean(nome?.trim())))]
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
 
   return {
     itens,
+    externosDisponiveis,
     dentistas,
     emitidoEm: new Date().toISOString(),
     usuario: { nome: usuario.nome, email: usuario.email, tipo: usuario.tipo || 'operador' },
