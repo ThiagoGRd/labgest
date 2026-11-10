@@ -2,6 +2,7 @@
 
 import { movimentarRecepcaoExterna } from '@/actions/recepcao-externa'
 import { chaveRecepcao, type MovimentoExterno } from '@/lib/recepcao-externa'
+import { filtrarOrigem, type FiltroOrigem } from '@/lib/recepcao-filtros'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -93,22 +94,29 @@ function horasParado(item: OrdemRecepcao, emitidoEm: string) {
 
 export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDisponiveis }: RecepcaoViewProps) {
   const router = useRouter()
+  const [origem, setOrigem] = useState<FiltroOrigem>('todos')
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [busca, setBusca] = useState('')
   const [distribuindo, setDistribuindo] = useState<OrdemRecepcao | null>(null)
   const [isPending, startTransition] = useTransition()
   const recepcaoSomente = usuario.tipo === 'recepcao'
   const termo = busca.trim().toLocaleLowerCase('pt-BR')
-  const filtrados = itens.filter((item) => pertenceFiltro(item, filtro) && (!termo || [item.paciente, item.clinica, item.servico, item.dentista, String(item.id)].some((valor) => valor.toLocaleLowerCase('pt-BR').includes(termo))))
-  const parados = itens.filter((item) => ['aguardando_recepcao', 'aguardando_distribuicao'].includes(item.situacao) && horasParado(item, emitidoEm) >= 24).length
+  const itensOrigem = filtrarOrigem(itens, origem)
+  const origens: Array<{ id: FiltroOrigem; label: string; quantidade: number }> = [
+    { id: 'todos', label: 'Todos', quantidade: itens.length },
+    { id: 'interno', label: 'Lab interno', quantidade: filtrarOrigem(itens, 'interno').length },
+    { id: 'externo', label: 'Labs externos', quantidade: filtrarOrigem(itens, 'externo').length },
+  ]
+  const filtrados = itensOrigem.filter((item) => pertenceFiltro(item, filtro) && (!termo || [item.paciente, item.clinica, item.servico, item.dentista, String(item.id)].some((valor) => valor.toLocaleLowerCase('pt-BR').includes(termo))))
+  const parados = itensOrigem.filter((item) => ['aguardando_recepcao', 'aguardando_distribuicao'].includes(item.situacao) && horasParado(item, emitidoEm) >= 24).length
 
   const filtros: Array<{ id: Filtro; label: string; quantidade: number }> = [
-    { id: 'todos', label: 'Todos', quantidade: itens.length },
-    { id: 'receber', label: 'Receber', quantidade: itens.filter((item) => pertenceFiltro(item, 'receber')).length },
-    { id: 'recepcao', label: 'Na recepção', quantidade: itens.filter((item) => pertenceFiltro(item, 'recepcao')).length },
-    { id: 'dentista', label: 'Com dentista', quantidade: itens.filter((item) => pertenceFiltro(item, 'dentista')).length },
-    { id: 'retorno', label: 'Retorno ao lab', quantidade: itens.filter((item) => pertenceFiltro(item, 'retorno')).length },
-    { id: 'laboratorio', label: 'No laboratório', quantidade: itens.filter((item) => pertenceFiltro(item, 'laboratorio')).length },
+    { id: 'todos', label: 'Todos', quantidade: itensOrigem.length },
+    { id: 'receber', label: 'Receber', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'receber')).length },
+    { id: 'recepcao', label: 'Na recepção', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'recepcao')).length },
+    { id: 'dentista', label: 'Com dentista', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'dentista')).length },
+    { id: 'retorno', label: 'Retorno ao lab', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'retorno')).length },
+    { id: 'laboratorio', label: 'No laboratório', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'laboratorio')).length },
   ]
 
   function executar(acao: () => Promise<{ success: boolean; error?: string }>, sucesso: string) {
@@ -133,10 +141,21 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
       <Header title="Recepção e distribuição" subtitle="Custódia dos trabalhos entre laboratório, recepção e dentistas" />
       <main className="mx-auto max-w-[1500px] space-y-5 p-1 sm:p-6">
         {!externosDisponiveis ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Fluxo dos laboratórios externos indisponível ou ainda não ativado. Esta lista mostra somente os trabalhos internos.</p> : null}
+        <section aria-label="Origem dos trabalhos" className="rounded-2xl border bg-white p-3 shadow-sm dark:border-white/10 dark:bg-zinc-900 sm:p-4">
+          <p className="mb-2 text-xs font-semibold text-slate-500">Origem dos trabalhos</p>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Filtrar por origem">
+            {origens.map((item) => (
+              <button key={item.id} type="button" aria-pressed={origem === item.id} onClick={() => setOrigem(item.id)} className={`min-w-0 rounded-xl px-2 py-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:px-4 ${origem === item.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300'}`}>
+                <span className="block">{item.label}</span>
+                <span className="mt-1 block text-lg opacity-80">{item.id === 'externo' && !externosDisponiveis ? 'Indisponível' : item.quantidade}</span>
+              </button>
+            ))}
+          </div>
+        </section>
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Resumo icon={PackageCheck} label="Receber ou conferir" valor={itens.filter((item) => pertenceFiltro(item, 'receber')).length} tone="blue" />
-          <Resumo icon={MapPin} label="Na recepção" valor={itens.filter((item) => pertenceFiltro(item, 'recepcao')).length} tone="amber" />
-          <Resumo icon={Stethoscope} label="Com dentistas" valor={itens.filter((item) => item.situacao === 'com_dentista').length} tone="violet" />
+          <Resumo icon={PackageCheck} label="Receber ou conferir" valor={itensOrigem.filter((item) => pertenceFiltro(item, 'receber')).length} tone="blue" />
+          <Resumo icon={MapPin} label="Na recepção" valor={itensOrigem.filter((item) => pertenceFiltro(item, 'recepcao')).length} tone="amber" />
+          <Resumo icon={Stethoscope} label="Com dentistas" valor={itensOrigem.filter((item) => item.situacao === 'com_dentista').length} tone="violet" />
           <Resumo icon={Clock3} label="Parados há mais de 24h" valor={parados} tone={parados ? 'red' : 'slate'} />
         </section>
 
@@ -157,7 +176,7 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
         {filtrados.length === 0 ? (
           <section className="rounded-2xl border border-dashed p-12 text-center text-slate-500 dark:border-white/10">
             <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
-            <p className="font-semibold">Nenhum trabalho nesta fila.</p>
+            <p className="font-semibold">{origem === 'externo' && !externosDisponiveis ? 'Não foi possível consultar os trabalhos externos.' : 'Nenhum trabalho nesta fila.'}</p>
           </section>
         ) : (
           <section className="grid items-start gap-3 lg:grid-cols-2">
