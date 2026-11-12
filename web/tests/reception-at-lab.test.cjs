@@ -17,9 +17,9 @@ function loader(overrides = {}) {
     assert.ok(file, name)
     if (cache.has(file)) return cache.get(file)
     const exports = {}; cache.set(file, exports)
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: {
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + (file.endsWith('/recepcao-view.tsx') ? '\nexport { AcoesExternas as testAcoesExternas };' : ''), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
-    } }).outputText, { exports, require: dep => load(dep, file), Date, Intl, Set, console, process: { env: {} } }, { filename: file })
+    } }).outputText, { exports, require: dep => load(dep, file), Date, Intl, Set, console, window: overrides.__window, process: { env: {} } }, { filename: file })
     return exports
   }
   return load
@@ -112,4 +112,50 @@ test('competing dispatch and distribution refuse overwriting a newer history', a
   const f = actionsFixture(base, 0)
   assert.equal((await f.actions.distribuirParaDentista({ ordemId: 7, dentista: 'Teste', finalidade: 'entrega' })).success, false)
   assert.equal(f.invalidations.length, 0)
+})
+
+test('direct delivery exists only for ready external orders', () => {
+  assert.match(view([{ ...row, status: 'Pronto', etapa: 'Pronto' }]), /Registrar entrega/)
+  for (const status of ['Enviado', 'Provando', 'Entregue']) assert.doesNotMatch(view([{ ...row, status }]), /Registrar entrega/)
+  assert.doesNotMatch(view([{ ...row, origem: 'interno', status: 'Finalizado' }]), /Registrar entrega/)
+})
+
+test('external delivery shortcut requires confirmation and calls the restricted delivery action with external identity and revision', async () => {
+  for (const confirmed of [false, true]) {
+    const writes = [], pending = [], confirmations = []
+    const Actions = loader({
+      __window: { confirm: message => { confirmations.push(message); return confirmed } },
+      '@/actions/recepcao-externa': { registrarEntregaExternaRecepcao: async (...args) => { writes.push(args); return { success: true } } },
+      '@/actions/recepcao': {},
+      '@/components/layout/dashboard-layout': {}, '@/components/layout/header': {}, '@/components/ui/modal': {},
+      'next/navigation': {}, 'sonner': {},
+    })('@/app/(dashboard)/recepcao/recepcao-view').testAcoesExternas
+    const tree = Actions({ item: { ...row, status: 'Pronto' }, disabled: false, onDistribuir: deny, onExecutar: action => pending.push(action()) })
+    function findButton(node) {
+      if (!node?.props) return null
+      const children = React.Children.toArray(node.props.children)
+      if (children.includes('Registrar entrega')) return node
+      return children.map(findButton).find(Boolean)
+    }
+    const button = findButton(tree)
+    assert.ok(button)
+    button.props.onClick()
+    await Promise.all(pending)
+    assert.equal(confirmations.length, 1)
+    assert.match(confirmations[0], /será marcado como Entregue/)
+    assert.equal(writes.length, confirmed ? 1 : 0)
+    if (confirmed) assert.equal(JSON.stringify(writes[0]), JSON.stringify([{ origem: 'externo', id: 7, expectedRevision: 'a'.repeat(32), expectedVersion: 0 }]))
+  }
+})
+test('delivery server action accepts reception auth and invalidates both lists only after success', async () => {
+  const events = []
+  const action = loader({
+    '@labgest/database': { prisma: {} },
+    '@/lib/auth-utils': { requireRecepcao: async () => { events.push('reception-auth'); return { id: 1 } }, requireUser: deny },
+    '@/lib/recepcao-externa-db': { concluirPedidoExterno: async () => { events.push('write'); return { success: true } } },
+    'next/cache': { revalidatePath: p => events.push(p) },
+  })('@/actions/recepcao-externa').registrarEntregaExternaRecepcao
+  assert.equal(typeof action, 'function')
+  assert.equal((await action({ origem: 'externo', id: 7, expectedRevision: 'a'.repeat(32), expectedVersion: 0 })).success, true)
+  assert.deepEqual(events, ['reception-auth', 'write', '/recepcao', '/labs-externos'])
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { movimentarCustodiaExterna } from './recepcao-externa-db'
+import { movimentarCustodiaExterna, concluirPedidoExterno } from './recepcao-externa-db'
 
 // Contract fixture, not a PostgreSQL integration or concurrency test.
 function fixture(options: { archived?: boolean; status?: string; revision?: string; eventFailure?: boolean; previous?: { situacao: string; version: number; dentista: string | null; finalidade: string | null } } = {}) {
@@ -94,4 +94,83 @@ test('conferência no laboratório guarda estados anterior/seguinte e responsáv
   assert.deepEqual(f.valuesWritten[1], [7, 3, 'registrar_no_laboratorio', actor.id, actor.nome,
     JSON.stringify(previous), JSON.stringify({ ...previous, situacao: 'no_laboratorio', version: 3 }), null])
   assert.ok(f.writes.every(q => !q.includes('public.labs_externos_pedidos')))
+})
+
+
+test('entrega pela recepção altera somente situação e atualização do pedido pronto', async () => {
+  const f = fixture()
+  await concluirPedidoExterno(f.db as never, input)
+  assert.equal(f.committed(), true)
+  assert.equal(f.writes.length, 1)
+  assert.match(f.writes[0], /UPDATE public\.labs_externos_pedidos/)
+  assert.match(f.writes[0], /SET situacao = 'Entregue', updated_at = NOW\(\)/)
+  assert.doesNotMatch(f.writes[0], /data_retorno|external_reception|finance|valor|pagamento/)
+  assert.deepEqual(f.valuesWritten[0], [7])
+})
+for (const status of ['Enviado', 'Provando', 'Entregue']) {
+  test(`entrega pela recepção recusa pedido ${status}`, async () => {
+    const f = fixture({ status })
+    await assert.rejects(() => concluirPedidoExterno(f.db as never, input), /pronto/)
+    assert.equal(f.writes.length, 0)
+  })
+}
+test('entrega pela recepção recusa pedido arquivado', async () => {
+  const f = fixture({ archived: true })
+  await assert.rejects(() => concluirPedidoExterno(f.db as never, input), /arquivado/)
+  assert.equal(f.writes.length, 0)
+})
+test('entrega pela recepção recusa tela anterior a edição de pedido ou movimento físico', async () => {
+  for (const options of [{ revision: 'b'.repeat(32) }, { previous: { situacao: 'no_laboratorio', version: 1, dentista: null, finalidade: null } }]) {
+    const f = fixture(options)
+    await assert.rejects(() => concluirPedidoExterno(f.db as never, input), /alterado/)
+    assert.equal(f.writes.length, 0)
+  }
+})
+test('entrega externa valida origem, identificador, revisão e versão antes de consultar', async () => {
+  const db = { $transaction() { throw Error('must not query') } }
+  for (const invalid of [{ origem: 'interno' }, { id: 0 }, { id: 1.1 }, { expectedRevision: 'invalid' }, { expectedVersion: -1 }, { expectedVersion: 0.5 }]) {
+    await assert.rejects(() => concluirPedidoExterno(db as never, { ...input, ...invalid } as never), /Comando externo inválido/)
+  }
+})
+
+// Execute the server wrapper without loading the real client or environment.
+async function deliveryActionFixture(failure?: Error, authFailure = false) {
+  const { readFileSync } = await import('node:fs')
+  const { runInNewContext } = await import('node:vm')
+  const ts = await import('typescript')
+  const calls: string[] = []
+  const exported: Record<string, (value: unknown) => Promise<{ success: boolean; code?: string; error?: string }>> = {}
+  runInNewContext(ts.transpileModule(readFileSync('web/src/actions/recepcao-externa.ts', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText, { exports: exported, Error, require(name: string) {
+    if (name === '@labgest/database') return { prisma: {} }
+    if (name === 'next/cache') return { revalidatePath: (p: string) => calls.push(p) }
+    if (name === '@/lib/auth-utils') return { requireRecepcao: async () => {
+      calls.push('auth'); if (authFailure) throw new Error('unauthorized'); return { tipo: 'recepcao' }
+    } }
+    if (name === '@/lib/recepcao-externa-db') return { concluirPedidoExterno: async () => {
+      calls.push('write'); if (failure) throw failure; return { success: true }
+    } }
+    throw new Error(`Unexpected dependency ${name}`)
+  } })
+  return { calls, action: exported.registrarEntregaExternaRecepcao }
+}
+test('entrega externa autoriza recepção antes de escrever e revalida ambas telas após sucesso', async () => {
+  const f = await deliveryActionFixture()
+  assert.equal((await f.action(input)).success, true)
+  assert.deepEqual(f.calls, ['auth', 'write', '/recepcao', '/labs-externos'])
+})
+test('entrega externa não grava nem revalida se autenticação falhar', async () => {
+  const f = await deliveryActionFixture(undefined, true)
+  await assert.rejects(() => f.action(input), /unauthorized/)
+  assert.deepEqual(f.calls, ['auth'])
+})
+test('entrega externa identifica conflito e oculta erros internos sem revalidar', async () => {
+  const conflict = await deliveryActionFixture(new Error('O registro foi alterado. Atualize a página.'))
+  const result = await conflict.action(input)
+  assert.equal(result.code, 'CONFLICT')
+  assert.equal(result.error, 'O registro foi alterado. Atualize a página.')
+  assert.deepEqual(conflict.calls, ['auth', 'write'])
+  const hidden = await deliveryActionFixture(new Error('database private connection details'))
+  assert.doesNotMatch((await hidden.action(input)).error || '', /private|database/)
 })

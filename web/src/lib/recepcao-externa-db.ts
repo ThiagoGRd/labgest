@@ -88,3 +88,40 @@ export async function movimentarCustodiaExterna(db: ArchiveDatabase, input: Coma
     return { success: true as const }
   })
 }
+
+export interface EntregaExternaRecepcao {
+  origem: 'externo'
+  id: number
+  expectedRevision: string
+  expectedVersion: number
+}
+
+// Narrow reception completion: no clinical, financial, custody or history edits.
+export async function concluirPedidoExterno(db: ArchiveDatabase, input: EntregaExternaRecepcao) {
+  if (!input || input.origem !== 'externo' || !Number.isSafeInteger(input.id) || input.id <= 0
+      || typeof input.expectedRevision !== 'string' || !/^[a-f0-9]{32}$/.test(input.expectedRevision)
+      || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) throw new Error('Comando externo inválido.')
+  return db.$transaction(async tx => {
+    if (!await capacidadeRecepcaoExterna(tx)) throw new Error('Recepção externa indisponível.')
+    // Serialize with edits, archive and custody using their common parent lock.
+    const [order] = await tx.$queryRaw<Array<{ situacao: string; revisao: string }>>`
+      SELECT p.situacao, md5(to_jsonb(p)::text) AS revisao
+      FROM public.labs_externos_pedidos p WHERE p.id = ${input.id} FOR UPDATE
+    `
+    if (!order) throw new Error('Pedido não encontrado.')
+    if (order.revisao !== input.expectedRevision) throw new Error('O pedido foi alterado. Atualize a página.')
+    if (order.situacao !== 'Pronto') throw new Error('O pedido precisa estar pronto para registrar a entrega.')
+    const archive = await estadosArquivamento(tx)
+    if (archive.states.some(s => Number(s.pedido_id) === input.id && s.archived)) throw new Error('Pedido encerrado ou arquivado.')
+    const [custody] = await tx.$queryRaw<Array<{ version: number }>>`
+      SELECT version FROM labgest_private.external_reception_state WHERE pedido_id = ${input.id}
+    `
+    if ((custody?.version ?? 0) !== input.expectedVersion) throw new Error('O registro foi alterado. Atualize a página.')
+    await tx.$executeRaw`
+      UPDATE public.labs_externos_pedidos
+      SET situacao = 'Entregue', updated_at = NOW()
+      WHERE id = ${input.id}
+    `
+    return { success: true as const }
+  })
+}

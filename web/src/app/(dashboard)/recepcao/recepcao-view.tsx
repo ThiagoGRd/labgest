@@ -1,6 +1,6 @@
 'use client'
 
-import { movimentarRecepcaoExterna } from '@/actions/recepcao-externa'
+import { movimentarRecepcaoExterna, registrarEntregaExternaRecepcao } from '@/actions/recepcao-externa'
 import { chaveRecepcao, type MovimentoExterno } from '@/lib/recepcao-externa'
 import { filtrarOrigem, type FiltroOrigem } from '@/lib/recepcao-filtros'
 import { useState, useTransition } from 'react'
@@ -309,6 +309,11 @@ function AcoesExternas({ item, disabled, onDistribuir, onExecutar }: {
   return <div className="mt-4 space-y-3">
     <p className="text-xs text-slate-500">Controle físico do trabalho externo. Não registra aprovação clínica nem altera o financeiro.</p>
     <div className="flex flex-wrap justify-end gap-2">
+      {item.status === 'Pronto' ? <Button disabled={disabled} onClick={() => {
+        if (window.confirm(`Confirma que este pedido externo já foi entregue?\nExterno #${item.id} · ${item.paciente}\nO pedido será marcado como Entregue e sairá da fila da recepção. O financeiro não será alterado.`)) {
+          onExecutar(() => registrarEntregaExternaRecepcao({ origem: 'externo', id: item.id, expectedRevision: item.externo?.revisao || '', expectedVersion: item.externo?.version ?? -1 }), 'Entrega registrada. Pedido concluído e retirado da fila da recepção.')
+        }
+      }}><PackageCheck className="h-4 w-4" />Registrar entrega</Button> : null}
       {['conferir_recebimento', 'em_transito_laboratorio', 'no_laboratorio'].includes(item.situacao) ? <Button disabled={disabled} onClick={() => {
         if (window.confirm('Você confirma que recebeu fisicamente este trabalho do laboratório externo?')) onExecutar(() => executarExterno(item, { acao: 'receber' }), 'Recebimento externo confirmado.')
       }}>Confirmar recebimento físico</Button> : null}
