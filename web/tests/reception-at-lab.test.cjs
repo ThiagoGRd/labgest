@@ -100,7 +100,7 @@ test('explicit lab state survives legacy Em Prova normalization and stays in lab
   })('@/actions/recepcao')
   const result = await actions.getPainelRecepcao()
   assert.equal(result.itens[0].situacao, 'no_laboratorio')
-  assert.ok(query.where.OR.some(c => c.situacaoLogistica === 'no_laboratorio' && c.movimentacaoLogisticaEm.not === null))
+  assert.ok(query.where.OR.some(c => c.situacaoLogistica === 'no_laboratorio' && c.historicoEtapas?.array_contains?.[0]?.acao === 'registrou_no_laboratorio'))
 })
 test('receipt refuses concurrent location change instead of overwriting history', async () => {
   const f = actionsFixture({ ...base, situacaoLogistica: 'aguardando_recepcao' }, 0)

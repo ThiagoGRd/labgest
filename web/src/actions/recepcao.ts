@@ -77,7 +77,8 @@ export async function getPainelRecepcao() {
         OR: [
           { situacaoLogistica: { in: SITUACOES_ATIVAS } },
           { status: 'Em Prova' },
-          { situacaoLogistica: 'no_laboratorio', movimentacaoLogisticaEm: { not: null } },
+          // Keep only explicit corrections in this additional queue branch; do not revive legacy completed work.
+          { situacaoLogistica: 'no_laboratorio', historicoEtapas: { array_contains: [{ acao: 'registrou_no_laboratorio' }] } },
           { status: 'Finalizado', dataFinalizacao: { gte: inicioFinalizadosRecentes } },
         ],
       },
