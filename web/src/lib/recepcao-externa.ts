@@ -1,6 +1,6 @@
 // Pure logistics only. No database, authentication, clinical result or billing side effects.
 export type OrigemRecepcao = 'interno' | 'externo'
-export type SituacaoExterna = 'conferir_recebimento' | 'aguardando_distribuicao' | 'com_dentista' | 'aguardando_envio_laboratorio' | 'em_transito_laboratorio'
+export type SituacaoExterna = 'no_laboratorio' | 'conferir_recebimento' | 'aguardando_distribuicao' | 'com_dentista' | 'aguardando_envio_laboratorio' | 'em_transito_laboratorio'
 export type FinalidadeExterna = 'prova' | 'instalacao' | 'entrega'
 export interface CustodiaExterna {
   situacao: SituacaoExterna
@@ -9,7 +9,7 @@ export interface CustodiaExterna {
   finalidade: FinalidadeExterna | null
 }
 export interface MovimentoExterno {
-  acao: 'receber' | 'distribuir' | 'receber_retorno' | 'enviar_retorno'
+  acao: 'registrar_no_laboratorio' | 'receber' | 'distribuir' | 'receber_retorno' | 'enviar_retorno'
   expectedVersion: number
   dentista?: string
   finalidade?: FinalidadeExterna
@@ -29,7 +29,10 @@ export function transicionarExterno(atual: CustodiaExterna | null, input: Movime
       || input.expectedVersion !== (atual?.version ?? 0)) throw new Error('O registro foi alterado. Atualize a página.')
   const estado = atual?.situacao ?? 'conferir_recebimento'
   const next: CustodiaExterna = { situacao: estado, version: input.expectedVersion + 1, dentista: atual?.dentista ?? null, finalidade: atual?.finalidade ?? null }
-  if (input.acao === 'receber' && ['conferir_recebimento', 'em_transito_laboratorio'].includes(estado)) {
+  if (input.acao === 'registrar_no_laboratorio' && ['conferir_recebimento', 'aguardando_distribuicao', 'em_transito_laboratorio'].includes(estado)) {
+    return { ...next, situacao: 'no_laboratorio' }
+  }
+  if (input.acao === 'receber' && ['conferir_recebimento', 'em_transito_laboratorio', 'no_laboratorio'].includes(estado)) {
     return { ...next, situacao: 'aguardando_distribuicao', dentista: null, finalidade: null }
   }
   if (input.acao === 'distribuir' && ['aguardando_distribuicao', 'com_dentista'].includes(estado)) {

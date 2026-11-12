@@ -3,8 +3,9 @@ import test from 'node:test'
 import { movimentarCustodiaExterna } from './recepcao-externa-db'
 
 // Contract fixture, not a PostgreSQL integration or concurrency test.
-function fixture(options: { archived?: boolean; status?: string; revision?: string; eventFailure?: boolean } = {}) {
+function fixture(options: { archived?: boolean; status?: string; revision?: string; eventFailure?: boolean; previous?: { situacao: string; version: number; dentista: string | null; finalidade: string | null } } = {}) {
   const writes: string[] = []
+  const valuesWritten: unknown[][] = []
   let committed = false
   const tx = {
     async $queryRaw(sql: TemplateStringsArray) {
@@ -14,12 +15,13 @@ function fixture(options: { archived?: boolean; status?: string; revision?: stri
       if (query.includes('FOR UPDATE')) return [{ situacao: options.status ?? 'Pronto', revisao: options.revision ?? 'a'.repeat(32) }]
       if (query.includes('external_order_archive_capability')) return [{ schema_version: 1, enabled: false, permitted: true, full_visibility: true }]
       if (query.includes('external_order_archive')) return [{ pedido_id: 7, archived: options.archived ?? false, version: 1 }]
-      if (query.includes('external_reception_state')) return []
+      if (query.includes('external_reception_state')) return options.previous ? [options.previous] : []
       throw new Error(`Unexpected query: ${query}`)
     },
-    async $executeRaw(sql: TemplateStringsArray) {
+    async $executeRaw(sql: TemplateStringsArray, ...values: unknown[]) {
       const query = sql.join('?')
       writes.push(query)
+      valuesWritten.push(values)
       if (options.eventFailure && query.includes('external_reception_event')) throw new Error('fixture event failure')
       return 1
     },
@@ -27,7 +29,7 @@ function fixture(options: { archived?: boolean; status?: string; revision?: stri
   const db = { ...tx, async $transaction(fn: (client: typeof tx) => Promise<unknown>) {
     try { const result = await fn(tx); committed = true; return result } catch (e) { writes.length = 0; throw e }
   } }
-  return { db, writes, committed: () => committed }
+  return { db, writes, valuesWritten, committed: () => committed }
 }
 const input = { origem: 'externo' as const, id: 7, expectedRevision: 'a'.repeat(32), expectedVersion: 0, acao: 'receber' as const }
 const actor = { id: 1, nome: 'Operador sintético' }
@@ -80,4 +82,16 @@ test('capacidade desativada bloqueia comando antes de consultar pedido', async (
   } }
   await assert.rejects(() => movimentarCustodiaExterna(db as never, input, actor), /indisponível/)
   assert.equal(f.writes.length, 0)
+})
+
+
+test('conferência no laboratório guarda estados anterior/seguinte e responsável sem alterar pedido', async () => {
+  const previous = { situacao: 'aguardando_distribuicao', version: 2, dentista: 'Anterior', finalidade: 'prova' }
+  const f = fixture({ previous })
+  await movimentarCustodiaExterna(f.db as never, { ...input, acao: 'registrar_no_laboratorio', expectedVersion: 2 }, actor)
+  assert.equal(f.committed(), true)
+  assert.equal(f.writes.length, 2)
+  assert.deepEqual(f.valuesWritten[1], [7, 3, 'registrar_no_laboratorio', actor.id, actor.nome,
+    JSON.stringify(previous), JSON.stringify({ ...previous, situacao: 'no_laboratorio', version: 3 }), null])
+  assert.ok(f.writes.every(q => !q.includes('public.labs_externos_pedidos')))
 })

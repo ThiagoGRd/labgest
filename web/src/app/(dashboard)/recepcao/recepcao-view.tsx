@@ -33,6 +33,7 @@ import {
   enviarParaRecepcao,
   enviarRetornoLaboratorio,
   receberDoDentista,
+  registrarNoLaboratorio,
   type FinalidadeClinica,
   type OrdemRecepcao,
   type SituacaoLogistica,
@@ -50,7 +51,7 @@ type Filtro = 'todos' | 'receber' | 'recepcao' | 'dentista' | 'retorno' | 'labor
 
 const SITUACOES: Record<SituacaoLogistica, { label: string; descricao: string; tone: string }> = {
   conferir_recebimento: { label: 'Conferir recebimento', descricao: 'A chegada física ainda não foi confirmada', tone: 'bg-amber-100 text-amber-800' },
-  no_laboratorio: { label: 'No laboratório', descricao: 'Pronto para iniciar a saída', tone: 'bg-slate-100 text-slate-700' },
+  no_laboratorio: { label: 'No laboratório', descricao: 'Localização física: laboratório', tone: 'bg-slate-100 text-slate-700' },
   aguardando_recepcao: { label: 'Aguardando recepção', descricao: 'Enviado pelo laboratório', tone: 'bg-blue-100 text-blue-700' },
   aguardando_distribuicao: { label: 'Na recepção', descricao: 'Aguardando distribuição', tone: 'bg-amber-100 text-amber-800' },
   com_dentista: { label: 'Com dentista', descricao: 'Aguardando atendimento', tone: 'bg-violet-100 text-violet-700' },
@@ -248,13 +249,24 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
       {item.origem === 'externo' ? <AcoesExternas item={item} disabled={disabled} onDistribuir={onDistribuir} onExecutar={onExecutar} /> :
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         {item.situacao === 'no_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => enviarParaRecepcao(item.id), 'Envio para a recepção registrado.')} disabled={disabled}><Send className="h-4 w-4" />Enviar à recepção</Button> : null}
-        {item.situacao === 'aguardando_recepcao' ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
+        {['aguardando_recepcao', 'no_laboratorio'].includes(item.situacao) ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
         {item.situacao === 'aguardando_distribuicao' ? <Button size="sm" onClick={onDistribuir} disabled={disabled}><UserRoundCheck className="h-4 w-4" />Entregar ao dentista</Button> : null}
         {item.situacao === 'com_dentista' ? <><Button size="sm" variant="outline" onClick={onDistribuir} disabled={disabled}><RefreshCw className="h-4 w-4" />Corrigir</Button><Button size="sm" onClick={() => onExecutar(() => receberDoDentista(item.id), 'Devolução do dentista registrada.')} disabled={disabled}><Undo2 className="h-4 w-4" />Receber do dentista</Button></> : null}
         {item.situacao === 'aguardando_resultado_dentista' ? <Button size="sm" variant="outline" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><RefreshCw className="h-4 w-4" />Verificar resposta</Button> : null}
         {item.situacao === 'aguardando_envio_laboratorio' ? <Button size="sm" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><Send className="h-4 w-4" />Enviar ao laboratório</Button> : null}
         {item.situacao === 'em_transito_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoLaboratorio(item.id), 'Recebimento no laboratório confirmado.')} disabled={disabled}><Building2 className="h-4 w-4" />Confirmar no laboratório</Button> : null}
       </div>}
+      {(item.origem === 'externo'
+        ? ['conferir_recebimento', 'aguardando_distribuicao', 'em_transito_laboratorio']
+        : ['aguardando_recepcao', 'aguardando_distribuicao']).includes(item.situacao) ? (
+        <div className="mt-2 flex justify-end"><Button size="sm" variant="outline" disabled={disabled} onClick={() => {
+          if (window.confirm(`Você conferiu que este trabalho está no laboratório, e não na recepção?\n${item.origem === 'externo' ? 'Externo' : 'OS'} #${item.id}\nIsso registra somente a localização física, sem alterar a etapa clínica ou marcar entrega.`)) {
+            onExecutar(() => item.origem === 'externo'
+              ? executarExterno(item, { acao: 'registrar_no_laboratorio' })
+              : registrarNoLaboratorio({ ordemId: item.id, situacao: item.situacao, movimentadoEm: item.movimentadoEm }), 'Localização registrada: no laboratório.')
+          }
+        }}><Building2 className="h-4 w-4" />Está no laboratório</Button></div>
+      ) : null}
       <p className="mt-2 text-right text-[11px] text-slate-400">{config.descricao}</p>
     </article>
   )
@@ -297,7 +309,7 @@ function AcoesExternas({ item, disabled, onDistribuir, onExecutar }: {
   return <div className="mt-4 space-y-3">
     <p className="text-xs text-slate-500">Controle físico do trabalho externo. Não registra aprovação clínica nem altera o financeiro.</p>
     <div className="flex flex-wrap justify-end gap-2">
-      {['conferir_recebimento', 'em_transito_laboratorio'].includes(item.situacao) ? <Button disabled={disabled} onClick={() => {
+      {['conferir_recebimento', 'em_transito_laboratorio', 'no_laboratorio'].includes(item.situacao) ? <Button disabled={disabled} onClick={() => {
         if (window.confirm('Você confirma que recebeu fisicamente este trabalho do laboratório externo?')) onExecutar(() => executarExterno(item, { acao: 'receber' }), 'Recebimento externo confirmado.')
       }}>Confirmar recebimento físico</Button> : null}
       {['aguardando_distribuicao', 'com_dentista'].includes(item.situacao) ? <Button disabled={disabled} onClick={onDistribuir}>{item.situacao === 'com_dentista' ? 'Corrigir distribuição' : 'Entregar ao dentista'}</Button> : null}

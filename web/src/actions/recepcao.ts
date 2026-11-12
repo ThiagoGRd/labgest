@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@labgest/database'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { requireRecepcao } from '@/lib/auth-utils'
@@ -54,8 +54,8 @@ function revalidarRecepcao() {
   revalidatePath('/prioridades')
 }
 
-function situacaoEfetiva(situacao: string, status: string | null): SituacaoLogistica {
-  if (situacao === 'no_laboratorio' && status === 'Em Prova') return 'aguardando_recepcao'
+function situacaoEfetiva(situacao: string, status: string | null, movimentadoEm?: Date | null): SituacaoLogistica {
+  if (situacao === 'no_laboratorio' && status === 'Em Prova' && !movimentadoEm) return 'aguardando_recepcao'
   return SITUACOES_ATIVAS.includes(situacao as SituacaoLogistica)
     ? situacao as SituacaoLogistica
     : 'no_laboratorio'
@@ -77,6 +77,7 @@ export async function getPainelRecepcao() {
         OR: [
           { situacaoLogistica: { in: SITUACOES_ATIVAS } },
           { status: 'Em Prova' },
+          { situacaoLogistica: 'no_laboratorio', movimentacaoLogisticaEm: { not: null } },
           { status: 'Finalizado', dataFinalizacao: { gte: inicioFinalizadosRecentes } },
         ],
       },
@@ -122,7 +123,7 @@ export async function getPainelRecepcao() {
       etapa: ordem.subetapaAtual || ordem.etapaAtual || 'Etapa não informada',
       status: ordem.status || 'Aguardando',
       localizacao: ordem.localizacaoAtual,
-      situacao: situacaoEfetiva(ordem.situacaoLogistica, ordem.status),
+      situacao: situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm),
       dentista: ordem.dentistaResponsavel || '',
       finalidade: finalidadeEfetiva(ordem.finalidadeClinica, ordem.status),
       agendamento: ordem.agendamentoClinico?.toISOString() || null,
@@ -192,8 +193,12 @@ export async function enviarParaRecepcao(ordemId: number) {
   const ordem = await carregarOrdem(ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'em_transito_recepcao',
       situacaoLogistica: 'aguardando_recepcao',
@@ -202,6 +207,7 @@ export async function enviarParaRecepcao(ordemId: number) {
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_recepcao', usuario, { local: 'Recepção' }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true }
 }
@@ -210,12 +216,16 @@ export async function confirmarRecebimentoRecepcao(ordemId: number) {
   const usuario = await requireRecepcao()
   const ordem = await carregarOrdem(ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
-  if (situacao !== 'aguardando_recepcao') return { success: false, error: 'Este trabalho não está aguardando recebimento.' }
+  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm)
+  if (!['aguardando_recepcao', 'no_laboratorio'].includes(situacao)) return { success: false, error: 'Este trabalho não está aguardando recebimento.' }
 
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'recepcao',
       situacaoLogistica: 'aguardando_distribuicao',
@@ -223,6 +233,41 @@ export async function confirmarRecebimentoRecepcao(ordemId: number) {
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_recepcao', usuario, { local: 'Recepção' }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
+  revalidarRecepcao()
+  return { success: true }
+}
+
+// A physical-location correction, not a clinical result, dispatch or delivery.
+export async function registrarNoLaboratorio(input: {
+  ordemId: number
+  situacao: SituacaoLogistica
+  movimentadoEm: string | null
+}) {
+  const usuario = await requireRecepcao()
+  if (!input || !Number.isSafeInteger(input.ordemId) || input.ordemId <= 0) return { success: false, error: 'Referência inválida.' }
+  const ordem = await carregarOrdem(input.ordemId)
+  if (!ordem || ['Entregue', 'Cancelado'].includes(ordem.status || '')) return { success: false, error: 'Ordem não encontrada ou encerrada.' }
+  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm)
+  if (!['aguardando_recepcao', 'aguardando_distribuicao'].includes(situacao)) return { success: false, error: 'Esta localização não pode ser alterada por esta opção.' }
+  if (input.situacao !== situacao || input.movimentadoEm !== (ordem.movimentacaoLogisticaEm?.toISOString() || null)) {
+    return { success: false, error: 'O trabalho foi movimentado. Atualize a página e confira novamente.' }
+  }
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordem.id, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
+    data: {
+      localizacaoAtual: 'laboratorio', situacaoLogistica: 'no_laboratorio', movimentacaoLogisticaEm: new Date(),
+      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'registrou_no_laboratorio', usuario, {
+        local: 'Laboratório', localAnterior: ordem.localizacaoAtual, situacaoAnterior: situacao,
+        observacao: 'Localização física conferida pela recepção. Não registra entrega nem altera a etapa clínica.',
+      }),
+    },
+  })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true }
 }
@@ -240,7 +285,7 @@ export async function distribuirParaDentista(data: {
   if (!['prova', 'instalacao', 'entrega'].includes(data.finalidade)) return { success: false, error: 'Informe uma finalidade válida.' }
   const ordem = await carregarOrdem(data.ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
+  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm)
   const corrigindo = situacao === 'com_dentista'
   if (!['aguardando_distribuicao', 'com_dentista'].includes(situacao)) return { success: false, error: 'O trabalho precisa estar na recepção antes da distribuição.' }
   if (corrigindo && !data.observacao?.trim()) return { success: false, error: 'Informe o motivo da correção da distribuição.' }
@@ -248,8 +293,12 @@ export async function distribuirParaDentista(data: {
   const agendamento = data.agendamento ? new Date(data.agendamento) : null
   if (agendamento && Number.isNaN(agendamento.getTime())) return { success: false, error: 'Informe um agendamento válido.' }
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: data.ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: data.ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'dentista',
       situacaoLogistica: 'com_dentista',
@@ -264,6 +313,7 @@ export async function distribuirParaDentista(data: {
       }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true }
 }
@@ -272,7 +322,7 @@ export async function receberDoDentista(ordemId: number) {
   const usuario = await requireRecepcao()
   const ordem = await carregarOrdem(ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'com_dentista') return { success: false, error: 'O trabalho não está registrado com o dentista.' }
+  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'com_dentista') return { success: false, error: 'O trabalho não está registrado com o dentista.' }
 
   const ciclo = await prisma.cicloProducao.findFirst({
     where: { ordemId, status: 'em_prova' },
@@ -300,7 +350,7 @@ export async function enviarRetornoLaboratorio(ordemId: number) {
   const usuario = await requireRecepcao()
   const ordem = await carregarOrdem(ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status)
+  const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm)
   if (!['aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(situacao)) return { success: false, error: 'O trabalho ainda não está pronto para retornar ao laboratório.' }
 
   if (finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova') {
@@ -329,7 +379,7 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
   }
   const ordem = await carregarOrdem(ordemId)
   if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status) !== 'em_transito_laboratorio') return { success: false, error: 'O trabalho não está em trânsito para o laboratório.' }
+  if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'em_transito_laboratorio') return { success: false, error: 'O trabalho não está em trânsito para o laboratório.' }
 
   const agora = new Date()
   await prisma.ordem.update({

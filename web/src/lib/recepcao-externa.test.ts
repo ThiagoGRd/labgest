@@ -54,3 +54,29 @@ test('comando desconhecido e versão inválida falham fechados', () => {
   assert.throws(() => transicionarExterno(null, { acao: 'excluir' as never, expectedVersion: 0 }))
   assert.throws(() => transicionarExterno(null, { acao: 'receber', expectedVersion: -1 }))
 })
+
+for (const situacao of ['conferir_recebimento', 'aguardando_distribuicao', 'em_transito_laboratorio'] as const) {
+  test(`conferência registra no laboratório a partir de ${situacao} sem exigir motivo`, () => {
+    const previous = { situacao, version: 3, dentista: 'Dentista sintético', finalidade: 'prova' as const }
+    const next = transicionarExterno(previous, { acao: 'registrar_no_laboratorio', expectedVersion: 3 })
+    assert.deepEqual(next, { ...previous, situacao: 'no_laboratorio', version: 4 })
+    assert.equal(previous.situacao, situacao)
+    const received = transicionarExterno(next, { acao: 'receber', expectedVersion: 4 })
+    assert.deepEqual(received, { situacao: 'aguardando_distribuicao', version: 5, dentista: null, finalidade: null })
+  })
+}
+test('primeira conferência no laboratório cria custódia sem inventar distribuição', () => {
+  assert.deepEqual(transicionarExterno(null, { acao: 'registrar_no_laboratorio', expectedVersion: 0 }), {
+    situacao: 'no_laboratorio', version: 1, dentista: null, finalidade: null,
+  })
+})
+for (const situacao of ['com_dentista', 'aguardando_envio_laboratorio', 'no_laboratorio'] as const) {
+  test(`conferência no laboratório não pula movimento a partir de ${situacao}`, () => {
+    assert.throws(() => transicionarExterno({ situacao, version: 3, dentista: 'Teste', finalidade: 'prova' },
+      { acao: 'registrar_no_laboratorio', expectedVersion: 3 }), /movimento/)
+  })
+}
+test('conferência no laboratório recusa versão antiga', () => {
+  assert.throws(() => transicionarExterno({ situacao: 'aguardando_distribuicao', version: 3, dentista: null, finalidade: null },
+    { acao: 'registrar_no_laboratorio', expectedVersion: 2 }), /alterado/)
+})
