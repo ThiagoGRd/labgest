@@ -766,6 +766,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
     revalidatePath('/producao')
     revalidatePath('/prioridades')
     revalidatePath('/financeiro')
+    revalidatePath('/recepcao')
     return { success: true, cobranca: resultado }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)

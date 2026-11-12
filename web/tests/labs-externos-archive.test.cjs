@@ -163,7 +163,7 @@ test('server action only revalidates after an atomic successful commit', async (
   const result = await action.api.alterarArquivoPedido(f.input)
   assert.equal(result.success, true)
   assert.equal(f.state.events.length, 1)
-  assert.equal(action.revalidations(), 1)
+  assert.equal(action.revalidations(), 2, 'external lab and reception caches are invalidated')
   const failed = fixture({ failAudit: true })
   const failureAction = actions(failed.db)
   const failure = await failureAction.api.alterarArquivoPedido(failed.input)

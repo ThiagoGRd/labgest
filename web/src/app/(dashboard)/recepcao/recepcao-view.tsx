@@ -232,7 +232,7 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
   return (
     <article className={`rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900 ${horas >= 24 && ['aguardando_recepcao', 'aguardando_distribuicao'].includes(item.situacao) ? 'border-red-300 dark:border-red-800' : ''}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0"><p className="text-xs font-bold text-indigo-600">{item.origem === 'externo' ? 'Externo' : 'Interno · OS'} #{item.id}</p><h2 className="truncate text-lg font-bold">{item.paciente}</h2><p className="truncate text-sm text-slate-500">{item.servico} · {item.clinica}</p></div>
+        <div className="min-w-0"><p className="text-xs font-bold text-indigo-600">{item.origem === 'externo' ? 'Externo' : 'Interno · OS'} #{item.id}</p><h2 className="break-words text-lg font-bold">{item.paciente}</h2><p className="whitespace-pre-wrap break-words text-sm text-slate-500">{item.servico} · {item.clinica}</p></div>
         <Badge className={config.tone}>{config.label}</Badge>
       </div>
       <div className="mt-4 grid gap-2 rounded-xl bg-slate-50 p-3 text-xs dark:bg-white/5 sm:grid-cols-2">
