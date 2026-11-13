@@ -17,7 +17,7 @@ function loader(overrides = {}) {
     assert.ok(file, name)
     if (cache.has(file)) return cache.get(file)
     const exports = {}; cache.set(file, exports)
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + (file.endsWith('/recepcao-view.tsx') ? '\nexport { AcoesExternas as testAcoesExternas };' : ''), { compilerOptions: {
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + (file.endsWith('/recepcao-view.tsx') ? '\nexport { AcoesExternas as testAcoesExternas, TrabalhoCard as testTrabalhoCard };' : ''), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText, { exports, require: dep => load(dep, file), Date, Intl, Set, console, window: overrides.__window, process: { env: {} } }, { filename: file })
     return exports
@@ -40,11 +40,11 @@ function view(items) {
 }
 
 const base = { id: 7, status: 'Finalizado', situacaoLogistica: 'aguardando_distribuicao', localizacaoAtual: 'recepcao', movimentacaoLogisticaEm: new Date('2026-11-01T12:00:00Z'), historicoEtapas: [{ acao: 'recebeu_recepcao' }], finalidadeClinica: 'entrega' }
-function actionsFixture(record = base, count = 1) {
+function actionsFixture(record = base, count = 1, tipo = 'recepcao') {
   const writes = [], invalidations = []
   const actions = loader({
-    '@labgest/database': { prisma: { ordem: { findFirst: async () => record, updateMany: async query => { writes.push(query); return { count } }, update: async query => { writes.push(query); return {} } } } },
-    '@/lib/auth-utils': { requireRecepcao: async () => ({ nome: 'Recepção teste', email: 'test@example.invalid', tipo: 'recepcao', permissoes: [] }) },
+    '@labgest/database': { prisma: { cicloProducao: { findFirst: async () => ({ decisao: 'aprovado' }) }, ordem: { findFirst: async () => record, updateMany: async query => { writes.push(query); return { count } }, update: async query => { writes.push(query); return {} } } } },
+    '@/lib/auth-utils': { requireRecepcao: async () => ({ nome: 'Recepção teste', email: 'test@example.invalid', tipo, permissoes: [] }) },
     '@/lib/recepcao-externa-db': {},
     'next/cache': { revalidatePath: p => invalidations.push(p) },
   })('@/actions/recepcao')
@@ -117,7 +117,7 @@ test('competing dispatch and distribution refuse overwriting a newer history', a
 test('direct delivery exists only for ready external orders', () => {
   assert.match(view([{ ...row, status: 'Pronto', etapa: 'Pronto' }]), /Registrar entrega/)
   for (const status of ['Enviado', 'Provando', 'Entregue']) assert.doesNotMatch(view([{ ...row, status }]), /Registrar entrega/)
-  assert.doesNotMatch(view([{ ...row, origem: 'interno', status: 'Finalizado' }]), /Registrar entrega/)
+  assert.doesNotMatch(view([{ ...row, origem: 'interno', status: 'Finalizado' }]), />Registrar entrega<\/button>/)
 })
 
 test('external delivery shortcut requires confirmation and calls the restricted delivery action with external identity and revision', async () => {
@@ -158,4 +158,59 @@ test('delivery server action accepts reception auth and invalidates both lists o
   assert.equal(typeof action, 'function')
   assert.equal((await action({ origem: 'externo', id: 7, expectedRevision: 'a'.repeat(32), expectedVersion: 0 })).success, true)
   assert.deepEqual(events, ['reception-auth', 'write', '/recepcao', '/labs-externos'])
+})
+test('internal delivery shortcut exists only after internal production is Finalizado', () => {
+  assert.match(view([{ ...row, origem: 'interno', status: 'Finalizado' }]), /Registrar entrega ao paciente/)
+  for (const status of ['Em Prova', 'Em Produção', 'Entregue', 'Cancelado']) assert.doesNotMatch(view([{ ...row, origem: 'interno', status }]), /Registrar entrega ao paciente/)
+  assert.doesNotMatch(view([{ ...row, status: 'Finalizado' }]), /Registrar entrega ao paciente/)
+})
+test('internal delivery action uses reception auth and invalidates financial and operational views after commit', async () => {
+  const events = []
+  const action = loader({
+    '@labgest/database': { prisma: {} },
+    '@/lib/auth-utils': { requireRecepcao: async () => { events.push('auth'); return { id: 1, nome: 'Recepção', email: 'test@example.invalid' } }, requireUser: deny },
+    '@/lib/entrega-interna-recepcao': { concluirEntregaInterna: async () => { events.push('commit'); return { success: true, cobrancaCriada: false } } },
+    'next/cache': { revalidatePath: p => events.push(p) },
+  })('@/actions/recepcao').registrarEntregaInternaRecepcao
+  assert.equal(typeof action, 'function')
+  assert.equal((await action({ ordemId: 7, expectedUpdatedAt: null })).success, true)
+  assert.equal(events[0], 'auth')
+  assert.ok(events.indexOf('/recepcao') > events.indexOf('commit'))
+  assert.ok(events.indexOf('/financeiro') > events.indexOf('commit'))
+})
+
+test('internal delivery confirmation discloses billing and never records payment or submits on cancel', async () => {
+  for (const confirmed of [false, true]) {
+    const calls = [], pending = [], confirmations = []
+    const Card = loader({
+      __window: { confirm: message => { confirmations.push(message); return confirmed } },
+      '@/actions/recepcao': { registrarEntregaInternaRecepcao: async input => { calls.push(input); return { success: true } } },
+      '@/actions/recepcao-externa': {},
+      '@/components/layout/dashboard-layout': {}, '@/components/layout/header': {}, '@/components/ui/modal': {},
+      'next/navigation': {}, 'sonner': {},
+    })('@/app/(dashboard)/recepcao/recepcao-view').testTrabalhoCard
+    const tree = Card({ item: { ...row, origem: 'interno', status: 'Finalizado', interno: { atualizadoEm: '2026-11-13T12:00:00.000Z' } }, disabled: false, emitidoEm: '2026-11-13T12:00:00Z', recepcaoSomente: true, onDistribuir: deny, onExecutar: action => pending.push(action()) })
+    function findButton(node) {
+      if (!node?.props) return null
+      const children = React.Children.toArray(node.props.children)
+      if (children.includes('Registrar entrega ao paciente')) return node
+      return children.map(findButton).find(Boolean)
+    }
+    findButton(tree).props.onClick()
+    await Promise.all(pending)
+    assert.match(confirmations[0], /pagamentos serão preservados/)
+    assert.match(confirmations[0], /não registra pagamento/)
+    assert.equal(calls.length, confirmed ? 1 : 0)
+    if (confirmed) assert.equal(JSON.stringify(calls[0]), JSON.stringify({ ordemId: 7, expectedUpdatedAt: '2026-11-13T12:00:00.000Z' }))
+  }
+})
+
+test('remaining custody actions refuse stale writes after an internal delivery', async () => {
+  for (const [method, situacao] of [['receberDoDentista', 'com_dentista'], ['enviarRetornoLaboratorio', 'aguardando_envio_laboratorio'], ['confirmarRecebimentoLaboratorio', 'em_transito_laboratorio']]) {
+    const f = actionsFixture({ ...base, situacaoLogistica: situacao }, 0, 'admin')
+    assert.equal((await f.actions[method](7)).success, false)
+    assert.equal(f.invalidations.length, 0)
+    assert.ok(f.writes[0].where.historicoEtapas)
+    assert.equal(f.writes[0].where.status, 'Finalizado')
+  }
 })

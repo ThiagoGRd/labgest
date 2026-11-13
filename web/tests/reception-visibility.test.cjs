@@ -66,7 +66,7 @@ test('recording internal delivery invalidates reception only after successful tr
   const events = []
   const actions = loader({
     '@labgest/database': { prisma: { $transaction: async fn => {
-      const result = await fn({ ordem: { findUnique: async () => ({ id: 7, status: 'Finalizado', contasReceber: [], historicoEtapas: [], servicoNome: 'Sintético', nomePaciente: 'Teste', clienteId: 1, clienteNome: 'Clínica teste' }), update: async () => {} }, contaReceber: { create: async ({ data }) => ({ id: 1, ...data }) } })
+      const result = await fn({ $queryRaw: async () => [{ id: 7 }], ordem: { findUnique: async () => ({ id: 7, status: 'Finalizado', contasReceber: [], historicoEtapas: [], servicoNome: 'Sintético', nomePaciente: 'Teste', clienteId: 1, clienteNome: 'Clínica teste' }), update: async () => {} }, contaReceber: { create: async ({ data }) => ({ id: 1, ...data }) } })
       events.push('commit'); return result
     } } },
     '@/lib/auth-utils': { requireUser: async () => ({ id: 1, email: 'test@example.invalid' }) },

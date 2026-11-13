@@ -4,6 +4,7 @@ import { prisma } from '@labgest/database'
 import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
+import { concluirEntregaInterna, type EntregaInternaInput } from '@/lib/entrega-interna-recepcao'
 import { requireRecepcao } from '@/lib/auth-utils'
 
 export type SituacaoLogistica =
@@ -21,6 +22,7 @@ export type FinalidadeClinica = 'prova' | 'instalacao' | 'entrega'
 export interface OrdemRecepcao {
   origem: 'interno' | 'externo'
   externo?: { revisao: string; version: number }
+  interno?: { atualizadoEm: string | null }
   id: number
   paciente: string
   clinica: string
@@ -84,6 +86,7 @@ export async function getPainelRecepcao() {
       },
       select: {
         id: true,
+        updatedAt: true,
         nomePaciente: true,
         clienteNome: true,
         servicoNome: true,
@@ -117,6 +120,7 @@ export async function getPainelRecepcao() {
     const ciclo = ordem.ciclos[0]
     return {
       origem: 'interno',
+      interno: { atualizadoEm: ordem.updatedAt?.toISOString() || null },
       id: ordem.id,
       paciente: ordem.nomePaciente,
       clinica: ordem.clienteNome,
@@ -332,8 +336,12 @@ export async function receberDoDentista(ordemId: number) {
   })
   const aguardandoResposta = finalidadeEfetiva(ordem.finalidadeClinica, ordem.status) === 'prova' && !ciclo?.decisao
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'recepcao',
       situacaoLogistica: aguardandoResposta ? 'aguardando_resultado_dentista' : 'aguardando_envio_laboratorio',
@@ -343,6 +351,7 @@ export async function receberDoDentista(ordemId: number) {
       }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true, aguardandoResposta }
 }
@@ -360,8 +369,12 @@ export async function enviarRetornoLaboratorio(ordemId: number) {
   }
 
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'em_transito_laboratorio',
       situacaoLogistica: 'em_transito_laboratorio',
@@ -369,6 +382,7 @@ export async function enviarRetornoLaboratorio(ordemId: number) {
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'enviou_retorno_laboratorio', usuario, { local: 'Laboratório' }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true }
 }
@@ -383,8 +397,12 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
   if (situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'em_transito_laboratorio') return { success: false, error: 'O trabalho não está em trânsito para o laboratório.' }
 
   const agora = new Date()
-  await prisma.ordem.update({
-    where: { id: ordemId },
+  const resultado = await prisma.ordem.updateMany({
+    where: {
+      id: ordemId, status: ordem.status, situacaoLogistica: ordem.situacaoLogistica,
+      localizacaoAtual: ordem.localizacaoAtual,
+      historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull },
+    },
     data: {
       localizacaoAtual: 'laboratorio',
       situacaoLogistica: 'no_laboratorio',
@@ -392,6 +410,22 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_laboratorio', usuario, { local: 'Laboratório' }),
     },
   })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
   return { success: true }
+}
+
+// Physical delivery only. The normal production flow has already generated billing.
+export async function registrarEntregaInternaRecepcao(input: EntregaInternaInput) {
+  const usuario = await requireRecepcao()
+  try {
+    const resultado = await concluirEntregaInterna(prisma, input, usuario, new Date())
+    revalidarRecepcao()
+    revalidatePath('/financeiro')
+    return { success: true, entregueEm: resultado.entregueEm }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    const known = /^(Dados inválidos para registrar a entrega\.|Ordem não encontrada\.|A ordem foi alterada\.|Finalize a produção|Há inconsistências na cobrança|Esta OS está sem cobrança\.)/
+    return { success: false, error: known.test(message) ? message : 'Não foi possível registrar a entrega. Atualize a página e confira antes de tentar novamente.' }
+  }
 }

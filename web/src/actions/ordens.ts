@@ -677,6 +677,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
     }
 
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ordens WHERE id = ${ordemId} FOR UPDATE`
       const ordem = await tx.ordem.findUnique({
         where: { id: ordemId },
         include: {

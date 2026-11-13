@@ -34,6 +34,7 @@ import {
   enviarRetornoLaboratorio,
   receberDoDentista,
   registrarNoLaboratorio,
+  registrarEntregaInternaRecepcao,
   type FinalidadeClinica,
   type OrdemRecepcao,
   type SituacaoLogistica,
@@ -248,6 +249,11 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
       {item.decisaoDentista ? <p className={`mt-3 rounded-lg p-2 text-xs font-semibold ${item.decisaoDentista === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{item.decisaoDentista === 'aprovado' ? 'Prova aprovada pelo dentista' : `Ajuste solicitado: ${item.observacaoDentista || 'sem observação'}`}</p> : null}
       {item.origem === 'externo' ? <AcoesExternas item={item} disabled={disabled} onDistribuir={onDistribuir} onExecutar={onExecutar} /> :
       <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {item.status === 'Finalizado' ? <Button size="sm" disabled={disabled} onClick={() => {
+          if (window.confirm(`Confirma que este trabalho já foi entregue ao paciente?\nOS #${item.id} · ${item.paciente}\nA OS será marcada como Entregue e sairá da fila. A cobrança existente e os pagamentos serão preservados. Se a cobrança estiver ausente ou inconsistente, a entrega não será registrada e será necessário pedir à administração para conferir. Isso não registra pagamento.`)) {
+            onExecutar(() => registrarEntregaInternaRecepcao({ ordemId: item.id, expectedUpdatedAt: item.interno?.atualizadoEm ?? null }), 'Entrega ao paciente registrada. Cobrança conferida, sem registrar pagamento.')
+          }
+        }}><PackageCheck className="h-4 w-4" />Registrar entrega ao paciente</Button> : null}
         {item.situacao === 'no_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => enviarParaRecepcao(item.id), 'Envio para a recepção registrado.')} disabled={disabled}><Send className="h-4 w-4" />Enviar à recepção</Button> : null}
         {['aguardando_recepcao', 'no_laboratorio'].includes(item.situacao) ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
         {item.situacao === 'aguardando_distribuicao' ? <Button size="sm" onClick={onDistribuir} disabled={disabled}><UserRoundCheck className="h-4 w-4" />Entregar ao dentista</Button> : null}
