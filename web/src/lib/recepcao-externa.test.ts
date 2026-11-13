@@ -80,3 +80,41 @@ test('conferência no laboratório recusa versão antiga', () => {
   assert.throws(() => transicionarExterno({ situacao: 'aguardando_distribuicao', version: 3, dentista: null, finalidade: null },
     { acao: 'registrar_no_laboratorio', expectedVersion: 2 }), /alterado/)
 })
+
+test('agendamento explícito preserva custódia, versão e retorno encerra o agendamento', () => {
+  const original = { situacao: 'aguardando_distribuicao' as const, version: 1, dentista: 'Responsável físico', finalidade: 'prova' as const, agendamento_confirmado: false, agendamento_em: null, agendamento_dentista: null }
+  const scheduled = transicionarExterno(original, { acao: 'agendar', expectedVersion: 1 })
+  assert.equal(scheduled.situacao, original.situacao)
+  assert.equal(scheduled.dentista, original.dentista)
+  assert.equal(scheduled.agendamento_confirmado, true)
+  assert.throws(() => transicionarExterno(scheduled, { acao: 'agendar', expectedVersion: 1 }))
+  const distributed = transicionarExterno(scheduled, { acao: 'distribuir', expectedVersion: 2, dentista: 'Físico', finalidade: 'prova' })
+  const returned = transicionarExterno(distributed, { acao: 'receber_retorno', expectedVersion: 3 })
+  assert.equal(returned.agendamento_confirmado, false)
+  assert.throws(() => transicionarExterno(returned, { acao: 'cancelar_agendamento', expectedVersion: 4 }))
+})
+test('não cria custódia fictícia para agendar trabalho não recebido', () => {
+  assert.throws(() => transicionarExterno(null, { acao: 'agendar', expectedVersion: 0 }))
+})
+test('retorno direto da recepção encerra agendamento sem criar custódia de dentista', () => {
+  const atual = { situacao: 'aguardando_distribuicao' as const, version: 1, dentista: null, finalidade: null, agendamento_confirmado: true, agendamento_em: null, agendamento_dentista: null }
+  const next = transicionarExterno(atual, { acao: 'enviar_retorno', expectedVersion: 1 })
+  assert.equal(next.situacao, 'em_transito_laboratorio')
+  assert.equal(next.agendamento_confirmado, false)
+  assert.equal(next.dentista, null)
+})
+test('localizar no laboratório encerra agendamento', () => {
+  const atual = { situacao: 'aguardando_distribuicao' as const, version: 1, dentista: null, finalidade: null, agendamento_confirmado: true, agendamento_em: null, agendamento_dentista: null }
+  assert.equal(transicionarExterno(atual, { acao: 'registrar_no_laboratorio', expectedVersion: 1 }).agendamento_confirmado, false)
+})
+test('edição e cancelamento externos preservam custódia e dado histórico, recusando repetição', () => {
+  const initial = { situacao: 'aguardando_distribuicao' as const, version: 1, dentista: 'Físico', finalidade: 'prova' as const, agendamento_confirmado: true, agendamento_em: new Date('2020-01-01T00:00:00Z'), agendamento_dentista: 'Anterior' }
+  const edited = transicionarExterno(initial, { acao: 'agendar', expectedVersion: 1, dentista: 'Novo', agendamento: '2026-11-15T12:00:00Z' })
+  assert.equal(edited.agendamento_dentista, 'Novo')
+  assert.equal(edited.dentista, 'Físico')
+  const canceled = transicionarExterno(edited, { acao: 'cancelar_agendamento', expectedVersion: 2 })
+  assert.equal(canceled.agendamento_confirmado, false)
+  assert.equal(canceled.agendamento_dentista, 'Novo')
+  assert.equal(canceled.agendamento_em?.toISOString(), '2026-11-15T12:00:00.000Z')
+  assert.throws(() => transicionarExterno(canceled, { acao: 'cancelar_agendamento', expectedVersion: 3 }))
+})

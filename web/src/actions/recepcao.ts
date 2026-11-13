@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { concluirEntregaInterna, type EntregaInternaInput } from '@/lib/entrega-interna-recepcao'
+import { prepararAgendamento } from '@/lib/agendamento-recepcao'
 import { requireRecepcao } from '@/lib/auth-utils'
 
 export type SituacaoLogistica =
@@ -34,6 +35,8 @@ export interface OrdemRecepcao {
   dentista: string
   finalidade: FinalidadeClinica | null
   agendamento: string | null
+  agendamentoConfirmado: boolean
+  agendamentoDentista: string | null
   movimentadoEm: string | null
   entregaPrevista: string
   decisaoDentista: string | null
@@ -98,6 +101,8 @@ export async function getPainelRecepcao() {
         dentistaResponsavel: true,
         finalidadeClinica: true,
         agendamentoClinico: true,
+        agendamentoConfirmado: true,
+        agendamentoDentista: true,
         movimentacaoLogisticaEm: true,
         dataEntrega: true,
         ciclos: {
@@ -132,6 +137,8 @@ export async function getPainelRecepcao() {
       dentista: ordem.dentistaResponsavel || '',
       finalidade: finalidadeEfetiva(ordem.finalidadeClinica, ordem.status),
       agendamento: ordem.agendamentoClinico?.toISOString() || null,
+      agendamentoConfirmado: ordem.agendamentoConfirmado,
+      agendamentoDentista: ordem.agendamentoDentista,
       movimentadoEm: ordem.movimentacaoLogisticaEm?.toISOString() || null,
       entregaPrevista: ordem.dataEntrega.toISOString(),
       decisaoDentista: ciclo?.decisao || null,
@@ -149,7 +156,7 @@ export async function getPainelRecepcao() {
       etapa: p.situacao_pedido, status: p.situacao_pedido,
       localizacao: p.situacao || 'Não confirmada', situacao: p.situacao || 'conferir_recebimento',
       dentista: p.dentista || '', finalidade: p.finalidade || null,
-      agendamento: null, movimentadoEm: p.movimentado_em?.toISOString() || null,
+      agendamento: p.agendamento_em?.toISOString() || null, agendamentoConfirmado: p.agendamento_confirmado ?? false, agendamentoDentista: p.agendamento_dentista, movimentadoEm: p.movimentado_em?.toISOString() || null,
       entregaPrevista: p.prazo?.toISOString() || '', decisaoDentista: null, observacaoDentista: null,
     })))
   } catch {
@@ -266,8 +273,9 @@ export async function registrarNoLaboratorio(input: {
     },
     data: {
       localizacaoAtual: 'laboratorio', situacaoLogistica: 'no_laboratorio', movimentacaoLogisticaEm: new Date(),
+      agendamentoConfirmado: false,
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'registrou_no_laboratorio', usuario, {
-        local: 'Laboratório', localAnterior: ordem.localizacaoAtual, situacaoAnterior: situacao,
+        local: 'Laboratório', localAnterior: ordem.localizacaoAtual, situacaoAnterior: situacao, agendamentoEncerrado: ordem.agendamentoConfirmado ? 'sim' : 'não',
         observacao: 'Localização física conferida pela recepção. Não registra entrega nem altera a etapa clínica.',
       }),
     },
@@ -295,8 +303,6 @@ export async function distribuirParaDentista(data: {
   if (!['aguardando_distribuicao', 'com_dentista'].includes(situacao)) return { success: false, error: 'O trabalho precisa estar na recepção antes da distribuição.' }
   if (corrigindo && !data.observacao?.trim()) return { success: false, error: 'Informe o motivo da correção da distribuição.' }
 
-  const agendamento = data.agendamento ? new Date(data.agendamento) : null
-  if (agendamento && Number.isNaN(agendamento.getTime())) return { success: false, error: 'Informe um agendamento válido.' }
   const agora = new Date()
   const resultado = await prisma.ordem.updateMany({
     where: {
@@ -309,7 +315,7 @@ export async function distribuirParaDentista(data: {
       situacaoLogistica: 'com_dentista',
       dentistaResponsavel: dentista,
       finalidadeClinica: data.finalidade,
-      agendamentoClinico: agendamento,
+      // Physical distribution must not overwrite appointment data.
       movimentacaoLogisticaEm: agora,
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, corrigindo ? 'corrigiu_distribuicao' : 'entregou_dentista', usuario, {
         dentista,
@@ -345,9 +351,11 @@ export async function receberDoDentista(ordemId: number) {
     data: {
       localizacaoAtual: 'recepcao',
       situacaoLogistica: aguardandoResposta ? 'aguardando_resultado_dentista' : 'aguardando_envio_laboratorio',
+      agendamentoConfirmado: false,
       movimentacaoLogisticaEm: agora,
       historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_do_dentista', usuario, {
         dentista: ordem.dentistaResponsavel || 'Não informado',
+        agendamentoEncerrado: ordem.agendamentoConfirmado ? 'sim' : 'não',
       }),
     },
   })
@@ -428,4 +436,35 @@ export async function registrarEntregaInternaRecepcao(input: EntregaInternaInput
     const known = /^(Dados inválidos para registrar a entrega\.|Ordem não encontrada\.|A ordem foi alterada\.|Finalize a produção|Há inconsistências na cobrança|Esta OS está sem cobrança\.)/
     return { success: false, error: known.test(message) ? message : 'Não foi possível registrar a entrega. Atualize a página e confira antes de tentar novamente.' }
   }
+}
+
+// Scheduling is independent from the physical custody and clinical workflow.
+export async function registrarAgendamentoInternoRecepcao(input: { ordemId: number; expectedUpdatedAt: string | null; agendado: boolean; dentista?: string; agendamento?: string }) {
+  const usuario = await requireRecepcao()
+  let dados: ReturnType<typeof prepararAgendamento>
+  try { dados = prepararAgendamento(input.agendado, input.dentista, input.agendamento) } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Dados inválidos.' } }
+  const ordem = await carregarOrdem(input.ordemId)
+  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
+  if ((ordem.updatedAt?.toISOString() || null) !== input.expectedUpdatedAt) return { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página e reabra o agendamento.' }
+  if (dados.confirmado && !['aguardando_distribuicao', 'com_dentista'].includes(situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm))) return { success: false, error: 'O trabalho precisa estar na recepção ou com o dentista.' }
+  if (!dados.confirmado && !ordem.agendamentoConfirmado) return { success: false, error: 'Não há agendamento ativo para cancelar.' }
+  const resultado = await prisma.ordem.updateMany({
+    where: { id: ordem.id, updatedAt: ordem.updatedAt, status: ordem.status, historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull } },
+    data: { agendamentoConfirmado: dados.confirmado, ...(dados.confirmado ? { agendamentoClinico: dados.data, agendamentoDentista: dados.dentista } : {}),
+      historicoEtapas: eventoHistorico(ordem.historicoEtapas, dados.confirmado ? 'agendou_recepcao' : 'cancelou_agendamento_recepcao', usuario, { dentista: dados.dentista || '', agendamento: dados.data?.toISOString() || '', agendamentoConfirmadoAnterior: ordem.agendamentoConfirmado ? 'sim' : 'não', agendamentoAnterior: ordem.agendamentoClinico?.toISOString() || '', dentistaAgendamentoAnterior: ordem.agendamentoDentista || '' }) },
+  })
+  if (resultado.count !== 1) return { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página e reabra o agendamento.' }
+  revalidarRecepcao()
+  return { success: true }
+}
+
+export async function retornarAgendadoDaRecepcao(input: { ordemId: number; expectedUpdatedAt: string | null }) {
+  const usuario = await requireRecepcao()
+  const ordem = await carregarOrdem(input.ordemId)
+  if (!ordem || !ordem.agendamentoConfirmado || situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'aguardando_distribuicao') return { success: false, error: 'Este retorno não está disponível.' }
+  if ((ordem.updatedAt?.toISOString() || null) !== input.expectedUpdatedAt) return { success: false, error: 'O trabalho foi alterado. Atualize a página.' }
+  const resultado = await prisma.ordem.updateMany({ where: { id: ordem.id, updatedAt: ordem.updatedAt, status: ordem.status, historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull } }, data: { localizacaoAtual: 'em_transito_laboratorio', situacaoLogistica: 'em_transito_laboratorio', movimentacaoLogisticaEm: new Date(), agendamentoConfirmado: false, historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'retornou_agendado_recepcao', usuario, { agendamentoEncerrado: 'sim', observacao: 'Retorno físico sem decisão clínica.' }) } })
+  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página.' }
+  revalidarRecepcao()
+  return { success: true }
 }

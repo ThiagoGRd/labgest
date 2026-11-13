@@ -34,3 +34,8 @@ export async function registrarEntregaExternaRecepcao(input: EntregaExternaRecep
       error: known.test(message) ? message : 'Não foi possível registrar a entrega externa. Atualize e confira antes de tentar novamente.' }
   }
 }
+
+export async function registrarAgendamentoExternoRecepcao(input: { origem: 'externo'; id: number; expectedRevision: string; expectedVersion: number; agendado: boolean; dentista?: string; agendamento?: string }) {
+  if (!input || typeof input.agendado !== 'boolean') return { success: false, error: 'Dados de agendamento inválidos.' }
+  return movimentarRecepcaoExterna({ ...input, acao: input.agendado ? 'agendar' : 'cancelar_agendamento' })
+}

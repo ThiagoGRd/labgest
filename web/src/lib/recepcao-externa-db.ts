@@ -11,6 +11,7 @@ export interface LinhaExterna {
   servico: string | null; prazo: Date | null; situacao_pedido: string; revisao: string
   situacao: CustodiaExterna['situacao'] | null; version: number | null
   dentista: string | null; finalidade: CustodiaExterna['finalidade']; movimentado_em: Date | null
+  agendamento_confirmado: boolean | null; agendamento_em: Date | null; agendamento_dentista: string | null
 }
 export async function capacidadeRecepcaoExterna(db: ArchiveQuery) {
   const [tables] = await db.$queryRaw<Array<{ count: number }>>`
@@ -45,7 +46,7 @@ export async function consultarCustodiaExterna(db: ArchiveQuery) {
   const rows = await db.$queryRaw<LinhaExterna[]>`
     SELECT p.id, p.lab_nome, p.paciente, p.dentista AS dentista_pedido, p.servico, p.prazo,
       p.situacao AS situacao_pedido, md5(to_jsonb(p)::text) AS revisao,
-      s.situacao, s.version, s.dentista, s.finalidade, s.movimentado_em
+      s.situacao, s.version, s.dentista, s.finalidade, s.movimentado_em, s.agendamento_confirmado, s.agendamento_em, s.agendamento_dentista
     FROM public.labs_externos_pedidos p
     LEFT JOIN labgest_private.external_reception_state s ON s.pedido_id = p.id
     WHERE p.situacao IN ('Enviado', 'Provando', 'Pronto')
@@ -70,14 +71,16 @@ export async function movimentarCustodiaExterna(db: ArchiveDatabase, input: Coma
     const archive = await estadosArquivamento(tx)
     if (!estadoInicialExterno(order.situacao, archive.states.some(s => Number(s.pedido_id) === input.id && s.archived))) throw new Error('Pedido encerrado ou arquivado.')
     const [previous] = await tx.$queryRaw<CustodiaExterna[]>`
-      SELECT situacao, version, dentista, finalidade FROM labgest_private.external_reception_state WHERE pedido_id = ${input.id}
+      SELECT situacao, version, dentista, finalidade, agendamento_confirmado, agendamento_em, agendamento_dentista FROM labgest_private.external_reception_state WHERE pedido_id = ${input.id}
     `
     const next = transicionarExterno(previous ?? null, input)
     await tx.$executeRaw`
-      INSERT INTO labgest_private.external_reception_state (pedido_id, situacao, version, dentista, finalidade, movimentado_em)
-      VALUES (${input.id}, ${next.situacao}, ${next.version}, ${next.dentista}, ${next.finalidade}, clock_timestamp())
+      INSERT INTO labgest_private.external_reception_state (pedido_id, situacao, version, dentista, finalidade, movimentado_em, agendamento_confirmado, agendamento_em, agendamento_dentista)
+      VALUES (${input.id}, ${next.situacao}, ${next.version}, ${next.dentista}, ${next.finalidade}, clock_timestamp(), ${next.agendamento_confirmado ?? false}, ${next.agendamento_em ?? null}, ${next.agendamento_dentista ?? null})
       ON CONFLICT (pedido_id) DO UPDATE SET situacao = EXCLUDED.situacao, version = EXCLUDED.version,
-        dentista = EXCLUDED.dentista, finalidade = EXCLUDED.finalidade, movimentado_em = EXCLUDED.movimentado_em
+        dentista = EXCLUDED.dentista, finalidade = EXCLUDED.finalidade,
+        movimentado_em = CASE WHEN ${input.acao} IN ('agendar', 'cancelar_agendamento') THEN labgest_private.external_reception_state.movimentado_em ELSE EXCLUDED.movimentado_em END,
+        agendamento_confirmado = EXCLUDED.agendamento_confirmado, agendamento_em = EXCLUDED.agendamento_em, agendamento_dentista = EXCLUDED.agendamento_dentista
     `
     await tx.$executeRaw`
       INSERT INTO labgest_private.external_reception_event

@@ -17,9 +17,9 @@ function loader(overrides = {}) {
     assert.ok(file, name)
     if (cache.has(file)) return cache.get(file)
     const exports = {}; cache.set(file, exports)
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + (file.endsWith('/recepcao-view.tsx') ? '\nexport { AcoesExternas as testAcoesExternas, TrabalhoCard as testTrabalhoCard };' : ''), { compilerOptions: {
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + (file.endsWith('/recepcao-view.tsx') ? '\nexport { AcoesExternas as testAcoesExternas, TrabalhoCard as testTrabalhoCard, pertenceFiltro as testPertenceFiltro, AgendamentoModal as testAgendamentoModal };' : ''), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
-    } }).outputText, { exports, require: dep => load(dep, file), Date, Intl, Set, console, window: overrides.__window, process: { env: {} } }, { filename: file })
+    } }).outputText, { exports, require: dep => load(dep, file), Date, Intl, Set, Error, console, window: overrides.__window, process: { env: {} } }, { filename: file })
     return exports
   }
   return load
@@ -58,7 +58,7 @@ test('reception can record lab location without changing clinical state and keep
   assert.equal(f.writes.length, 1)
   const { where, data } = f.writes[0]
   assert.equal(data.situacaoLogistica, 'no_laboratorio'); assert.equal(data.localizacaoAtual, 'laboratorio')
-  assert.deepEqual(Object.keys(data).sort(), ['historicoEtapas', 'localizacaoAtual', 'movimentacaoLogisticaEm', 'situacaoLogistica'])
+  assert.deepEqual(Object.keys(data).sort(), ['agendamentoConfirmado', 'historicoEtapas', 'localizacaoAtual', 'movimentacaoLogisticaEm', 'situacaoLogistica'])
   assert.equal(data.historicoEtapas.length, 2); assert.equal(data.historicoEtapas[0].acao, 'recebeu_recepcao')
   assert.equal(data.historicoEtapas[1].acao, 'registrou_no_laboratorio')
   assert.equal(data.historicoEtapas[1].por, 'test@example.invalid')
@@ -212,5 +212,138 @@ test('remaining custody actions refuse stale writes after an internal delivery',
     assert.equal(f.invalidations.length, 0)
     assert.ok(f.writes[0].where.historicoEtapas)
     assert.equal(f.writes[0].where.status, 'Finalizado')
+  }
+})
+
+test('internal scheduling explicitly sets, edits and cancels without physical or financial changes', async () => {
+  const timestamp = new Date('2026-11-13T10:00:00Z')
+  const record = { ...base, updatedAt: timestamp, agendamentoConfirmado: false, agendamentoClinico: new Date('2020-01-01'), agendamentoDentista: null }
+  for (const [active, input] of [[false, { agendado: true }], [true, { agendado: true, dentista: 'Dra Teste', agendamento: '2026-11-15T12:00:00Z' }], [true, { agendado: false }]]) {
+    const f = actionsFixture({ ...record, agendamentoConfirmado: active })
+    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), ...input })
+    assert.equal(result.success, true)
+    const { where, data } = f.writes[0]
+    assert.equal(where.updatedAt, timestamp)
+    assert.equal(data.agendamentoConfirmado, input.agendado)
+    assert.equal(data.historicoEtapas[0].acao, 'recebeu_recepcao')
+    assert.equal(data.historicoEtapas[1].acao, input.agendado ? 'agendou_recepcao' : 'cancelou_agendamento_recepcao')
+    assert.ok(!('localizacaoAtual' in data) && !('situacaoLogistica' in data) && !('status' in data))
+    if (!input.agendado) assert.ok(!('agendamentoClinico' in data))
+  }
+})
+test('internal scheduling rejects stale, repeated cancel and concurrent modification', async () => {
+  const timestamp = new Date('2026-11-13T10:00:00Z')
+  const record = { ...base, updatedAt: timestamp, agendamentoConfirmado: false }
+  let f = actionsFixture(record)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: null, agendado: true })).success, false)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), agendado: false })).success, false)
+  assert.equal(f.writes.length, 0)
+  f = actionsFixture(record, 0)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), agendado: true })).success, false)
+  assert.equal(f.invalidations.length, 0)
+})
+test('legacy historical date is not an active appointment; legacy custody remains visible', () => {
+  const html = view([{ ...row, situacao: 'com_dentista', agendamento: '2020-01-01T12:00:00Z', agendamentoConfirmado: false }])
+  assert.match(html, /Histórico não confirmado/)
+  assert.match(html, /Custódia registrada com dentista/)
+  assert.match(html, /Agendamento realizado/)
+})
+test('direct scheduled return from reception changes custody only, closes schedule and checks revision', async () => {
+  const updatedAt = new Date('2026-11-13T10:00:00Z')
+  const f = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: true })
+  const result = await f.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedUpdatedAt: updatedAt.toISOString() })
+  assert.equal(result.success, true)
+  const { where, data } = f.writes[0]
+  assert.equal(where.updatedAt, updatedAt)
+  assert.equal(data.agendamentoConfirmado, false)
+  assert.equal(data.situacaoLogistica, 'em_transito_laboratorio')
+  assert.equal(data.historicoEtapas[1].agendamentoEncerrado, 'sim')
+  assert.ok(!('status' in data) && !('finalidadeClinica' in data))
+  const stale = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: true })
+  assert.equal((await stale.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedUpdatedAt: null })).success, false)
+  assert.equal(stale.writes.length, 0)
+})
+test('scheduling audit retains previous flag, historical date and scheduling dentist', async () => {
+  const updatedAt = new Date('2026-11-13T10:00:00Z')
+  const f = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false, agendamentoClinico: new Date('2020-01-01T12:00:00Z'), agendamentoDentista: 'Anterior' })
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: updatedAt.toISOString(), agendado: true })).success, true)
+  const event = f.writes[0].data.historicoEtapas[1]
+  assert.equal(event.agendamentoAnterior, '2020-01-01T12:00:00.000Z')
+  assert.equal(event.dentistaAgendamentoAnterior, 'Anterior')
+  assert.equal(event.agendamentoConfirmadoAnterior, 'não')
+})
+test('scheduling filters follow flag independently of custody and legacy dates', () => {
+  const mod = loader({ '@/actions/recepcao': {}, '@/actions/recepcao-externa': {} })('@/app/(dashboard)/recepcao/recepcao-view')
+  const filter = mod.testPertenceFiltro
+  const scheduled = { ...row, situacao: 'aguardando_distribuicao', agendamentoConfirmado: true }
+  assert.equal(filter(scheduled, 'dentista'), true)
+  assert.equal(filter(scheduled, 'recepcao'), false)
+  assert.equal(filter({ ...scheduled, agendamentoConfirmado: false }, 'recepcao'), true)
+  const legacy = { ...row, situacao: 'com_dentista', agendamento: '2020-01-01', agendamentoConfirmado: false }
+  assert.equal(filter(legacy, 'todos'), true)
+  assert.equal(filter(legacy, 'dentista'), false)
+})
+test('new appointment modal starts empty despite historical date, optional submit and close do not invent data', () => {
+  const captured = []
+  const fakeReact = { ...React, useState: initial => [initial, () => {}] }
+  const mod = loader({ react: fakeReact, '@/actions/recepcao': {}, '@/actions/recepcao-externa': {}, '@/components/ui/modal': { Modal: () => null } })('@/app/(dashboard)/recepcao/recepcao-view')
+  const modal = mod.testAgendamentoModal({ item: { ...row, situacao: 'aguardando_distribuicao', agendamento: '2020-01-01T12:00:00Z', agendamentoConfirmado: false }, disabled: false, onClose: () => captured.push('close'), onConfirm: (...args) => captured.push(args) })
+  const form = modal.props.children
+  const children = form.props.children
+  assert.equal(children[1].props.children[1].props.value, '')
+  assert.equal(children[2].props.children[1].props.value, '')
+  form.props.onSubmit({ preventDefault() {} })
+  assert.deepEqual(captured[0], [true, '', undefined])
+  children[3].props.children[0].props.onClick()
+  assert.equal(captured[1], 'close')
+})
+test('cancel confirmation aborts without action, confirms once when accepted, and disabled submission does nothing', () => {
+  const calls = []
+  let accepted = false
+  const fakeReact = { ...React, useState: initial => [initial, () => {}] }
+  const mod = loader({ react: fakeReact, __window: { confirm: () => accepted }, '@/actions/recepcao': {}, '@/actions/recepcao-externa': {}, '@/components/ui/modal': { Modal: () => null } })('@/app/(dashboard)/recepcao/recepcao-view')
+  const props = { item: { ...row, situacao: 'aguardando_distribuicao', agendamentoConfirmado: true, agendamentoDentista: null }, disabled: false, onClose: () => {}, onConfirm: (...args) => calls.push(args) }
+  const form = mod.testAgendamentoModal(props).props.children
+  const cancel = form.props.children[3].props.children[1]
+  cancel.props.onClick(); assert.equal(calls.length, 0)
+  accepted = true; cancel.props.onClick(); assert.deepEqual(calls[0], [false])
+  const disabledForm = mod.testAgendamentoModal({ ...props, disabled: true }).props.children
+  disabledForm.props.onSubmit({ preventDefault() {} }); assert.equal(calls.length, 1)
+})
+test('stale scheduling returns structured conflict before or during conditional update', async () => {
+  const updatedAt = new Date('2026-11-13T10:00:00Z')
+  for (const [f, expected] of [[actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }), null], [actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }, 0), updatedAt.toISOString()]]) {
+    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: expected, agendado: true })
+    assert.equal(result.code, 'CONFLICT')
+  }
+})
+test('real view closes stale scheduling modal on conflict, refreshes, and reopen uses refreshed revision', async () => {
+  let hooks=[], index=0, pending, refreshes=0; const calls=[]
+  const fakeReact={...React,useState:init=>{const i=index++; if (!(i in hooks)) hooks[i]=init; return [hooks[i],v=>{hooks[i]=v}]}, useRef:init=>{const i=index++;if(!(i in hooks))hooks[i]={current:init};return hooks[i]}, useTransition:()=>[false,fn=>{pending=fn()}]}
+  let result={success:false,code:'CONFLICT',error:'Atualize'}
+  const mod=loader({react:fakeReact,'next/navigation':{useRouter:()=>({refresh:()=>refreshes++})},'sonner':{toast:{error:()=>{},success:()=>{}}},'@/actions/recepcao':{registrarAgendamentoInternoRecepcao:async x=>{calls.push(x);return result}},'@/actions/recepcao-externa':{}})('@/app/(dashboard)/recepcao/recepcao-view')
+  const old={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'old'}}
+  function render(item){index=0;return mod.RecepcaoView({itens:[item],dentistas:[],emitidoEm:'2026-11-13T12:00:00Z',externosDisponiveis:true,usuario:{nome:'T',email:'t',tipo:'recepcao'}})}
+  function find(el,name){if(!el||typeof el!=='object')return; if(typeof el.type==='function'&&el.type.name===name)return el; const c=el.props?.children;for(const v of Array.isArray(c)?c:[c]){const x=find(v,name);if(x)return x}}
+  find(render(old),'TrabalhoCard').props.onAgendar(); let modal=find(render(old),'AgendamentoModal'); assert.ok(modal)
+  modal.props.onConfirm(true,'',''); await pending; assert.equal(calls[0].expectedUpdatedAt,'old'); assert.equal(refreshes,1)
+  const fresh={...old,interno:{atualizadoEm:'new'}}; assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
+  find(render(fresh),'TrabalhoCard').props.onAgendar(); modal=find(render(fresh),'AgendamentoModal'); result={success:true}; modal.props.onConfirm(true,'',''); await pending
+  assert.equal(calls[1].expectedUpdatedAt,'new'); assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
+})
+test('rapid repeated scheduling submits dispatch only one request before rerender', async () => {
+  let hooks=[], index=0, pending, release, calls=0; const wait=new Promise(r=>release=r)
+  const fakeReact={...React,useState:init=>{const i=index++;if(!(i in hooks))hooks[i]=init;return [hooks[i],v=>{hooks[i]=v}]},useRef:init=>{const i=index++;if(!(i in hooks))hooks[i]={current:init};return hooks[i]},useTransition:()=>[false,fn=>{pending=fn()}]}
+  const mod=loader({react:fakeReact,'next/navigation':{useRouter:()=>({refresh:()=>{}})},'sonner':{toast:{error:()=>{},success:()=>{}}},'@/actions/recepcao':{registrarAgendamentoInternoRecepcao:async()=>{calls++;await wait;return {success:true}}},'@/actions/recepcao-externa':{}})('@/app/(dashboard)/recepcao/recepcao-view')
+  const item={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'old'}}
+  function render(){index=0;return mod.RecepcaoView({itens:[item],dentistas:[],emitidoEm:'2026-11-13T12:00:00Z',externosDisponiveis:true,usuario:{nome:'T',email:'t',tipo:'recepcao'}})}
+  function find(el,name){if(!el||typeof el!=='object')return;if(typeof el.type==='function'&&el.type.name===name)return el;const c=el.props?.children;for(const v of Array.isArray(c)?c:[c]){const x=find(v,name);if(x)return x}}
+  find(render(),'TrabalhoCard').props.onAgendar(); const modal=find(render(),'AgendamentoModal'); modal.props.onConfirm(true,'',''); const first=pending; modal.props.onConfirm(true,'',''); assert.equal(calls,1);release();await first
+})
+test('external scheduling surfaces revision and version conflicts as structured conflict', async () => {
+  for (const message of ['O pedido foi alterado. Atualize a página.', 'O registro foi alterado. Atualize a página.']) {
+    const actions=loader({'@labgest/database':{prisma:{}},'@/lib/auth-utils':{requireRecepcao:async()=>({id:1,nome:'Teste'})},'next/cache':{revalidatePath:()=>{}},'@/lib/recepcao-externa-db':{movimentarCustodiaExterna:async()=>{throw Error(message)}}})('@/actions/recepcao-externa')
+    const result=await actions.registrarAgendamentoExternoRecepcao({origem:'externo',id:1,expectedRevision:'a'.repeat(32),expectedVersion:1,agendado:true})
+    assert.equal(result.code,'CONFLICT')
   }
 })

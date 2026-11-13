@@ -110,6 +110,8 @@ model Ordem {
   dentistaResponsavel                                    String?         @map("dentista_responsavel") @db.VarChar(255)
   finalidadeClinica                                      String?         @map("finalidade_clinica") @db.VarChar(30)
   agendamentoClinico                                     DateTime?       @map("agendamento_clinico") @db.Timestamptz(6)
+  agendamentoConfirmado                                  Boolean         @default(false) @map("agendamento_confirmado")
+  agendamentoDentista                                    String?         @map("agendamento_dentista") @db.VarChar(255)
   movimentacaoLogisticaEm                               DateTime?       @map("movimentacao_logistica_em") @db.Timestamptz(6)
   workflowTipo                                           String?         @default("simples") @map("workflow_tipo") @db.VarChar(20)
   ciclo_id_atual                                         Int?

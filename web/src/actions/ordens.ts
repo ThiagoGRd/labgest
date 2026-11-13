@@ -303,6 +303,7 @@ export async function updateOrdem(id: number, data: {
       : statusParaEtapa(etapaCanonica)
 
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${id} FOR UPDATE`
       const ordemAtual = await tx.ordem.findUnique({ where: { id }, select: { status: true, etapaAtual: true, historicoEtapas: true } })
       if (!ordemAtual) return { success: false as const, error: 'Ordem não encontrada' }
       if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordemAtual.status || '')) {
@@ -543,7 +544,7 @@ export async function cancelarOrdem(id: number, motivo: string) {
   })
 
   await prisma.ordem.update({
-    where: { id },
+    where: { id, updatedAt: ordem.updatedAt },
     data: {
       status: 'Cancelado',
       motivoCancelamento: motivo.trim(),
@@ -589,6 +590,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
   try {
     console.log('[avancarEtapa] Iniciando para ordem ID:', ordemId)
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
       const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
       if (!ordem) {
         console.error('[avancarEtapa] Ordem não encontrada:', ordemId)
@@ -807,7 +809,7 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
     const progresso = getProgresso(tipoWorkflow, retorno)
 
     await prisma.ordem.update({
-      where: { id: ordemId },
+      where: { id: ordemId, updatedAt: ordem.updatedAt },
       data: {
         etapaAtual: retorno,
         tentativaAtual: novaTentativa,

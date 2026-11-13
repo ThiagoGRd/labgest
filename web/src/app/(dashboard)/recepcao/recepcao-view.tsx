@@ -1,9 +1,10 @@
 'use client'
 
-import { movimentarRecepcaoExterna, registrarEntregaExternaRecepcao } from '@/actions/recepcao-externa'
+import { movimentarRecepcaoExterna, registrarEntregaExternaRecepcao, registrarAgendamentoExternoRecepcao } from '@/actions/recepcao-externa'
 import { chaveRecepcao, type MovimentoExterno } from '@/lib/recepcao-externa'
+import { correspondeBusca, dataHoraMaceio, instanteMaceio } from '@/lib/recepcao-agenda-view'
 import { filtrarOrigem, type FiltroOrigem } from '@/lib/recepcao-filtros'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Building2,
@@ -35,6 +36,8 @@ import {
   receberDoDentista,
   registrarNoLaboratorio,
   registrarEntregaInternaRecepcao,
+  registrarAgendamentoInternoRecepcao,
+  retornarAgendadoDaRecepcao,
   type FinalidadeClinica,
   type OrdemRecepcao,
   type SituacaoLogistica,
@@ -69,8 +72,8 @@ const FINALIDADES: Record<FinalidadeClinica, string> = {
 
 function pertenceFiltro(item: OrdemRecepcao, filtro: Filtro) {
   if (filtro === 'receber') return ['aguardando_recepcao', 'conferir_recebimento'].includes(item.situacao)
-  if (filtro === 'recepcao') return ['aguardando_distribuicao', 'aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(item.situacao)
-  if (filtro === 'dentista') return item.situacao === 'com_dentista'
+  if (filtro === 'recepcao') return !item.agendamentoConfirmado && ['aguardando_distribuicao', 'aguardando_resultado_dentista', 'aguardando_envio_laboratorio'].includes(item.situacao)
+  if (filtro === 'dentista') return item.agendamentoConfirmado
   if (filtro === 'retorno') return item.situacao === 'em_transito_laboratorio'
   if (filtro === 'laboratorio') return item.situacao === 'no_laboratorio'
   return true
@@ -83,11 +86,6 @@ function formatarData(valor: string | null, comHora = false) {
     : { timeZone: 'UTC', dateStyle: 'short' })
 }
 
-function paraDataHoraLocal(valor: string | null) {
-  if (!valor) return ''
-  const data = new Date(valor)
-  return new Date(data.getTime() - data.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
 
 function horasParado(item: OrdemRecepcao, emitidoEm: string) {
   if (!item.movimentadoEm) return 0
@@ -99,6 +97,8 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
   const [origem, setOrigem] = useState<FiltroOrigem>('todos')
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [busca, setBusca] = useState('')
+  const [agendando, setAgendando] = useState<OrdemRecepcao | null>(null)
+  const agendamentoEmCurso = useRef(false)
   const [distribuindo, setDistribuindo] = useState<OrdemRecepcao | null>(null)
   const [isPending, startTransition] = useTransition()
   const recepcaoSomente = usuario.tipo === 'recepcao'
@@ -109,14 +109,14 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
     { id: 'interno', label: 'Lab interno', quantidade: filtrarOrigem(itens, 'interno').length },
     { id: 'externo', label: 'Labs externos', quantidade: filtrarOrigem(itens, 'externo').length },
   ]
-  const filtrados = itensOrigem.filter((item) => pertenceFiltro(item, filtro) && (!termo || [item.paciente, item.clinica, item.servico, item.dentista, String(item.id)].some((valor) => valor.toLocaleLowerCase('pt-BR').includes(termo))))
+  const filtrados = itensOrigem.filter((item) => pertenceFiltro(item, filtro) && (!termo || correspondeBusca(item, termo)))
   const parados = itensOrigem.filter((item) => ['aguardando_recepcao', 'aguardando_distribuicao'].includes(item.situacao) && horasParado(item, emitidoEm) >= 24).length
 
   const filtros: Array<{ id: Filtro; label: string; quantidade: number }> = [
     { id: 'todos', label: 'Todos', quantidade: itensOrigem.length },
     { id: 'receber', label: 'Receber', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'receber')).length },
     { id: 'recepcao', label: 'Na recepção', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'recepcao')).length },
-    { id: 'dentista', label: 'Com dentista', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'dentista')).length },
+    { id: 'dentista', label: 'Agendamento realizado', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'dentista')).length },
     { id: 'retorno', label: 'Retorno ao lab', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'retorno')).length },
     { id: 'laboratorio', label: 'No laboratório', quantidade: itensOrigem.filter((item) => pertenceFiltro(item, 'laboratorio')).length },
   ]
@@ -157,7 +157,7 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Resumo icon={PackageCheck} label="Receber ou conferir" valor={itensOrigem.filter((item) => pertenceFiltro(item, 'receber')).length} tone="blue" />
           <Resumo icon={MapPin} label="Na recepção" valor={itensOrigem.filter((item) => pertenceFiltro(item, 'recepcao')).length} tone="amber" />
-          <Resumo icon={Stethoscope} label="Com dentistas" valor={itensOrigem.filter((item) => item.situacao === 'com_dentista').length} tone="violet" />
+          <Resumo icon={Stethoscope} label="Agendamento realizado" valor={itensOrigem.filter((item) => item.agendamentoConfirmado).length} tone="violet" />
           <Resumo icon={Clock3} label="Parados há mais de 24h" valor={parados} tone={parados ? 'red' : 'slate'} />
         </section>
 
@@ -190,6 +190,7 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
                 recepcaoSomente={recepcaoSomente}
                 disabled={isPending}
                 onDistribuir={() => setDistribuindo(item)}
+                onAgendar={() => setAgendando(item)}
                 onExecutar={executar}
               />
             ))}
@@ -197,6 +198,21 @@ export function RecepcaoView({ itens, dentistas, emitidoEm, usuario, externosDis
         )}
       </main>
 
+      {agendando ? <AgendamentoModal item={agendando} disabled={isPending} onClose={() => setAgendando(null)} onConfirm={(agendado, dentista, agendamento) => {
+        if (agendamentoEmCurso.current) return
+        agendamentoEmCurso.current = true
+        executar(async () => {
+          try {
+            const resultado = agendando.origem === 'externo' && agendando.externo
+              ? await registrarAgendamentoExternoRecepcao({ origem: 'externo', id: agendando.id, expectedRevision: agendando.externo.revisao, expectedVersion: agendando.externo.version, agendado, dentista, agendamento })
+              : await registrarAgendamentoInternoRecepcao({ ordemId: agendando.id, expectedUpdatedAt: agendando.interno?.atualizadoEm ?? null, agendado, dentista, agendamento })
+            if (resultado.success || ('code' in resultado && resultado.code === 'CONFLICT')) setAgendando(null)
+            return resultado
+          } finally {
+            agendamentoEmCurso.current = false
+          }
+        }, agendado ? 'Agendamento salvo.' : 'Agendamento cancelado.')
+      }} /> : null}
       {distribuindo ? (
         <DistribuirModal
           item={distribuindo}
@@ -221,12 +237,13 @@ function Resumo({ icon: Icon, label, valor, tone }: { icon: typeof PackageCheck;
   return <div className="flex items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900"><div className={`rounded-xl p-2.5 ${cores[tone]}`}><Icon className="h-5 w-5" /></div><div><p className="text-2xl font-bold">{valor}</p><p className="text-xs font-semibold text-slate-500">{label}</p></div></div>
 }
 
-function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir, onExecutar }: {
+function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir, onAgendar, onExecutar }: {
   item: OrdemRecepcao
   emitidoEm: string
   recepcaoSomente: boolean
   disabled: boolean
   onDistribuir: () => void
+  onAgendar: () => void
   onExecutar: (acao: () => Promise<{ success: boolean; error?: string }>, sucesso: string) => void
 }) {
   const config = SITUACOES[item.situacao]
@@ -241,10 +258,12 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
         <p><span className="font-semibold text-slate-500">Etapa:</span> {item.etapa}</p>
         <p><span className="font-semibold text-slate-500">Finalidade:</span> {item.finalidade ? FINALIDADES[item.finalidade] : 'A definir na distribuição'}</p>
         <p><span className="font-semibold text-slate-500">Dentista:</span> {item.dentista || 'Ainda não definido'}</p>
-        <p><span className="font-semibold text-slate-500">Agendamento:</span> {formatarData(item.agendamento, true)}</p>
+        <p><span className="font-semibold text-slate-500">Agendamento:</span> {item.agendamentoConfirmado ? `Confirmado · ${formatarData(item.agendamento, true)} · ${item.agendamentoDentista || 'Dentista não informado'}` : item.agendamento ? `Histórico não confirmado · ${formatarData(item.agendamento, true)}` : 'Não confirmado'}</p>
         <p><span className="font-semibold text-slate-500">Entrega prevista:</span> {formatarData(item.entregaPrevista)}</p>
         <p className={horas >= 24 ? 'font-semibold text-red-600' : ''}><span className="font-semibold text-slate-500">Nesta situação:</span> {item.movimentadoEm ? `${Math.floor(horas)}h` : 'Histórico anterior'}</p>
       </div>
+      {item.situacao === 'com_dentista' && !item.agendamentoConfirmado ? <p className="mt-3 text-xs text-amber-700">Custódia registrada com dentista; agendamento não confirmado. Confira antes de agendar.</p> : null}
+      {(item.agendamentoConfirmado || ['aguardando_distribuicao', 'com_dentista'].includes(item.situacao)) ? <div className="mt-3 flex justify-end"><Button size="sm" variant="outline" disabled={disabled} onClick={onAgendar}>{item.agendamentoConfirmado ? 'Editar ou cancelar agendamento' : 'Registrar agendamento'}</Button></div> : null}
       {item.situacao === 'aguardando_resultado_dentista' ? <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-700">O trabalho voltou fisicamente, mas o dentista ainda precisa registrar no portal se foi aprovado ou se precisa de ajuste.</p> : null}
       {item.decisaoDentista ? <p className={`mt-3 rounded-lg p-2 text-xs font-semibold ${item.decisaoDentista === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{item.decisaoDentista === 'aprovado' ? 'Prova aprovada pelo dentista' : `Ajuste solicitado: ${item.observacaoDentista || 'sem observação'}`}</p> : null}
       {item.origem === 'externo' ? <AcoesExternas item={item} disabled={disabled} onDistribuir={onDistribuir} onExecutar={onExecutar} /> :
@@ -256,6 +275,7 @@ function TrabalhoCard({ item, emitidoEm, recepcaoSomente, disabled, onDistribuir
         }}><PackageCheck className="h-4 w-4" />Registrar entrega ao paciente</Button> : null}
         {item.situacao === 'no_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => enviarParaRecepcao(item.id), 'Envio para a recepção registrado.')} disabled={disabled}><Send className="h-4 w-4" />Enviar à recepção</Button> : null}
         {['aguardando_recepcao', 'no_laboratorio'].includes(item.situacao) ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
+        {item.situacao === 'aguardando_distribuicao' && item.agendamentoConfirmado ? <Button size="sm" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Enviar fisicamente ao laboratório sem registrar decisão clínica? O agendamento será encerrado.')) onExecutar(() => retornarAgendadoDaRecepcao({ ordemId: item.id, expectedUpdatedAt: item.interno?.atualizadoEm ?? null }), 'Retorno físico registrado.') }}>Retornar ao laboratório</Button> : null}
         {item.situacao === 'aguardando_distribuicao' ? <Button size="sm" onClick={onDistribuir} disabled={disabled}><UserRoundCheck className="h-4 w-4" />Entregar ao dentista</Button> : null}
         {item.situacao === 'com_dentista' ? <><Button size="sm" variant="outline" onClick={onDistribuir} disabled={disabled}><RefreshCw className="h-4 w-4" />Corrigir</Button><Button size="sm" onClick={() => onExecutar(() => receberDoDentista(item.id), 'Devolução do dentista registrada.')} disabled={disabled}><Undo2 className="h-4 w-4" />Receber do dentista</Button></> : null}
         {item.situacao === 'aguardando_resultado_dentista' ? <Button size="sm" variant="outline" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><RefreshCw className="h-4 w-4" />Verificar resposta</Button> : null}
@@ -288,14 +308,12 @@ function DistribuirModal({ item, dentistas, disabled, onClose, onConfirm }: {
   const corrigindo = item.situacao === 'com_dentista'
   const [dentista, setDentista] = useState(item.dentista)
   const [finalidade, setFinalidade] = useState<FinalidadeClinica>(item.finalidade || 'prova')
-  const [agendamento, setAgendamento] = useState(paraDataHoraLocal(item.agendamento))
   const [observacao, setObservacao] = useState('')
   return (
     <Modal isOpen onClose={onClose} title={corrigindo ? 'Corrigir distribuição' : 'Entregar ao dentista'} description={`${item.origem === 'externo' ? 'Externo' : 'OS'} #${item.id} · ${item.paciente}`} size="md" mobileFullscreen dismissible={!disabled}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); onConfirm({ dentista, finalidade, agendamento: agendamento ? new Date(agendamento).toISOString() : undefined, observacao: observacao || undefined }) }}>
+      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); onConfirm({ dentista, finalidade, observacao: observacao || undefined }) }}>
         <div><label htmlFor="dentista-recepcao" className="mb-1 block text-sm font-semibold">Dentista responsável *</label><Input id="dentista-recepcao" list="dentistas-recepcao" value={dentista} onChange={(event) => setDentista(event.target.value)} placeholder="Nome do dentista" required maxLength={255} /><datalist id="dentistas-recepcao">{dentistas.map((nome) => <option key={nome} value={nome} />)}</datalist></div>
         <div><label htmlFor="finalidade-recepcao" className="mb-1 block text-sm font-semibold">Finalidade *</label><select id="finalidade-recepcao" value={finalidade} onChange={(event) => setFinalidade(event.target.value as FinalidadeClinica)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="prova">Prova clínica</option><option value="instalacao">Instalação</option><option value="entrega">Entrega ao paciente</option></select></div>
-        {item.origem === 'interno' ? <div><label htmlFor="agendamento-recepcao" className="mb-1 block text-sm font-semibold">Agendamento</label><Input id="agendamento-recepcao" type="datetime-local" value={agendamento} onChange={(event) => setAgendamento(event.target.value)} /><p className="mt-1 text-xs text-slate-500">Pode ser preenchido manualmente enquanto a agenda do Clinicorp não estiver sincronizada.</p></div> : null}
         {corrigindo ? <div><label htmlFor="motivo-correcao" className="mb-1 block text-sm font-semibold">Motivo da correção *</label><textarea id="motivo-correcao" value={observacao} onChange={(event) => setObservacao(event.target.value)} required rows={3} maxLength={500} className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Explique por que a distribuição está sendo alterada." /></div> : null}
         <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={onClose} disabled={disabled}>Cancelar</Button><Button type="submit" disabled={disabled || !dentista.trim()}>{disabled ? 'Salvando...' : corrigindo ? 'Salvar correção' : <><ChevronRight className="h-4 w-4" />Confirmar entrega</>}</Button></div>
       </form>
@@ -323,9 +341,22 @@ function AcoesExternas({ item, disabled, onDistribuir, onExecutar }: {
       {['conferir_recebimento', 'em_transito_laboratorio', 'no_laboratorio'].includes(item.situacao) ? <Button disabled={disabled} onClick={() => {
         if (window.confirm('Você confirma que recebeu fisicamente este trabalho do laboratório externo?')) onExecutar(() => executarExterno(item, { acao: 'receber' }), 'Recebimento externo confirmado.')
       }}>Confirmar recebimento físico</Button> : null}
+      {item.situacao === 'aguardando_distribuicao' && item.agendamentoConfirmado ? <Button disabled={disabled} variant="outline" onClick={() => { if (window.confirm('Enviar fisicamente ao laboratório sem registrar decisão clínica? O agendamento será encerrado.')) onExecutar(() => executarExterno(item, { acao: 'enviar_retorno' }), 'Retorno físico registrado.') }}>Retornar ao laboratório</Button> : null}
       {['aguardando_distribuicao', 'com_dentista'].includes(item.situacao) ? <Button disabled={disabled} onClick={onDistribuir}>{item.situacao === 'com_dentista' ? 'Corrigir distribuição' : 'Entregar ao dentista'}</Button> : null}
       {item.situacao === 'com_dentista' ? <Button disabled={disabled} onClick={() => onExecutar(() => executarExterno(item, { acao: 'receber_retorno' }), 'Retorno físico do dentista registrado.')}>Receber do dentista</Button> : null}
       {item.situacao === 'aguardando_envio_laboratorio' ? <Button disabled={disabled} onClick={() => onExecutar(() => executarExterno(item, { acao: 'enviar_retorno' }), 'Envio físico ao laboratório externo registrado.')}>Enviar ao laboratório externo</Button> : null}
     </div>
   </div>
+}
+
+function AgendamentoModal({ item, disabled, onClose, onConfirm }: { item: OrdemRecepcao; disabled: boolean; onClose: () => void; onConfirm: (agendado: boolean, dentista?: string, agendamento?: string) => void }) {
+  const [dentista, setDentista] = useState(item.agendamentoConfirmado ? item.agendamentoDentista || '' : '')
+  const [data, setData] = useState(item.agendamentoConfirmado ? dataHoraMaceio(item.agendamento) : '')
+  return <Modal isOpen onClose={onClose} title={item.agendamentoConfirmado ? 'Editar agendamento' : 'Registrar agendamento'} description={`${item.paciente} · ${item.origem} #${item.id}`} size="md" mobileFullscreen dismissible={!disabled}>
+    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!disabled) onConfirm(true, dentista, data ? instanteMaceio(data) : undefined) }}>
+      <p className="text-sm">O agendamento não altera a localização física nem registra resultado clínico.</p>
+      <label className="block text-sm">Dentista (opcional)<Input value={dentista} onChange={event => setDentista(event.target.value)} maxLength={255} /></label>
+      <label className="block text-sm">Data e hora em Maceió (opcional)<Input type="datetime-local" value={data} onChange={event => setData(event.target.value)} /></label>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={disabled} onClick={onClose}>Fechar</Button>{item.agendamentoConfirmado ? <Button type="button" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Cancelar este agendamento? A localização física não será alterada.')) onConfirm(false) }}>Cancelar agendamento</Button> : null}{['aguardando_distribuicao', 'com_dentista'].includes(item.situacao) ? <Button type="submit" disabled={disabled}>{disabled ? 'Salvando...' : 'Salvar agendamento'}</Button> : null}</div>
+    </form></Modal>
 }

@@ -36,6 +36,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
   if (!passo) return { success: false, error: 'Selecione uma etapa válida para este tipo de prótese' }
 
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem) return { success: false, error: 'Ordem não encontrada' }
     if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
@@ -104,11 +105,12 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
           situacaoLogistica: 'aguardando_recepcao',
           finalidadeClinica: passo.entregaFinal ? 'entrega' : passo.prova ? 'prova' : 'instalacao',
           dentistaResponsavel: null,
-          agendamentoClinico: null,
+          agendamentoConfirmado: false,
           movimentacaoLogisticaEm: agora,
         } : {}),
         historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
           acao: 'definiu_fluxo_manualmente',
+          agendamentoEncerrado: vaiParaClinica && ordem.agendamentoConfirmado,
           tipo: fluxo.nome,
           etapa: passo.nome,
           data: agora.toISOString(),
@@ -132,6 +134,7 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
   const usuario = await requireUser()
 
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Fluxo da prótese não identificado' }
 
@@ -187,12 +190,13 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
           situacaoLogistica: 'aguardando_recepcao',
           finalidadeClinica: proximo.entregaFinal ? 'entrega' : proximo.prova ? 'prova' : 'instalacao',
           dentistaResponsavel: null,
-          agendamentoClinico: null,
+          agendamentoConfirmado: false,
           movimentacaoLogisticaEm: agora,
         } : {}),
         historicoEtapas: vaiParaClinica
           ? historicoComEvento(historicoTecnico, {
               acao: 'enviou_recepcao',
+              agendamentoEncerrado: ordem.agendamentoConfirmado,
               finalidade: proximo.entregaFinal ? 'entrega' : proximo.prova ? 'prova' : 'instalacao',
               data: agora.toISOString(),
               por: usuario.email || 'laboratorio',
@@ -216,36 +220,41 @@ export async function registrarEnvioFornecedor(ordemId: number, fornecedor: stri
   const usuario = await requireUser()
   if (!fornecedor.trim()) return { success: false, error: 'Informe o nome do fornecedor' }
 
-  const ordem = await prisma.ordem.findUnique({ where: { id: ordemId } })
-  if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Ordem não encontrada' }
-  const passo = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
-  if (passo.responsavel !== 'fornecedor') return { success: false, error: 'A ordem não está na etapa do fornecedor' }
+  const resultado = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
+    const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Ordem não encontrada' }
+    const passo = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
+    if (passo.responsavel !== 'fornecedor') return { success: false, error: 'A ordem não está na etapa do fornecedor' }
 
-  const agora = new Date()
-  const prazo = calcularPrazoPasso(agora, passo, ordem.arcadas)
-  await prisma.ordem.update({
-    where: { id: ordemId },
-    data: {
-      fornecedorEstrutura: fornecedor.trim(),
-      dataEnvioFornecedor: agora,
-      prazoFornecedor: prazo,
-      prazoEtapaAtual: prazo,
-      dataRecebimentoFornecedor: null,
-      justificativaAtrasoFornecedor: null,
-      historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
-        acao: 'enviado_fornecedor', fornecedor: fornecedor.trim(), data: agora.toISOString(), por: usuario.email || 'laboratorio',
-      }),
-    },
+    const agora = new Date()
+    const prazo = calcularPrazoPasso(agora, passo, ordem.arcadas)
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        fornecedorEstrutura: fornecedor.trim(),
+        dataEnvioFornecedor: agora,
+        prazoFornecedor: prazo,
+        prazoEtapaAtual: prazo,
+        dataRecebimentoFornecedor: null,
+        justificativaAtrasoFornecedor: null,
+        historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
+          acao: 'enviado_fornecedor', fornecedor: fornecedor.trim(), data: agora.toISOString(), por: usuario.email || 'laboratorio',
+        }),
+      },
+    })
+
+    return { success: true as const, prazo: prazo?.toISOString() }
   })
-
-  revalidarFluxo()
-  return { success: true, prazo: prazo?.toISOString() }
+  if (resultado.success) revalidarFluxo()
+  return resultado
 }
 
 export async function confirmarRecebimentoFornecedor(ordemId: number, justificativaAtraso?: string) {
   const usuario = await requireUser()
 
   const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
     if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Ordem não encontrada' }
     const passo = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)

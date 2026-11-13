@@ -24,7 +24,7 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
 
   const [totalCiclos, ordem] = await Promise.all([
     prisma.cicloProducao.count({ where: { ordemId } }),
-    prisma.ordem.findUnique({ where: { id: ordemId }, select: { etapaAtual: true } }),
+    prisma.ordem.findUnique({ where: { id: ordemId }, select: { etapaAtual: true, updatedAt: true, agendamentoConfirmado: true, historicoEtapas: true } }),
   ])
   if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
@@ -48,8 +48,10 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
       }
     }),
     prisma.ordem.update({
-      where: { id: ordemId },
+      where: { id: ordemId, updatedAt: ordem.updatedAt },
       data: {
+        agendamentoConfirmado: false,
+        historicoEtapas: [...(Array.isArray(ordem.historicoEtapas) ? ordem.historicoEtapas : []), { acao: 'abriu_ciclo', agendamentoEncerrado: ordem.agendamentoConfirmado, data: dataEntrada.toISOString() }],
         etapaAtual: macroetapa,
         subetapaAtual: subetapa,
         status: statusParaEtapa(macroetapa),
@@ -67,33 +69,20 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
 export async function enviarParaProva(cicloId: number) {
   const usuario = await requireUser()
 
-  const ciclo = await prisma.cicloProducao.update({
-    where: { id: cicloId },
-    data: {
-      dataSaida: new Date(),
-      status: 'em_prova',
-    },
-    include: { ordem: true }
-  })
-
-  // Atualiza status da ordem
-  await prisma.ordem.update({
-    where: { id: ciclo.ordemId },
-    data: {
-      status: 'Em Prova',
-      etapaAtual: 'em_prova',
-      subetapaAtual: ciclo.etapa,
-      localizacaoAtual: 'em_transito_recepcao',
-      situacaoLogistica: 'aguardando_recepcao',
-      finalidadeClinica: 'prova',
-      dentistaResponsavel: null,
-      agendamentoClinico: null,
-      movimentacaoLogisticaEm: new Date(),
-      historicoEtapas: [
-        ...(Array.isArray(ciclo.ordem.historicoEtapas) ? ciclo.ordem.historicoEtapas : []),
-        { acao: 'enviou_recepcao', finalidade: 'prova', data: new Date().toISOString(), por: usuario.email },
-      ],
-    }
+  const ciclo = await prisma.$transaction(async tx => {
+    const atual = await tx.cicloProducao.findUniqueOrThrow({ where: { id: cicloId } })
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${atual.ordemId} FOR UPDATE`
+    const ordem = await tx.ordem.findUniqueOrThrow({ where: { id: atual.ordemId } })
+    const agora = new Date()
+    const atualizado = await tx.cicloProducao.update({ where: { id: cicloId }, data: { dataSaida: agora, status: 'em_prova' }, include: { ordem: true } })
+    await tx.ordem.update({ where: { id: atual.ordemId }, data: {
+      status: 'Em Prova', etapaAtual: 'em_prova', subetapaAtual: atual.etapa,
+      localizacaoAtual: 'em_transito_recepcao', situacaoLogistica: 'aguardando_recepcao', finalidadeClinica: 'prova',
+      dentistaResponsavel: null, agendamentoConfirmado: false, movimentacaoLogisticaEm: agora,
+      historicoEtapas: [...(Array.isArray(ordem.historicoEtapas) ? ordem.historicoEtapas : []),
+        { acao: 'enviou_recepcao', finalidade: 'prova', agendamentoEncerrado: ordem.agendamentoConfirmado, data: agora.toISOString(), por: usuario.email }],
+    } })
+    return atualizado
   })
 
   revalidatePath('/producao')
@@ -157,7 +146,7 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
       await prisma.$transaction([
         ...operacoes,
         prisma.ordem.update({
-          where: { id: cicloAtual.ordemId },
+          where: { id: cicloAtual.ordemId, updatedAt: cicloAtual.ordem.updatedAt },
           data: {
             passoFluxoAtual: destino.id,
             etapaAtual: cicloAtual.decisao === 'ajustes' ? 'ajuste' : destino.macroetapa,
@@ -166,6 +155,8 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
             prazoEtapaAtual: calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas),
             localizacaoAtual: 'laboratorio',
             situacaoLogistica: 'no_laboratorio',
+            agendamentoConfirmado: false,
+            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
             movimentacaoLogisticaEm: new Date(),
           },
         }),
@@ -187,13 +178,15 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
         data: { dataRetorno: new Date(), status: 'concluido' },
       }),
       prisma.ordem.update({
-        where: { id: cicloAtual.ordemId },
+        where: { id: cicloAtual.ordemId, updatedAt: cicloAtual.ordem.updatedAt },
         data: {
           status: 'Em Produção',
           etapaAtual: 'acabamento',
           subetapaAtual: 'Acabamento e polimento',
           localizacaoAtual: 'laboratorio',
           situacaoLogistica: 'no_laboratorio',
+            agendamentoConfirmado: false,
+            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
           movimentacaoLogisticaEm: new Date(),
         },
       }),
@@ -228,13 +221,15 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
       },
     }),
     prisma.ordem.update({
-      where: { id: cicloAtual.ordemId },
+      where: { id: cicloAtual.ordemId, updatedAt: cicloAtual.ordem.updatedAt },
       data: {
         etapaAtual: 'ajuste',
         subetapaAtual: subetapa,
         status: 'Em Produção',
         localizacaoAtual: 'laboratorio',
         situacaoLogistica: 'no_laboratorio',
+            agendamentoConfirmado: false,
+            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
         movimentacaoLogisticaEm: new Date(),
       },
     }),
