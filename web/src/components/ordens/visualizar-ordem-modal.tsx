@@ -315,9 +315,10 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
               {ordem.arquivos && ordem.arquivos.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {ordem.arquivos.map((arquivo, idx) => {
+                    const urlArquivo = resolverUrlArquivoLab(arquivo)
                     const isStl = arquivo.toLowerCase().endsWith('.stl')
                     return (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg group hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => isStl && setPreviewUrl(arquivo)}>
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg group hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => isStl && setPreviewUrl(urlArquivo)}>
                         <div className="flex items-center gap-2 overflow-hidden">
                           <div className={`p-2 rounded-lg ${isStl ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800'}`}>
                             {isStl ? <Package className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
@@ -330,7 +331,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                               <Eye className="h-4 w-4 text-indigo-600" />
                             </Button>
                           )}
-                          <a aria-label={`Baixar ${arquivo.split('/').pop()}`} href={arquivo} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500">
+                          <a aria-label={`Baixar ${arquivo.split('/').pop()}`} href={urlArquivo} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500">
                             <Download className="h-4 w-4" />
                           </a>
                         </div>

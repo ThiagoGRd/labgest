@@ -105,7 +105,25 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (itens.length === 0) {
+    const itemPendente = currentItem.servicoId
+      ? (() => {
+          const srv = servicos.find(s => s.id.toString() === currentItem.servicoId)
+          return {
+            id: 'pendente',
+            servicoId: currentItem.servicoId,
+            servicoNome: srv?.nome || '',
+            elementos: currentItem.elementos,
+            corDentes: currentItem.corDentes,
+            material: currentItem.material,
+            arcadas: currentItem.arcadas,
+            tipoProtese: currentItem.tipoProtese,
+            preco: srv?.preco || 0,
+          }
+        })()
+      : null
+    const itensParaEnviar = itemPendente ? [...itens, itemPendente] : itens
+
+    if (itensParaEnviar.length === 0) {
       setError('Adicione pelo menos um serviço ao pedido')
       return
     }
@@ -116,7 +134,7 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
     try {
       const result = await createBatchOrdens({
         ...globalData,
-        itens: itens.map(i => ({
+        itens: itensParaEnviar.map(i => ({
           servicoId: i.servicoId,
           elementos: i.elementos,
           corDentes: i.corDentes,

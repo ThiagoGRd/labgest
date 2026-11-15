@@ -33,7 +33,7 @@ function loader(overrides = {}) {
           esModuleInterop: true,
         },
       }).outputText,
-      { exports, require: (dep) => load(dep, file), Date, Intl, Set, Map, Math, JSON, RegExp, Array, Object, Number, String, Boolean, Error, console, process },
+      { exports, require: (dep) => load(dep, file), Date, Intl, Set, Map, Math, JSON, RegExp, Array, Object, Number, String, Boolean, Error, URL, Headers, console, process },
       { filename: file },
     )
     return exports
@@ -338,4 +338,67 @@ test('resolverUrlArquivoLab resolve caminhos relativos do Supabase sem alterar U
   } finally {
     process.env.NEXT_PUBLIC_SUPABASE_URL = prevUrl
   }
+})
+
+test('proxy.ts libera /api/webhooks/whatsapp e /check/ sem redirecionar para /login', async () => {
+  const customLoad = loader({
+    '@supabase/ssr': {
+      createServerClient: () => ({
+        auth: { getUser: async () => ({ data: { user: null } }) },
+      }),
+    },
+    'next/server': {
+      NextResponse: {
+        next: () => ({ type: 'next', cookies: { set: () => {} } }),
+        redirect: (url) => ({ type: 'redirect', location: String(url) }),
+      },
+    },
+  })
+  const { proxy } = customLoad('web/src/proxy.ts')
+
+  const makeReq = (pathname) => ({
+    url: `https://labgest-web.vercel.app${pathname}`,
+    nextUrl: { pathname },
+    headers: new Headers(),
+    cookies: { getAll: () => [], set: () => {} },
+  })
+
+  const resWebhook = await proxy(makeReq('/api/webhooks/whatsapp'))
+  assert.equal(resWebhook.type, 'next')
+
+  const resCheck = await proxy(makeReq('/check/123'))
+  assert.equal(resCheck.type, 'next')
+
+  const resFinanceiro = await proxy(makeReq('/financeiro'))
+  assert.equal(resFinanceiro.type, 'redirect')
+  assert.match(resFinanceiro.location, /\/login$/)
+})
+
+test('CheckinRapidoPanel e MovimentarEstoqueModal expoem acoes completas na UI', () => {
+  const customLoad = loader({
+    'next/navigation': { useRouter: () => ({ refresh: () => {} }) },
+    '@/actions/notificacoes': { executarCheckinRapidoOrdem: async () => ({ success: true }) },
+    '@/actions/estoque': { registrarMovimentacaoEstoque: async () => ({ success: true }) },
+    '@/components/ui/modal': { Modal: ({ children, title }) => React.createElement('div', null, title, children) },
+  })
+
+  const { CheckinRapidoPanel } = customLoad('web/src/components/ordens/checkin-rapido-panel.tsx')
+  const htmlCheckin = renderToStaticMarkup(
+    React.createElement(CheckinRapidoPanel, { tokenOuId: 'abc', ordemId: 42, statusAtual: 'Em Produção' }),
+  )
+  assert.match(htmlCheckin, /Chegou na Recepção/)
+  assert.match(htmlCheckin, /Entregue ao Dentista/)
+  assert.match(htmlCheckin, /Dentista: Aprovar Prova/)
+  assert.match(htmlCheckin, /Dentista: Solicitar Ajuste/)
+  assert.match(htmlCheckin, /Confirmar Entrada no Laboratório \(\+10 dias úteis\)/)
+
+  const { MovimentarEstoqueModal } = customLoad('web/src/components/estoque/movimentar-estoque-modal.tsx')
+  const htmlEstoque = renderToStaticMarkup(
+    React.createElement(MovimentarEstoqueModal, {
+      item: { id: 1, nome: 'Bloco Zircônia', unidade: 'un', quantidade: 5, precoUnitario: 120 },
+      onClose: () => {},
+      onSuccess: () => {},
+    }),
+  )
+  assert.match(htmlEstoque, /Lançar compra no Contas a Pagar do Financeiro/)
 })

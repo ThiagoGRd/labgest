@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, Loader2, SlidersHorizontal } from 'lucide-react'
 import { registrarMovimentacaoEstoque } from '@/actions/estoque'
+import { calcularCustoMedioPonderado } from '@/lib/inteligencia-financeira'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,8 +23,20 @@ export function MovimentarEstoqueModal({ item, onClose, onSuccess }: MovimentarE
   const [motivo, setMotivo] = useState('')
   const [documento, setDocumento] = useState('')
   const [valorUnitario, setValorUnitario] = useState(String(item.precoUnitario || ''))
+  const [gerarContaPagar, setGerarContaPagar] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const qtdNum = Number(quantidade)
+  const valorUnitNum = valorUnitario ? Number(valorUnitario) : Number(item.precoUnitario || 0)
+  const custoMedioProjetado =
+    tipo === 'Entrada' && Number.isFinite(qtdNum) && qtdNum > 0 && Number.isFinite(valorUnitNum) && valorUnitNum >= 0
+      ? calcularCustoMedioPonderado(item.quantidade, item.precoUnitario, qtdNum, valorUnitNum)
+      : null
+  const totalCompraProjetado =
+    tipo === 'Entrada' && Number.isFinite(qtdNum) && qtdNum > 0 && Number.isFinite(valorUnitNum) && valorUnitNum > 0
+      ? Number((qtdNum * valorUnitNum).toFixed(2))
+      : 0
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -36,6 +49,7 @@ export function MovimentarEstoqueModal({ item, onClose, onSuccess }: MovimentarE
       motivo,
       documento,
       valorUnitario: tipo === 'Entrada' && valorUnitario ? Number(valorUnitario) : undefined,
+      gerarContaPagar: tipo === 'Entrada' ? gerarContaPagar : false,
     })
     setLoading(false)
     if (!resultado.success) {
@@ -62,7 +76,35 @@ export function MovimentarEstoqueModal({ item, onClose, onSuccess }: MovimentarE
           })}
         </div>
         <label><span className="mb-1.5 block text-sm font-semibold">{tipo === 'Ajuste' ? 'Novo saldo físico' : 'Quantidade'} *</span><Input type="number" min={tipo === 'Ajuste' ? '0' : '0.001'} step="0.001" value={quantidade} onChange={event => setQuantidade(event.target.value)} placeholder={`Em ${item.unidade}`} required /></label>
-        {tipo === 'Entrada' ? <label><span className="mb-1.5 block text-sm font-semibold">Novo preço unitário (R$)</span><Input type="number" min="0" step="0.01" value={valorUnitario} onChange={event => setValorUnitario(event.target.value)} /></label> : null}
+        {tipo === 'Entrada' ? (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-semibold">Preço unitário da compra (R$)</span>
+              <Input type="number" min="0" step="0.01" value={valorUnitario} onChange={event => setValorUnitario(event.target.value)} />
+              {custoMedioProjetado !== null && (
+                <span className="mt-1 block text-xs text-slate-500">
+                  Novo custo médio ponderado no estoque: <strong>R$ {custoMedioProjetado.toFixed(2).replace('.', ',')}</strong>
+                </span>
+              )}
+            </label>
+            <label className="flex items-start gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs text-slate-700 cursor-pointer dark:border-indigo-500/20 dark:bg-indigo-950/20 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={gerarContaPagar}
+                onChange={event => setGerarContaPagar(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>
+                <strong className="block text-slate-900 dark:text-white">Lançar compra no Contas a Pagar do Financeiro</strong>
+                <span>
+                  {totalCompraProjetado > 0
+                    ? `Gera despesa automática de R$ ${totalCompraProjetado.toFixed(2).replace('.', ',')} com vencimento em 15 dias.`
+                    : 'Gera despesa automática na aba A Pagar ao confirmar a entrada.'}
+                </span>
+              </span>
+            </label>
+          </div>
+        ) : null}
         <label><span className="mb-1.5 block text-sm font-semibold">Motivo *</span><Input value={motivo} onChange={event => setMotivo(event.target.value)} placeholder={tipo === 'Entrada' ? 'Ex.: Compra mensal' : tipo === 'Saída' ? 'Ex.: Uso extraordinário' : 'Ex.: Conferência física'} maxLength={255} required /></label>
         <label><span className="mb-1.5 block text-sm font-semibold">Documento / referência</span><Input value={documento} onChange={event => setDocumento(event.target.value)} placeholder="Nota fiscal, lote ou requisição" maxLength={100} /></label>
         <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button><Button type="submit" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{loading ? 'Registrando...' : `Confirmar ${tipo.toLowerCase()}`}</Button></div>
