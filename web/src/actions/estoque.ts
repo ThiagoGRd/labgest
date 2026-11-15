@@ -211,12 +211,16 @@ export async function registrarMovimentacaoEstoque(data: {
   motivo: string
   documento?: string
   valorUnitario?: number
+  gerarContaPagar?: boolean
 }) {
   const usuario = await requireUser()
   try {
     if (!numeroValido(data.quantidade) || data.quantidade === 0) throw new Error('Informe uma quantidade maior que zero')
     if (!data.motivo.trim()) throw new Error('Informe o motivo da movimentação')
     if (data.valorUnitario != null && !numeroValido(data.valorUnitario)) throw new Error('Informe um valor unitário válido')
+
+    const { calcularCustoMedioPonderado } = await import('@/lib/inteligencia-financeira')
+    let alertaEstoqueBaixo: { nome: string; saldo: number; minimo: number; unidade: string } | null = null
 
     await prisma.$transaction(async tx => {
       const item = await tx.estoque.findUnique({ where: { id: data.estoqueId } })
@@ -235,11 +239,15 @@ export async function registrarMovimentacaoEstoque(data: {
         : data.quantidade
       if (quantidadeMovimentada === 0) throw new Error('O novo saldo é igual ao saldo atual')
 
+      const novoPrecoUnitario = data.tipo === 'Entrada' && data.valorUnitario != null
+        ? calcularCustoMedioPonderado(saldoAnterior, Number(item.precoUnitario), data.quantidade, data.valorUnitario)
+        : undefined
+
       await tx.estoque.update({
         where: { id: item.id },
         data: {
           quantidade: saldoPosterior,
-          ...(data.tipo === 'Entrada' && data.valorUnitario != null ? { precoUnitario: data.valorUnitario } : {}),
+          ...(novoPrecoUnitario !== undefined ? { precoUnitario: novoPrecoUnitario } : {}),
         },
       })
       await tx.movimentacaoEstoque.create({
@@ -256,9 +264,74 @@ export async function registrarMovimentacaoEstoque(data: {
           usuarioNome: usuario.nome,
         },
       })
+
+      if (
+        data.tipo === 'Entrada' &&
+        data.gerarContaPagar &&
+        typeof tx.contaPagar?.create === 'function'
+      ) {
+        const custoUnit = data.valorUnitario ?? Number(item.precoUnitario)
+        const valorTotalCompra = Number((quantidadeMovimentada * custoUnit).toFixed(2))
+        if (valorTotalCompra > 0) {
+          const vencimento = new Date()
+          vencimento.setDate(vencimento.getDate() + 15)
+          await tx.contaPagar.create({
+            data: {
+              descricao: `Compra de insumo: ${item.nome} (${quantidadeMovimentada} ${item.unidade})`,
+              categoria: 'Materiais e Insumos',
+              fornecedor: item.fornecedor || 'Fornecedor de Insumos',
+              valor: valorTotalCompra,
+              dataCompetencia: new Date(),
+              dataVencimento: vencimento,
+              status: 'Pendente',
+              observacoes: data.documento ? `Doc: ${data.documento} — ${data.motivo}` : data.motivo,
+              usuarioId: usuario.id,
+            },
+          })
+        }
+      }
+
+      if (data.tipo === 'Saída' && saldoPosterior <= Number(item.quantidadeMinima)) {
+        alertaEstoqueBaixo = {
+          nome: item.nome,
+          saldo: saldoPosterior,
+          minimo: Number(item.quantidadeMinima),
+          unidade: item.unidade,
+        }
+      }
     }, { isolationLevel: 'Serializable' })
 
+    if (alertaEstoqueBaixo) {
+      try {
+        const { carregarConfigWhatsappInterna } = await import('@/actions/notificacoes')
+        const { enviarWhatsapp, formatarMensagemTransicaoWhatsapp, normalizarDestinoWhatsapp } = await import('@/lib/whatsapp')
+        const cfg = await carregarConfigWhatsappInterna()
+        if (cfg.estoqueBaixo) {
+          const al = alertaEstoqueBaixo as { nome: string; saldo: number; minimo: number; unidade: string }
+          const msg = formatarMensagemTransicaoWhatsapp({
+            tipo: 'estoque_baixo',
+            ordemId: 0,
+            paciente: '',
+            insumoNome: al.nome,
+            quantidadeAtual: al.saldo,
+            quantidadeMinima: al.minimo,
+            unidade: al.unidade,
+          })
+          const destinos = [cfg.gestorTelefone, cfg.labTelefone]
+            .map((d) => normalizarDestinoWhatsapp(d || ''))
+            .filter((d): d is string => Boolean(d))
+          for (const d of [...new Set(destinos)]) {
+            await enviarWhatsapp(d, msg)
+          }
+        }
+      } catch {
+        // Não bloqueia baixa de estoque caso WhatsApp falhe
+      }
+    }
+
     revalidatePath('/estoque')
+    revalidatePath('/servicos')
+    revalidatePath('/financeiro')
     return { success: true }
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : 'Erro ao movimentar estoque'

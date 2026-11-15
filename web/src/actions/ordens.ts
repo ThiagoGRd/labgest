@@ -23,6 +23,7 @@ import {
   type TipoWorkflow,
   calcularPrazoPasso,
   getFluxoProtese,
+  getPrimeiroPassoLaboratorial,
   inferirTipoProtese,
   isTipoProtese,
 } from '@/lib/workflow-config'
@@ -225,7 +226,7 @@ export async function createBatchOrdens(data: {
         : isTipoProtese(servico.tipoWorkflow)
           ? servico.tipoWorkflow
           : inferirTipoProtese(servico.nome)
-      const primeiroPasso = tipoProtese ? getFluxoProtese(tipoProtese).passos[0] : null
+      const primeiroPasso = tipoProtese ? getPrimeiroPassoLaboratorial(tipoProtese) : null
       const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
       const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
       const arcadas = item.arcadas === 2 ? 2 : 1
@@ -246,7 +247,9 @@ export async function createBatchOrdens(data: {
           elementos: item.elementos,
           material: item.material,
           observacoes: data.observacoes,
-          status: 'Aguardando',
+          status: primeiroPasso ? 'Em Produção' : 'Aguardando',
+          localizacaoAtual: 'laboratorio',
+          situacaoLogistica: 'no_laboratorio',
           etapaAtual: primeiraEtapa,
           subetapaAtual: primeiroPasso?.nome,
           tipoWorkflow: tipoWorkflow,
@@ -264,6 +267,7 @@ export async function createBatchOrdens(data: {
     await prisma.$transaction(operacoes)
     revalidatePath('/ordens')
     revalidatePath('/producao')
+    revalidatePath('/lab-interno')
     return { success: true }
   } catch (error) {
     console.error('Erro ao criar ordens em lote:', error)
@@ -625,6 +629,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
       // Determinar novo status: finalizado somente ao chegar em ETAPA_FINAL
       const novoStatus = statusParaEtapa(proxima)
       const progresso = getProgresso(tipoWorkflow, proxima)
+      const fichaPreservada = preservarFichaClinica(ordem.checklistEstetico)
 
       await tx.ordem.update({
         where: { id: ordemId },
@@ -633,7 +638,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
           historicoEtapas: historico,
           status: novoStatus,
           progresso,
-          checklistEstetico: {},
+          checklistEstetico: fichaPreservada,
           dataFinalizacao: proxima === ETAPA_FINAL ? agora : null,
         },
       })
@@ -650,6 +655,7 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
     console.log('[avancarEtapa] Sucesso!')
     revalidatePath('/ordens')
     revalidatePath('/producao')
+    revalidatePath('/lab-interno')
     revalidatePath('/prioridades')
     if (resultado.finalizado) {
       revalidatePath('/financeiro')
@@ -661,6 +667,35 @@ export async function avancarEtapa(ordemId: number, observacao?: string) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     return { success: false, error: `Erro ao avançar etapa: ${errorMsg}` }
   }
+}
+
+function preservarFichaClinica(checklistAtual: unknown): Prisma.InputJsonObject {
+  if (!checklistAtual || typeof checklistAtual !== 'object' || Array.isArray(checklistAtual)) {
+    return {}
+  }
+  const camposClinicos = [
+    'dvo',
+    'registroMordida',
+    'linhaMedia',
+    'oclusao',
+    'corredorBucal',
+    'moldeiraIndividual',
+    'planoCera',
+    'montagemDente',
+    'barraProtocolo',
+    'acrilizacao',
+    'conserto',
+    'corGengiva',
+  ]
+  const preservado: Record<string, Prisma.InputJsonValue | null> = {}
+  const obj = checklistAtual as Record<string, unknown>
+  for (const chave of camposClinicos) {
+    const val = obj[chave]
+    if (typeof val === 'boolean' || typeof val === 'string' || typeof val === 'number') {
+      preservado[chave] = val
+    }
+  }
+  return preservado
 }
 
 export async function marcarEntregue(ordemId: number, dadosCobranca: {
@@ -767,6 +802,7 @@ export async function marcarEntregue(ordemId: number, dadosCobranca: {
 
     revalidatePath('/ordens')
     revalidatePath('/producao')
+    revalidatePath('/lab-interno')
     revalidatePath('/prioridades')
     revalidatePath('/financeiro')
     revalidatePath('/recepcao')
@@ -807,6 +843,7 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
     })
 
     const progresso = getProgresso(tipoWorkflow, retorno)
+    const fichaPreservada = preservarFichaClinica(ordem.checklistEstetico)
 
     await prisma.ordem.update({
       where: { id: ordemId, updatedAt: ordem.updatedAt },
@@ -816,12 +853,13 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
         historicoEtapas: historico,
         status: statusParaEtapa(retorno),
         progresso: progresso,
-        checklistEstetico: {},
+        checklistEstetico: fichaPreservada,
       }
     })
 
     revalidatePath('/ordens')
     revalidatePath('/producao')
+    revalidatePath('/lab-interno')
     revalidatePath('/prioridades')
     return { success: true, novaEtapa: retorno, tentativa: novaTentativa }
   } catch (error) {
@@ -833,9 +871,14 @@ export async function retornarEtapa(ordemId: number, motivoRetorno: string) {
 export async function updateChecklistEstetico(ordemId: number, checklist: Partial<ChecklistEstetico>) {
   await requireUser()
   try {
+    const atual = await prisma.ordem.findUnique({ where: { id: ordemId }, select: { checklistEstetico: true } })
+    const mesclado = {
+      ...preservarFichaClinica(atual?.checklistEstetico),
+      ...checklist,
+    }
     await prisma.ordem.update({
       where: { id: ordemId },
-      data: { checklistEstetico: checklist }
+      data: { checklistEstetico: mesclado }
     })
     revalidatePath('/ordens')
     return { success: true }

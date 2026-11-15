@@ -114,6 +114,16 @@ function descricaoHistorico(item: HistoricoEtapa) {
   return ROTULOS_HISTORICO[item.acao || ''] || item.acao?.replaceAll('_', ' ') || 'Movimentação registrada'
 }
 
+export function resolverUrlArquivoLab(urlOuPath: string) {
+  if (!urlOuPath) return ''
+  if (/^https?:\/\//i.test(urlOuPath) || urlOuPath.startsWith('blob:') || urlOuPath.startsWith('data:')) {
+    return urlOuPath
+  }
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return urlOuPath
+  return `${base.replace(/\/$/, '')}/storage/v1/object/public/lab-files/${urlOuPath.replace(/^\//, '')}`
+}
+
 export function VisualizarOrdemModal({ isOpen, onClose, ordem }: VisualizarOrdemModalProps) {
   if (!isOpen || !ordem) return null
   return <ConteudoFicha key={ordem.id} isOpen={isOpen} onClose={onClose} ordem={ordem} />

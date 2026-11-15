@@ -9,6 +9,15 @@ import { parseDateLocal } from '@/lib/date-utils'
 import { resumirCobrancasMensais } from '@/lib/regra-cobranca-mensal'
 import { resumirDespesasMensais } from '@/lib/regra-despesa-mensal'
 import { contasNoPeriodo, filtroReceberPeriodo, limitesMesReceber, mesDataFinanceira } from '@/lib/periodo-receber'
+import {
+  avaliarReajusteServico,
+  calcularRentabilidadePorCliente,
+  diagnosticarReposicaoEstoque,
+  type AlertaInsumoFinanceiro,
+  type AnaliseReajusteServico,
+  type MaterialVinculado,
+  type RentabilidadeCliente,
+} from '@/lib/inteligencia-financeira'
 
 const contaSchema = z.object({
   tipo: z.enum(['receber', 'pagar']),
@@ -243,6 +252,136 @@ export async function getFinanceiroPageData(filtroMes?: string) {
   }
   meses.add(`${ano}-${String(mes).padStart(2, '0')}`)
 
+  let inteligencia: {
+    reajusteServicos: AnaliseReajusteServico[]
+    rentabilidadeClientes: RentabilidadeCliente[]
+    reposicaoEstoque: {
+      alertas: AlertaInsumoFinanceiro[]
+      custoTotalReposicao: number
+      valorTotalEmEstoque: number
+    }
+  } = {
+    reajusteServicos: [],
+    rentabilidadeClientes: [],
+    reposicaoEstoque: { alertas: [], custoTotalReposicao: 0, valorTotalEmEstoque: 0 },
+  }
+
+  try {
+    const [estoqueRaw, servicosRaw, ordensRecentes] = await Promise.all([
+      typeof prisma.estoque?.findMany === 'function'
+        ? prisma.estoque.findMany({ where: { ativo: true } })
+        : Promise.resolve([]),
+      typeof prisma.servico?.findMany === 'function'
+        ? prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' } })
+        : Promise.resolve([]),
+      typeof prisma.ordem?.findMany === 'function'
+        ? prisma.ordem.findMany({
+            where: { status: { not: 'Cancelado' } },
+            select: {
+              id: true,
+              clienteNome: true,
+              servicoId: true,
+              servicoNome: true,
+              valor: true,
+              valorFinal: true,
+              tentativaAtual: true,
+              ciclos: { select: { decisao: true } },
+            },
+            orderBy: { id: 'desc' },
+            take: 500,
+          })
+        : Promise.resolve([]),
+    ])
+
+    const precosEstoquePorId = new Map<number, number>(
+      estoqueRaw.map((item) => [item.id, Number(item.precoUnitario)]),
+    )
+
+    const reajusteServicos: AnaliseReajusteServico[] = servicosRaw.map((srv) => {
+      const materiais: MaterialVinculado[] = Array.isArray(srv.materiais)
+        ? (srv.materiais as Array<Record<string, unknown>>).flatMap((m) => {
+            const id = Number(m?.id)
+            const quantidade = Number(m?.quantidade)
+            return Number.isInteger(id) && id > 0 && Number.isFinite(quantidade) && quantidade > 0
+              ? [{ id, quantidade }]
+              : []
+          })
+        : []
+
+      const ordensDoServico = ordensRecentes.filter(
+        (o) => o.servicoId === srv.id || o.servicoNome === srv.nome,
+      )
+      const ordensComRetrabalho = ordensDoServico.filter(
+        (o) =>
+          (o.tentativaAtual || 0) > 0 ||
+          (Array.isArray(o.ciclos) && o.ciclos.some((c) => c.decisao === 'ajustes' || c.decisao === 'ajustar')),
+      ).length
+
+      return avaliarReajusteServico({
+        servicoId: srv.id,
+        servicoNome: srv.nome,
+        categoria: srv.categoria || 'Geral',
+        precoAtual: Number(srv.preco),
+        custoCadastrado: Number(srv.custoMateriais || 0),
+        materiaisVinculados: materiais,
+        precosEstoquePorId,
+        totalOrdens: ordensDoServico.length,
+        ordensComRetrabalho,
+      })
+    })
+
+    const custoPorServicoNome = new Map<string, number>(
+      reajusteServicos.map((r) => [r.servicoNome, r.custoInsumosAoVivo]),
+    )
+
+    const inadimplenciaPorCliente = new Map<string, number>()
+    for (const c of contasReceber) {
+      if (c.status.includes('Vencido') || c.status.includes('atrasado')) {
+        inadimplenciaPorCliente.set(
+          c.cliente,
+          (inadimplenciaPorCliente.get(c.cliente) || 0) + c.restante,
+        )
+      }
+    }
+
+    const rentabilidadeClientes = calcularRentabilidadePorCliente({
+      ordens: ordensRecentes.map((o) => {
+        const ajustesCiclo = Array.isArray(o.ciclos)
+          ? o.ciclos.filter((c) => c.decisao === 'ajustes' || c.decisao === 'ajustar').length
+          : 0
+        return {
+          clienteNome: o.clienteNome || 'Sem cliente',
+          valor: Number(o.valorFinal ?? o.valor ?? 0),
+          custoInsumoEstimado: custoPorServicoNome.get(o.servicoNome) ?? 0,
+          ajustesRetorno: Math.max(o.tentativaAtual || 0, ajustesCiclo),
+        }
+      }),
+      inadimplenciaPorCliente,
+    })
+
+    const reposicaoEstoque = diagnosticarReposicaoEstoque(
+      estoqueRaw.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        categoria: item.categoria,
+        quantidade: Number(item.quantidade),
+        quantidadeMinima: Number(item.quantidadeMinima),
+        unidade: item.unidade,
+        precoUnitario: Number(item.precoUnitario),
+        fornecedor: item.fornecedor,
+        dataValidade: item.dataValidade?.toISOString() ?? null,
+      })),
+    )
+
+    inteligencia = {
+      reajusteServicos,
+      rentabilidadeClientes,
+      reposicaoEstoque,
+    }
+  } catch (err) {
+    console.error('Erro ao calcular inteligência financeira:', err)
+  }
+
   return {
     periodo: `${ano}-${String(mes).padStart(2, '0')}`,
     receber: contasReceber.filter((conta) => receberVencimentoIds.has(conta.id)),
@@ -274,7 +413,31 @@ export async function getFinanceiroPageData(filtroMes?: string) {
       vencidoReceber,
       quantidadeVencidas: vencidasGlobais.length,
     },
+    inteligencia,
     mesesDisponiveis: Array.from(meses).sort().reverse(),
+  }
+}
+
+export async function aplicarReajusteServico(servicoId: number, novoPreco: number) {
+  await requireUser()
+  try {
+    if (!Number.isInteger(servicoId) || servicoId <= 0) {
+      return { success: false, error: 'Serviço inválido.' }
+    }
+    if (!Number.isFinite(novoPreco) || novoPreco <= 0) {
+      return { success: false, error: 'Informe um novo preço maior que zero.' }
+    }
+    await prisma.servico.update({
+      where: { id: servicoId },
+      data: { preco: novoPreco },
+    })
+    revalidarFinanceiro()
+    revalidatePath('/servicos')
+    revalidatePath('/ordens')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao aplicar reajuste de serviço:', error)
+    return { success: false, error: 'Não foi possível aplicar o reajuste na tabela.' }
   }
 }
 

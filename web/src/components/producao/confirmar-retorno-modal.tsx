@@ -28,8 +28,9 @@ export function ConfirmarRetornoModal({
   fotosProva = []
 }: ConfirmarRetornoModalProps) {
   const router = useRouter()
-  const [novoPrazo, setNovoPrazo] = useState(7)
+  const [novoPrazo, setNovoPrazo] = useState(10)
   const [loading, setLoading] = useState(false)
+
   const [error, setError] = useState('')
 
   const isAprovado = decisaoDentista === 'aprovado'

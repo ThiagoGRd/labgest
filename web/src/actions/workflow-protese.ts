@@ -4,9 +4,14 @@ import { Prisma, prisma } from '@labgest/database'
 import {
   calcularPrazoPasso,
   getFluxoProtese,
+  getNextEtapa,
   getPassoProtese,
+  getPrimeiroPassoLaboratorial,
   getProximoPassoProtese,
+  inferirTipoProtese,
   isTipoProtese,
+  normalizarEtapa,
+  statusParaEtapa,
   statusParaPassoProtese,
   type TipoProteseId,
 } from '@/lib/workflow-config'
@@ -14,17 +19,89 @@ import { requireUser } from '@/lib/auth-utils'
 import { revalidatePath } from 'next/cache'
 import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 
+const PRAZO_RETORNO_LAB_DIAS = 10
+
 function historicoComEvento(historico: Prisma.JsonValue, evento: Prisma.JsonObject) {
   return [...(Array.isArray(historico) ? historico : []), evento] as Prisma.JsonArray
 }
 
 function revalidarFluxo() {
   revalidatePath('/producao')
+  revalidatePath('/lab-interno')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
   revalidatePath('/financeiro')
   revalidatePath('/estoque')
   revalidatePath('/recepcao')
+  revalidatePath('/tratamentos')
+}
+
+export async function iniciarFluxoNoLaboratorio(ordemId: number) {
+  const usuario = await requireUser()
+  const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
+    const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
+    if (['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status || '')) {
+      return { success: false, error: 'Esta ordem já está encerrada' }
+    }
+
+    const agora = new Date()
+    const prazoPadrao = new Date(agora.getTime() + PRAZO_RETORNO_LAB_DIAS * 86_400_000)
+    const tipo = isTipoProtese(ordem.tipoWorkflow)
+      ? ordem.tipoWorkflow
+      : inferirTipoProtese(ordem.servicoNome || '', ordem.tipoWorkflow)
+
+    if (tipo) {
+      const passo = getPrimeiroPassoLaboratorial(tipo)
+      const prazoPasso = calcularPrazoPasso(agora, passo, ordem.arcadas)
+      await tx.ordem.update({
+        where: { id: ordemId },
+        data: {
+          tipoWorkflow: tipo,
+          passoFluxoAtual: passo.id,
+          etapaAtual: passo.macroetapa,
+          subetapaAtual: passo.nome,
+          status: 'Em Produção',
+          prazoEtapaAtual: prazoPasso || prazoPadrao,
+          localizacaoAtual: 'laboratorio',
+          situacaoLogistica: 'no_laboratorio',
+          movimentacaoLogisticaEm: agora,
+          historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
+            acao: 'iniciou_fluxo_laboratorio',
+            etapa: passo.nome,
+            data: agora.toISOString(),
+            por: usuario.email || 'laboratorio',
+          }),
+        },
+      })
+      return { success: true, etapa: passo.nome }
+    }
+
+    await tx.ordem.update({
+      where: { id: ordemId },
+      data: {
+        passoFluxoAtual: 'confeccao',
+        etapaAtual: 'confeccao',
+        subetapaAtual: 'Em confecção na bancada',
+        status: 'Em Produção',
+        prazoEtapaAtual: prazoPadrao,
+        localizacaoAtual: 'laboratorio',
+        situacaoLogistica: 'no_laboratorio',
+        movimentacaoLogisticaEm: agora,
+        historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
+          acao: 'iniciou_fluxo_laboratorio',
+          etapa: 'Em confecção na bancada',
+          data: agora.toISOString(),
+          por: usuario.email || 'laboratorio',
+        }),
+      },
+    })
+    return { success: true, etapa: 'Em confecção na bancada' }
+  })
+
+  if (resultado.success) revalidarFluxo()
+  return resultado
 }
 
 export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, passoId: string) {
@@ -70,7 +147,7 @@ export async function definirEtapaFluxoProtese(ordemId: number, tipo: string, pa
             etapa: passo.nome,
             dataEntrada: agora,
             dataSaida: agora,
-            prazoDias: 7,
+            prazoDias: PRAZO_RETORNO_LAB_DIAS,
             dataComprometida: ordem.dataEntrega,
             status: 'em_prova',
             registradoPor: usuario.email || 'laboratorio',
@@ -136,12 +213,57 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
   const resultado = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${ordemId} FOR UPDATE`
     const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
-    if (!ordem || !isTipoProtese(ordem.tipoWorkflow)) return { success: false, error: 'Fluxo da prótese não identificado' }
+    if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
-    const passoAtual = getPassoProtese(ordem.tipoWorkflow, ordem.passoFluxoAtual)
-    if (passoAtual.responsavel !== 'laboratorio') return { success: false, error: 'Esta etapa deve ser concluída pela clínica' }
+    const tipo = isTipoProtese(ordem.tipoWorkflow)
+      ? ordem.tipoWorkflow
+      : inferirTipoProtese(ordem.servicoNome || '', ordem.tipoWorkflow)
 
-    const proximo = getProximoPassoProtese(ordem.tipoWorkflow, passoAtual.id)
+    if (!tipo) {
+      const etapaAtual = normalizarEtapa(ordem.etapaAtual || 'recebimento')
+      const proximaEtapa = getNextEtapa(null, etapaAtual) || 'pronto'
+      const agora = new Date()
+      const novoStatus = statusParaEtapa(proximaEtapa)
+      const vaiParaClinica = proximaEtapa === 'em_prova' || proximaEtapa === 'pronto'
+      await tx.ordem.update({
+        where: { id: ordemId },
+        data: {
+          etapaAtual: proximaEtapa,
+          passoFluxoAtual: proximaEtapa,
+          subetapaAtual: proximaEtapa === 'pronto' ? 'Pronto para entrega' : proximaEtapa,
+          status: novoStatus,
+          dataFinalizacao: proximaEtapa === 'pronto' ? agora : null,
+          ...(vaiParaClinica ? {
+            localizacaoAtual: 'em_transito_recepcao',
+            situacaoLogistica: 'aguardando_recepcao',
+            finalidadeClinica: proximaEtapa === 'pronto' ? 'entrega' : 'prova',
+            dentistaResponsavel: null,
+            agendamentoConfirmado: false,
+            movimentacaoLogisticaEm: agora,
+          } : {}),
+          historicoEtapas: historicoComEvento(ordem.historicoEtapas, {
+            acao: vaiParaClinica ? 'enviou_recepcao' : 'concluiu_etapa_laboratorial',
+            de: etapaAtual,
+            para: proximaEtapa,
+            agendamentoEncerrado: vaiParaClinica && ordem.agendamentoConfirmado,
+            data: agora.toISOString(),
+            por: usuario.email || 'laboratorio',
+          }),
+        },
+      })
+      if (novoStatus === 'Finalizado') {
+        await garantirEfeitosFinalizacao(tx, ordemId, agora)
+      }
+      return { success: true, proximo: proximaEtapa, vaiParaClinica }
+    }
+
+    const passoAtual = getPassoProtese(tipo, ordem.passoFluxoAtual)
+    const recebimentoNoLab = passoAtual.macroetapa === 'recebimento' && (!ordem.localizacaoAtual || ordem.localizacaoAtual === 'laboratorio')
+    if (passoAtual.responsavel !== 'laboratorio' && !recebimentoNoLab) {
+      return { success: false, error: 'Esta etapa deve ser concluída pela clínica' }
+    }
+
+    const proximo = getProximoPassoProtese(tipo, passoAtual.id)
     if (!proximo) return { success: false, error: 'O fluxo já chegou ao final' }
 
     await tx.cicloProducao.updateMany({
@@ -158,7 +280,7 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
           etapa: proximo.nome,
           dataEntrada: new Date(),
           dataSaida: new Date(),
-          prazoDias: 7,
+          prazoDias: PRAZO_RETORNO_LAB_DIAS,
           dataComprometida: ordem.dataEntrega,
           status: 'em_prova',
           registradoPor: usuario.email || 'laboratorio',
@@ -179,6 +301,7 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
     await tx.ordem.update({
       where: { id: ordemId },
       data: {
+        tipoWorkflow: tipo,
         passoFluxoAtual: proximo.id,
         etapaAtual: proximo.macroetapa,
         subetapaAtual: proximo.nome,
@@ -209,12 +332,27 @@ export async function concluirEtapaLaboratorial(ordemId: number) {
       await garantirEfeitosFinalizacao(tx, ordemId, agora)
     }
 
-    return { success: true, proximo: proximo.nome }
+    return { success: true, proximo: proximo.nome, vaiParaClinica }
   })
 
-  if (resultado.success) revalidarFluxo()
+  if (resultado.success) {
+    revalidarFluxo()
+    if ('vaiParaClinica' in resultado && resultado.vaiParaClinica) {
+      try {
+        const { notificarTransicaoOrdemWhatsapp } = await import('@/actions/notificacoes')
+        await notificarTransicaoOrdemWhatsapp({
+          ordemId,
+          tipo: 'saida_lab_recepcao',
+          etapaOuFinalidade: resultado.proximo,
+        })
+      } catch {
+        // Não bloqueia conclusão da etapa caso WhatsApp falhe
+      }
+    }
+  }
   return resultado
 }
+
 
 export async function registrarEnvioFornecedor(ordemId: number, fornecedor: string) {
   const usuario = await requireUser()

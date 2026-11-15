@@ -170,6 +170,11 @@ export function getPassoLaboratorialAnterior(tipo: TipoProteseId, passoId: strin
   return null
 }
 
+export function getPrimeiroPassoLaboratorial(tipo: TipoProteseId) {
+  const fluxo = getFluxoProtese(tipo)
+  return fluxo.passos.find((passo) => passo.responsavel === 'laboratorio') ?? fluxo.passos[0]
+}
+
 export function inferirTipoProtese(servicoNome: string, legado?: string | null): TipoProteseId | null {
   const nome = servicoNome.toLowerCase()
   if (nome.includes('clareamento')) return 'placa_clareamento'

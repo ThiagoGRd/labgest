@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth-utils'
 import { inferirTipoProtese, isEtapaId, isTipoProtese, normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
 import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
+import { extrairUltimoRetornoLabIso } from '@/lib/producao-utils'
 
 export async function getProducao() {
   await requireUser()
@@ -53,12 +54,15 @@ export async function getProducao() {
         justificativaAtrasoFornecedor: o.justificativaAtrasoFornecedor,
         localizacaoAtual: o.localizacaoAtual,
         situacaoLogistica: o.situacaoLogistica,
+        movimentacaoLogisticaEm: o.movimentacaoLogisticaEm?.toISOString() ?? null,
         dentistaResponsavel: o.dentistaResponsavel,
         agendamentoClinico: o.agendamentoClinico?.toISOString() ?? null,
         cicloAtivoId: cicloAtivo?.id ?? null,
         cicloStatus: cicloAtivo?.status ?? null,
         cicloNumero: cicloAtivo?.numeroCiclo ?? null,
         cicloComprometido: cicloAtivo?.dataComprometida?.toISOString() ?? null,
+        dataEntradaCiclo: cicloAtivo?.dataEntrada?.toISOString() ?? null,
+        retornouAoLabEm: extrairUltimoRetornoLabIso(o.historicoEtapas),
         cicloDentistaDeci: cicloAtivo?.decisao ?? null,
         cicloRespostaEm: cicloAtivo?.decisao ? cicloAtivo.updatedAt?.toISOString() ?? null : null,
         cicloObs: cicloAtivo?.observacoesDentista ?? null,
@@ -70,6 +74,7 @@ export async function getProducao() {
     throw new Error('Não foi possível carregar a produção. Atualize a página para tentar novamente.')
   }
 }
+
 
 export async function moverOrdem(id: number, novaEtapa: string) {
   await requireUser()

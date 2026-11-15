@@ -3,18 +3,19 @@
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
 import { getProducao } from '@/actions/producao'
+import { listarTriagemWhatsappOs } from '@/actions/triagem-whatsapp'
 import { hojeIso, somarDias } from '@/lib/labs-externos-utils'
 import { JANELA_DESEMPENHO_DIAS, type OrdemFinalizada } from '@/lib/lab-interno-utils'
 
-// Painel de gestão do laboratório interno: só leitura. As ordens em andamento vêm da mesma
-// consulta da Produção (uma única fonte de verdade); aqui só se somam as já finalizadas.
+// Painel operacional e de gestão do laboratório interno: compartilha a mesma consulta
+// da Produção (uma única fonte de verdade), somando histórico e triagem do WhatsApp.
 export async function getLabInterno() {
   await requireUser()
 
   const inicio = new Date(`${somarDias(hojeIso(), -JANELA_DESEMPENHO_DIAS)}T00:00:00Z`)
 
   try {
-    const [ordens, finalizadas] = await Promise.all([
+    const [ordens, finalizadas, triagem] = await Promise.all([
       getProducao(),
       prisma.ordem.findMany({
         where: { status: { in: ['Finalizado', 'Entregue'] }, dataFinalizacao: { gte: inicio } },
@@ -26,6 +27,7 @@ export async function getLabInterno() {
         },
         take: 2000,
       }),
+      listarTriagemWhatsappOs(),
     ])
 
     const historico: OrdemFinalizada[] = finalizadas.map((ordem) => ({
@@ -35,9 +37,10 @@ export async function getLabInterno() {
       ciclos: ordem._count.ciclos,
     }))
 
-    return { ordens, historico }
+    return { ordens, historico, triagem }
   } catch (error) {
     console.error('Erro ao carregar o laboratório interno:', error)
     throw new Error('Não foi possível carregar o laboratório interno. Atualize a página para tentar novamente.')
   }
 }
+

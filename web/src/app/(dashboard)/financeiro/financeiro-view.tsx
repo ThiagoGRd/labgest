@@ -8,9 +8,11 @@ import {
   Pencil, Search, TrendingUp, Undo2, XCircle,
 } from 'lucide-react'
 import { cancelarConta, estornarBaixa, sincronizarFinanceiroRetroativo } from '@/actions/financeiro'
+import type { AlertaInsumoFinanceiro, AnaliseReajusteServico, RentabilidadeCliente } from '@/lib/inteligencia-financeira'
 import { BaixaContaModal } from '@/components/financeiro/baixa-conta-modal'
 import { EditarContaModal } from '@/components/financeiro/editar-conta-modal'
 import { NovaContaModal } from '@/components/financeiro/nova-conta-modal'
+import { PainelInteligenciaFinanceira } from '@/components/financeiro/painel-inteligencia-financeira'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +61,15 @@ interface FinanceiroData {
     vencidoReceber: number; quantidadeVencidas: number
   }
   mesesDisponiveis: string[]
+  inteligencia?: {
+    reajusteServicos: AnaliseReajusteServico[]
+    rentabilidadeClientes: RentabilidadeCliente[]
+    reposicaoEstoque: {
+      alertas: AlertaInsumoFinanceiro[]
+      custoTotalReposicao: number
+      valorTotalEmEstoque: number
+    }
+  }
 }
 
 interface FinanceiroViewProps { dados: FinanceiroData; criterioReceber: 'vencimento' | 'competencia' }
@@ -216,6 +227,20 @@ export function FinanceiroView({ dados, criterioReceber }: FinanceiroViewProps) 
                 {dados.receber.length + dados.pagar.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Sem compromissos neste período.</p>}
               </CardContent></Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="inteligencia" className="mt-4 space-y-6">
+            <PainelInteligenciaFinanceira
+              reajusteServicos={dados.inteligencia?.reajusteServicos ?? []}
+              rentabilidadeClientes={dados.inteligencia?.rentabilidadeClientes ?? []}
+              reposicaoEstoque={
+                dados.inteligencia?.reposicaoEstoque ?? {
+                  alertas: [],
+                  custoTotalReposicao: 0,
+                  valorTotalEmEstoque: 0,
+                }
+              }
+            />
           </TabsContent>
 
           <TabsContent value="receber" className="mt-4 space-y-4">

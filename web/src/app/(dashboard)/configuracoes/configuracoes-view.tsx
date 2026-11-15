@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { updateLabConfig } from '@/actions/configuracoes'
 import { criarUsuario, toggleStatusUsuario, excluirUsuario } from '@/actions/usuarios'
-import { saveNotificacoesConfig } from '@/actions/notificacoes'
+import { saveNotificacoesConfig, dispararResumoMatinalWhatsapp } from '@/actions/notificacoes'
+import { CONFIG_WHATSAPP_PADRAO, type ConfigNotificacoesWhatsapp } from '@/lib/whatsapp'
 import {
   Building2,
   Users,
@@ -28,6 +29,8 @@ import {
   Moon,
   Sun,
   Monitor,
+  MessageSquare,
+  Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -52,11 +55,13 @@ interface Usuario {
 interface ConfiguracoesViewProps {
   initialConfig: Configuracao | null
   usuarios: Usuario[]
+  initialNotificacoes?: ConfigNotificacoesWhatsapp
 }
 
-export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesViewProps) {
+export function ConfiguracoesView({ initialConfig, usuarios, initialNotificacoes }: ConfiguracoesViewProps) {
   const [activeSection, setActiveSection] = useState('laboratorio')
   const [saving, setSaving] = useState(false)
+  const [enviandoResumo, setEnviandoResumo] = useState(false)
   const [showNewUser, setShowNewUser] = useState(false)
   const [usuarioParaExcluir, setUsuarioParaExcluir] = useState<Usuario | null>(null)
   const [excluindoUsuario, setExcluindoUsuario] = useState(false)
@@ -80,12 +85,9 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
   })
 
   // State Notificações
-  const [notificacoes, setNotificacoes] = useState({
-    novaOrdem: true,
-    atrasos: true,
-    estoqueBaixo: true,
-    ordemFinalizada: false,
-    resumoDiario: false
+  const [notificacoes, setNotificacoes] = useState<ConfigNotificacoesWhatsapp>({
+    ...CONFIG_WHATSAPP_PADRAO,
+    ...initialNotificacoes,
   })
 
   const handleSaveLab = async () => {
@@ -123,9 +125,28 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
   const handleSaveNotificacoes = async () => {
     setSaving(true)
     try {
-      await saveNotificacoesConfig(notificacoes)
+      const res = await saveNotificacoesConfig(notificacoes)
+      if (res.success) {
+        toast.success('Configurações de automação e WhatsApp salvas!')
+      } else {
+        toast.error(res.error || 'Erro ao salvar preferências.')
+      }
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleTestarResumoMatinal = async () => {
+    setEnviandoResumo(true)
+    try {
+      const res = await dispararResumoMatinalWhatsapp()
+      if (res.success) {
+        toast.success(res.enviados ? `Resumo matinal enviado para ${res.enviados} destino(s)!` : 'Resumo matinal gerado com sucesso.')
+      } else {
+        toast.error('Não foi possível disparar o resumo matinal.')
+      }
+    } finally {
+      setEnviandoResumo(false)
     }
   }
 
@@ -321,29 +342,116 @@ export function ConfiguracoesView({ initialConfig, usuarios }: ConfiguracoesView
             {/* Notificações */}
             {activeSection === 'notificacoes' && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bell className="h-5 w-5" />
-                    Configurações de Notificações
-                  </CardTitle>
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bell className="h-5 w-5 text-indigo-600" />
+                      Automações e Lembretes por WhatsApp
+                    </CardTitle>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Configure os números da recepção, laboratório, gestora e grupo de OS + .STL para disparo imediato via Evolution API.
+                    </p>
+                  </div>
+                  <Button variant="outline" onClick={handleTestarResumoMatinal} disabled={enviandoResumo}>
+                    {enviandoResumo ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                    Enviar Resumo Matinal Agora
+                  </Button>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-4">
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando nova ordem for criada</span>
-                      <input type="checkbox" checked={notificacoes.novaOrdem} onChange={e => setNotificacoes({...notificacoes, novaOrdem: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                <CardContent className="space-y-6">
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 dark:border-indigo-900/30 dark:bg-indigo-950/20 p-4 space-y-4">
+                    <h4 className="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-indigo-600" />
+                      Destinos de WhatsApp da Operação
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          WhatsApp da Recepção (Meninas da Clínica)
+                        </label>
+                        <Input
+                          placeholder="Ex: 5511999999999"
+                          value={notificacoes.recepcaoTelefone}
+                          onChange={(e) => setNotificacoes({ ...notificacoes, recepcaoTelefone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          WhatsApp da Auxiliar / Bancada do Laboratório
+                        </label>
+                        <Input
+                          placeholder="Ex: 5511988888888"
+                          value={notificacoes.labTelefone}
+                          onChange={(e) => setNotificacoes({ ...notificacoes, labTelefone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          WhatsApp da Administradora / Gestor
+                        </label>
+                        <Input
+                          placeholder="Ex: 5511977777777"
+                          value={notificacoes.gestorTelefone}
+                          onChange={(e) => setNotificacoes({ ...notificacoes, gestorTelefone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          JID do Grupo de OS + .STL (Opcional)
+                        </label>
+                        <Input
+                          placeholder="Ex: 12036304958291@g.us"
+                          value={notificacoes.grupoOsJid}
+                          onChange={(e) => setNotificacoes({ ...notificacoes, grupoOsJid: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Gatilhos Automáticos Anti-Falha Humana
+                    </h4>
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Saída do Laboratório → Avisar Recepção</span>
+                        <span className="text-xs text-slate-500">Envia mensagem automática com link 1-toque assim que a peça sai da bancada para a clínica</span>
+                      </div>
+                      <input type="checkbox" checked={notificacoes.notificarSaidaLabParaRecepcao} onChange={e => setNotificacoes({...notificacoes, notificarSaidaLabParaRecepcao: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando ordem estiver atrasada</span>
-                      <input type="checkbox" checked={notificacoes.atrasos} onChange={e => setNotificacoes({...notificacoes, atrasos: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Chegada na Recepção → Avisar Dentista</span>
+                        <span className="text-xs text-slate-500">Avisa imediatamente o dentista quando a recepção confirma que a peça chegou</span>
+                      </div>
+                      <input type="checkbox" checked={notificacoes.notificarChegadaRecepcaoParaDentista} onChange={e => setNotificacoes({...notificacoes, notificarChegadaRecepcaoParaDentista: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar quando estoque estiver baixo</span>
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Cobrar Decisão de Prova (Sem resposta / Devolvida sem decisão)</span>
+                        <span className="text-xs text-slate-500">Envia link direto para o dentista aprovar ou pedir ajuste quando a peça volta da clínica sem decisão</span>
+                      </div>
+                      <input type="checkbox" checked={notificacoes.cobrarRetornoProvaSemDecisao} onChange={e => setNotificacoes({...notificacoes, cobrarRetornoProvaSemDecisao: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    </label>
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Alerta de Problema Técnico na Peça / Moldagem</span>
+                        <span className="text-xs text-slate-500">Dispara WhatsApp imediato para Dentista e Recepção quando a bancada reporta problema</span>
+                      </div>
+                      <input type="checkbox" checked={notificacoes.notificarProblemaTecnico} onChange={e => setNotificacoes({...notificacoes, notificarProblemaTecnico: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    </label>
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Notificar quando estoque estiver baixo</span>
+                        <span className="text-xs text-slate-500">Envia alerta para Administradora e Auxiliar quando um insumo atinge o estoque mínimo</span>
+                      </div>
                       <input type="checkbox" checked={notificacoes.estoqueBaixo} onChange={e => setNotificacoes({...notificacoes, estoqueBaixo: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <span className="text-slate-700">Notificar dentista quando ordem for finalizada (Email)</span>
-                      <input type="checkbox" checked={notificacoes.ordemFinalizada} onChange={e => setNotificacoes({...notificacoes, ordemFinalizada: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 block">Resumo Matinal Diário (Agenda Clinicorp x Peças + Atrasos)</span>
+                        <span className="text-xs text-slate-500">Envia briefing diário às 07:30 para Recepção, Auxiliar do Lab e Administradora</span>
+                      </div>
+                      <input type="checkbox" checked={notificacoes.resumoDiario} onChange={e => setNotificacoes({...notificacoes, resumoDiario: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
                   </div>
                   <div className="flex justify-end pt-4 border-t">

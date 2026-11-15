@@ -323,6 +323,12 @@ export async function enviarParaRecepcao(ordemId: number) {
   })
   if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
+  try {
+    const { notificarTransicaoOrdemWhatsapp } = await import('@/actions/notificacoes')
+    await notificarTransicaoOrdemWhatsapp({ ordemId, tipo: 'saida_lab_recepcao' })
+  } catch {
+    // Falha de envio externo não bloqueia a transição
+  }
   return { success: true }
 }
 
@@ -349,6 +355,12 @@ export async function confirmarRecebimentoRecepcao(ordemId: number) {
   })
   if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
+  try {
+    const { notificarTransicaoOrdemWhatsapp } = await import('@/actions/notificacoes')
+    await notificarTransicaoOrdemWhatsapp({ ordemId, tipo: 'chegada_recepcao_dentista' })
+  } catch {
+    // Falha de envio externo não bloqueia a transição
+  }
   return { success: true }
 }
 
@@ -463,6 +475,14 @@ export async function receberDoDentista(ordemId: number) {
   })
   if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
+  if (aguardandoResposta) {
+    try {
+      const { notificarTransicaoOrdemWhatsapp } = await import('@/actions/notificacoes')
+      await notificarTransicaoOrdemWhatsapp({ ordemId, tipo: 'cobranca_decisao_prova' })
+    } catch {
+      // Falha de envio externo não bloqueia a transição
+    }
+  }
   return { success: true, aguardandoResposta }
 }
 
@@ -517,11 +537,12 @@ export async function confirmarRecebimentoLaboratorio(ordemId: number) {
       localizacaoAtual: 'laboratorio',
       situacaoLogistica: 'no_laboratorio',
       movimentacaoLogisticaEm: agora,
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_laboratorio', usuario, { local: 'Laboratório' }),
+      historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'recebeu_laboratorio', usuario, { local: 'Laboratório', prazoCicloDias: '10' }),
     },
   })
   if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página e confira novamente.' }
   revalidarRecepcao()
+  revalidatePath('/lab-interno')
   return { success: true }
 }
 

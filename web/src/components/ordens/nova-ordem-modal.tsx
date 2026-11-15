@@ -350,10 +350,10 @@ export function NovaOrdemModal({ isOpen, onClose, clientes, servicos, onSuccess 
           <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="rounded-xl px-6">Cancelar</Button>
           <Button 
             type="submit" 
-            disabled={loading || itens.length === 0} 
+            disabled={loading || (itens.length === 0 && !currentItem.servicoId)} 
             className="rounded-xl px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : `Gerar ${itens.length > 1 ? itens.length + ' Ordens' : 'Ordem'}`}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : `Gerar ${(itens.length + (currentItem.servicoId ? 1 : 0)) > 1 ? (itens.length + (currentItem.servicoId ? 1 : 0)) + ' Ordens' : 'Ordem'}`}
           </Button>
         </div>
       </form>

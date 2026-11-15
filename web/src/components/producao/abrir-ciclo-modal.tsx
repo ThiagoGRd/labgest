@@ -32,8 +32,9 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
   const etapasOpcoes = tipoWorkflow
     ? [...SUBETAPAS_POR_WORKFLOW[tipoWorkflow].map(subetapa => subetapa.nome), 'Outro']
     : etapasPadrao
-  const [prazoDias, setPrazoDias] = useState(7)
+  const [prazoDias, setPrazoDias] = useState(10)
   const [etapa, setEtapa] = useState(() => etapasOpcoes[0])
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 

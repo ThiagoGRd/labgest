@@ -14,8 +14,10 @@ import {
   statusParaPassoProtese,
 } from '@/lib/workflow-config'
 
+const PRAZO_RETORNO_LAB_DIAS = 10
+
 // Abre um novo ciclo quando o trabalho entra no lab
-export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: string) {
+export async function abrirCiclo(ordemId: number, prazoDias = PRAZO_RETORNO_LAB_DIAS, etapa?: string) {
   await requireUser()
 
   if (!Number.isInteger(prazoDias) || prazoDias <= 0) {
@@ -29,8 +31,7 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
   if (!ordem) return { success: false, error: 'Ordem não encontrada' }
 
   const dataEntrada = new Date()
-  const dataComprometida = new Date()
-  dataComprometida.setDate(dataComprometida.getDate() + prazoDias)
+  const dataComprometida = new Date(dataEntrada.getTime() + prazoDias * 86_400_000)
 
   const subetapa = etapa?.trim() || 'Produção'
   // Abrir um ciclo registra o detalhe técnico sem trocar a macroetapa do Kanban.
@@ -54,12 +55,14 @@ export async function abrirCiclo(ordemId: number, prazoDias: number, etapa?: str
         historicoEtapas: [...(Array.isArray(ordem.historicoEtapas) ? ordem.historicoEtapas : []), { acao: 'abriu_ciclo', agendamentoEncerrado: ordem.agendamentoConfirmado, data: dataEntrada.toISOString() }],
         etapaAtual: macroetapa,
         subetapaAtual: subetapa,
+        prazoEtapaAtual: dataComprometida,
         status: statusParaEtapa(macroetapa),
       }
     }),
   ])
 
   revalidatePath('/producao')
+  revalidatePath('/lab-interno')
   revalidatePath('/ordens')
   revalidatePath('/recepcao')
   return { success: true, ciclo }
@@ -86,13 +89,14 @@ export async function enviarParaProva(cicloId: number) {
   })
 
   revalidatePath('/producao')
+  revalidatePath('/lab-interno')
   revalidatePath('/ordens')
   revalidatePath('/recepcao')
   return { success: true, ciclo }
 }
 
-// Auxiliar confirma recebimento físico e abre novo ciclo
-export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, novaEtapa?: string) {
+// Auxiliar confirma recebimento físico e abre novo ciclo (10 dias por padrão ao retornar ao laboratório)
+export async function confirmarRetorno(cicloId: number, novoPrazoDias = PRAZO_RETORNO_LAB_DIAS, novaEtapa?: string) {
   await requireUser()
 
   const cicloAtual = await prisma.cicloProducao.findUnique({
@@ -111,6 +115,10 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
     return { success: false, error: 'Informe um prazo válido para o ajuste' }
   }
 
+  const prazoEfetivoDias = Number.isInteger(novoPrazoDias) && novoPrazoDias > 0 ? novoPrazoDias : PRAZO_RETORNO_LAB_DIAS
+  const agora = new Date()
+  const prazo10DiasRetorno = new Date(agora.getTime() + prazoEfetivoDias * 86_400_000)
+
   if (isTipoProtese(cicloAtual.ordem.tipoWorkflow)) {
     const tipo = cicloAtual.ordem.tipoWorkflow
     const passoAtual = getPassoProtese(tipo, cicloAtual.ordem.passoFluxoAtual)
@@ -120,28 +128,27 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
         : getPassoLaboratorialAnterior(tipo, passoAtual.id)
       if (!destino) return { success: false, error: 'Não foi possível determinar a próxima etapa do fluxo' }
 
+      const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId: cicloAtual.ordemId } })
+      const prazoPasso = calcularPrazoPasso(agora, destino, cicloAtual.ordem.arcadas)
+      const dataComprometida = prazoPasso && prazoPasso > prazo10DiasRetorno ? prazoPasso : prazo10DiasRetorno
+
       const operacoes = [
         prisma.cicloProducao.update({
           where: { id: cicloId },
-          data: { dataRetorno: new Date(), status: 'concluido' },
+          data: { dataRetorno: agora, status: 'concluido' },
         }),
-      ]
-
-      if (cicloAtual.decisao === 'ajustes') {
-        const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId: cicloAtual.ordemId } })
-        const dataComprometida = calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas) || new Date()
-        operacoes.push(prisma.cicloProducao.create({
+        prisma.cicloProducao.create({
           data: {
             ordemId: cicloAtual.ordemId,
             numeroCiclo: totalCiclos + 1,
-            etapa: `Ajuste: ${destino.nome}`,
-            dataEntrada: new Date(),
-            prazoDias: novoPrazoDias,
+            etapa: cicloAtual.decisao === 'ajustes' ? `Ajuste: ${destino.nome}` : destino.nome,
+            dataEntrada: agora,
+            prazoDias: prazoEfetivoDias,
             dataComprometida,
             status: 'no_lab',
           },
-        }))
-      }
+        }),
+      ]
 
       await prisma.$transaction([
         ...operacoes,
@@ -152,17 +159,18 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
             etapaAtual: cicloAtual.decisao === 'ajustes' ? 'ajuste' : destino.macroetapa,
             subetapaAtual: cicloAtual.decisao === 'ajustes' ? `Ajuste: ${destino.nome}` : destino.nome,
             status: statusParaPassoProtese(destino),
-            prazoEtapaAtual: calcularPrazoPasso(new Date(), destino, cicloAtual.ordem.arcadas),
+            prazoEtapaAtual: dataComprometida,
             localizacaoAtual: 'laboratorio',
             situacaoLogistica: 'no_laboratorio',
             agendamentoConfirmado: false,
-            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
-            movimentacaoLogisticaEm: new Date(),
+            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, prazoDias: prazoEfetivoDias, data: agora.toISOString() }],
+            movimentacaoLogisticaEm: agora,
           },
         }),
       ])
 
       revalidatePath('/producao')
+      revalidatePath('/lab-interno')
       revalidatePath('/ordens')
       revalidatePath('/prioridades')
       revalidatePath('/recepcao')
@@ -170,12 +178,12 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
     }
   }
 
-  // Se decisão foi 'aprovado', vai para finalização sem abrir novo ciclo
+  // Se decisão foi 'aprovado', segue para acabamento com novo prazo de 10 dias do retorno ao laboratório
   if (cicloAtual.decisao === 'aprovado') {
     await prisma.$transaction([
       prisma.cicloProducao.update({
         where: { id: cicloId },
-        data: { dataRetorno: new Date(), status: 'concluido' },
+        data: { dataRetorno: agora, status: 'concluido' },
       }),
       prisma.ordem.update({
         where: { id: cicloAtual.ordemId, updatedAt: cicloAtual.ordem.updatedAt },
@@ -183,15 +191,17 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
           status: 'Em Produção',
           etapaAtual: 'acabamento',
           subetapaAtual: 'Acabamento e polimento',
+          prazoEtapaAtual: prazo10DiasRetorno,
           localizacaoAtual: 'laboratorio',
           situacaoLogistica: 'no_laboratorio',
-            agendamentoConfirmado: false,
-            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
-          movimentacaoLogisticaEm: new Date(),
+          agendamentoConfirmado: false,
+          historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, prazoDias: prazoEfetivoDias, data: agora.toISOString() }],
+          movimentacaoLogisticaEm: agora,
         },
       }),
     ])
     revalidatePath('/producao')
+    revalidatePath('/lab-interno')
     revalidatePath('/ordens')
     revalidatePath('/prioridades')
     revalidatePath('/recepcao')
@@ -199,23 +209,22 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
   }
 
   const totalCiclos = await prisma.cicloProducao.count({ where: { ordemId: cicloAtual.ordemId } })
-  const dataComprometida = new Date()
-  dataComprometida.setDate(dataComprometida.getDate() + novoPrazoDias)
+  const dataComprometida = prazo10DiasRetorno
   const subetapa = novaEtapa?.trim() || 'Ajustes solicitados pelo dentista'
 
   // Ajuste e abertura do novo ciclo são atômicos: ou ambos acontecem, ou nenhum.
   const [, novoCiclo] = await prisma.$transaction([
     prisma.cicloProducao.update({
       where: { id: cicloId },
-      data: { dataRetorno: new Date(), status: 'concluido' },
+      data: { dataRetorno: agora, status: 'concluido' },
     }),
     prisma.cicloProducao.create({
       data: {
         ordemId: cicloAtual.ordemId,
         numeroCiclo: totalCiclos + 1,
         etapa: subetapa,
-        dataEntrada: new Date(),
-        prazoDias: novoPrazoDias,
+        dataEntrada: agora,
+        prazoDias: prazoEfetivoDias,
         dataComprometida,
         status: 'no_lab',
       },
@@ -226,21 +235,24 @@ export async function confirmarRetorno(cicloId: number, novoPrazoDias: number, n
         etapaAtual: 'ajuste',
         subetapaAtual: subetapa,
         status: 'Em Produção',
+        prazoEtapaAtual: dataComprometida,
         localizacaoAtual: 'laboratorio',
         situacaoLogistica: 'no_laboratorio',
-            agendamentoConfirmado: false,
-            historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, data: new Date().toISOString() }],
-        movimentacaoLogisticaEm: new Date(),
+        agendamentoConfirmado: false,
+        historicoEtapas: [...(Array.isArray(cicloAtual.ordem.historicoEtapas) ? cicloAtual.ordem.historicoEtapas : []), { acao: 'retorno_ciclo', agendamentoEncerrado: cicloAtual.ordem.agendamentoConfirmado, prazoDias: prazoEfetivoDias, data: agora.toISOString() }],
+        movimentacaoLogisticaEm: agora,
       },
     }),
   ])
 
   revalidatePath('/producao')
+  revalidatePath('/lab-interno')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
   revalidatePath('/recepcao')
   return { success: true, novoCiclo }
 }
+
 
 // Após executar o ajuste, permite seguir para acabamento sem exigir uma nova prova.
 export async function concluirAjusteSemNovaProva(cicloId: number) {

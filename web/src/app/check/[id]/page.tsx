@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { CheckCircle2, Package, Calendar, Activity } from 'lucide-react'
 import Link from 'next/link'
 import { getFluxoProtese, isTipoProtese, KANBAN_ETAPAS, normalizarEtapa } from '@/lib/workflow-config'
+import { CheckinRapidoPanel } from '@/components/ordens/checkin-rapido-panel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { robots: { index: false, follow: false } }
@@ -130,6 +131,12 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
                 <p className="text-lg font-black text-slate-900 uppercase">{ordem.prioridade}</p>
               </div>
             </div>
+
+            <CheckinRapidoPanel
+              tokenOuId={resolvedParams.id}
+              ordemId={ordem.id}
+              statusAtual={ordem.status}
+            />
 
             <div className="text-center pt-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">LABGEST PREMIUM • DENTAL TECHNOLOGY</p>

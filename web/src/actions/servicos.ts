@@ -120,14 +120,14 @@ export async function getServicos() {
   const estoque = materiaisUsados.size > 0
     ? await prisma.estoque.findMany({
         where: { id: { in: [...materiaisUsados] } },
-        select: { id: true, nome: true, unidade: true },
+        select: { id: true, nome: true, unidade: true, precoUnitario: true },
       })
     : []
   const materiaisPorId = new Map(estoque.map((item) => [item.id, item]))
 
   return servicos.map((servico) => {
     const preco = Number(servico.preco)
-    const custo = Number(servico.custoMateriais || 0)
+    const custoCadastrado = Number(servico.custoMateriais || 0)
     const ordensValidas = servico.ordens.filter((ordem) => ordem.status !== 'Cancelado')
     const finalizadas = ordensValidas.filter((ordem) => ordem.dataPedido && ordem.dataFinalizacao)
     const tempoMedioReal = finalizadas.length > 0
@@ -136,11 +136,17 @@ export async function getServicos() {
           return total + Math.max(0, dias)
         }, 0) / finalizadas.length)
       : null
-    const materiais = normalizarMateriais(servico.materiais).map((material) => ({
-      ...material,
-      nome: materiaisPorId.get(material.id)?.nome || `Material #${material.id}`,
-      unidade: materiaisPorId.get(material.id)?.unidade || 'un',
-    }))
+    const materiais = normalizarMateriais(servico.materiais).map((material) => {
+      const infoEstoque = materiaisPorId.get(material.id)
+      return {
+        ...material,
+        nome: infoEstoque?.nome || `Material #${material.id}`,
+        unidade: infoEstoque?.unidade || 'un',
+        precoUnitario: infoEstoque ? Number(infoEstoque.precoUnitario) : 0,
+      }
+    })
+    const custoDinamico = materiais.reduce((acc, m) => acc + m.precoUnitario * m.quantidade, 0)
+    const custo = custoDinamico > 0 ? Number(custoDinamico.toFixed(2)) : custoCadastrado
 
     return {
       id: servico.id,

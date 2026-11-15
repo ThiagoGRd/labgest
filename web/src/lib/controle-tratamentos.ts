@@ -338,8 +338,8 @@ export async function atualizarAlertas() {
   if (resolver.length) await prisma.alertaTratamento.updateMany({ where: { id: { in: resolver } }, data: { resolvidoEm: new Date() } })
 
   // Só avisa quando esta execução realmente criou os alertas (evita aviso duplicado em corrida).
-  const telefone = process.env.GESTOR_WHATSAPP
-  if (telefone && criados.count === novos.length && novos.length > 0) {
+  const telefoneEnv = process.env.GESTOR_WHATSAPP
+  if (criados.count === novos.length && novos.length > 0) {
     const criticos = novos.filter((n) => n.tipo.endsWith('critico'))
     // Quando o crítico nasce junto com o de atenção, basta avisar do crítico.
     const relevantes = novos.filter((n) => n.tipo.endsWith('critico') || !criticos.some((c) => c.tratamento.ordemId === n.tratamento.ordemId && c.tipo.split('_')[0] === n.tipo.split('_')[0]))
@@ -347,7 +347,18 @@ export async function atualizarAlertas() {
       `${tipo.endsWith('critico') ? '🔴' : '🟡'} ${MENSAGENS[tipo](tratamento)} Está com ${NOMES_RESPONSAVEL[tratamento.tempo.comQuem]} (OS #${tratamento.ordemId}).`)
     const resto = relevantes.length > 15 ? `\n… e mais ${relevantes.length - 15}.` : ''
     try {
-      await sendWhatsAppMessage(telefone, `*LabGest — controle de tratamentos*\n\n${linhas.join('\n\n')}${resto}`)
+      const destinos = new Set<string>()
+      if (telefoneEnv) destinos.add(telefoneEnv)
+      try {
+        const { carregarConfigWhatsappInterna } = await import('@/actions/notificacoes')
+        const cfg = await carregarConfigWhatsappInterna()
+        if (cfg.gestorTelefone) destinos.add(cfg.gestorTelefone)
+      } catch {
+        // Ignora caso config de notificações não esteja disponível
+      }
+      for (const dest of destinos) {
+        await sendWhatsAppMessage(dest, `*LabGest — controle de tratamentos*\n\n${linhas.join('\n\n')}${resto}`)
+      }
     } catch (falhaWhatsapp) {
       console.error('Falha ao enviar alerta WhatsApp de tratamentos:', falhaWhatsapp)
     }
@@ -429,8 +440,14 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
     const piso = somarDias(hoje, -MAXIMO_RETROATIVO_DIAS)
     const de = [somarDias(maisAntiga, -MARGEM_INICIO_DIAS), piso].sort()[1]
     const ate = somarDias(hoje, DIAS_FUTUROS)
+    const deRecentePreOs = somarDias(hoje, -14)
 
     const { consultas: agenda, profissionais } = await buscarAgendaCompleta(de, ate)
+    for (const c of agenda) {
+      if (c.data >= deRecentePreOs && c.pacienteNome?.trim()) {
+        chaves.add(normalizarNome(c.pacienteNome))
+      }
+    }
     const relevantes = agenda.filter((c) => chaves.has(normalizarNome(c.pacienteNome)))
     const agora = new Date()
 

@@ -23,12 +23,15 @@ export interface OrdemProducao {
   justificativaAtrasoFornecedor?: string | null
   localizacaoAtual?: string | null
   situacaoLogistica?: string | null
+  movimentacaoLogisticaEm?: string | null
   dentistaResponsavel?: string | null
   agendamentoClinico?: string | null
   cicloAtivoId?: number | null
   cicloStatus?: string | null
   cicloNumero?: number | null
   cicloComprometido?: string | null
+  dataEntradaCiclo?: string | null
+  retornouAoLabEm?: string | null
   cicloDentistaDeci?: string | null
   cicloRespostaEm?: string | null
   cicloObs?: string | null
@@ -37,3 +40,4 @@ export interface OrdemProducao {
 
 export type FilaProducao = 'laboratorio' | 'clinica' | 'fornecedor' | 'sem_etapa'
 export type VisualizacaoProducao = 'kanban' | 'lista'
+
