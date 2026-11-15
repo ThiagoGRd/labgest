@@ -7,6 +7,18 @@ import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { concluirEntregaInterna, type EntregaInternaInput } from '@/lib/entrega-interna-recepcao'
 import { prepararAgendamento } from '@/lib/agendamento-recepcao'
 import { requireRecepcao } from '@/lib/auth-utils'
+import { clinicorpConfigurado } from '@/lib/clinicorp'
+import { hojeIso } from '@/lib/labs-externos-utils'
+import {
+  chavePacienteRecepcao,
+  historicoIndicaNoLabAtual,
+  ordenarItensRecepcao,
+  resumirAgendaClinicorpParaOrdem,
+  situacaoVisualItem,
+  type ConsultaClinicorpRecepcao,
+  type ResumoClinicorpRecepcao,
+} from '@/lib/recepcao-clinicorp'
+import type { StatusConsulta } from '@labgest/shared'
 
 export type SituacaoLogistica =
   | 'conferir_recebimento'
@@ -41,6 +53,7 @@ export interface OrdemRecepcao {
   entregaPrevista: string
   decisaoDentista: string | null
   observacaoDentista: string | null
+  clinicorp?: ResumoClinicorpRecepcao | null
 }
 
 const SITUACOES_ATIVAS: SituacaoLogistica[] = [
@@ -73,6 +86,7 @@ function finalidadeEfetiva(finalidade: string | null, status: string | null): Fi
 
 export async function getPainelRecepcao() {
   const usuario = await requireRecepcao()
+  const hoje = hojeIso()
   const inicioFinalizadosRecentes = new Date()
   inicioFinalizadosRecentes.setDate(inicioFinalizadosRecentes.getDate() - 60)
   const [ordens, clientes] = await Promise.all([
@@ -105,6 +119,7 @@ export async function getPainelRecepcao() {
         agendamentoDentista: true,
         movimentacaoLogisticaEm: true,
         dataEntrega: true,
+        historicoEtapas: true,
         ciclos: {
           where: { status: 'em_prova' },
           select: { decisao: true, observacoesDentista: true },
@@ -121,7 +136,21 @@ export async function getPainelRecepcao() {
     }),
   ])
 
-  const itens = ordens.map<OrdemRecepcao>((ordem) => {
+  const ordensVisiveis = ordens.filter((ordem) => {
+    const situacao = situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm)
+    if (
+      situacao === 'no_laboratorio'
+      && ordem.status !== 'Em Prova'
+      && ordem.status !== 'Finalizado'
+      && Array.isArray(ordem.historicoEtapas)
+      && !historicoIndicaNoLabAtual(ordem.historicoEtapas)
+    ) {
+      return false
+    }
+    return true
+  })
+
+  const itens = ordensVisiveis.map<OrdemRecepcao>((ordem) => {
     const ciclo = ordem.ciclos[0]
     return {
       origem: 'interno',
@@ -164,13 +193,86 @@ export async function getPainelRecepcao() {
     externosDisponiveis = false
   }
 
-  const dentistas = [...new Set(clientes.flatMap((cliente) => [cliente.dentista, cliente.nome]).filter((nome): nome is string => Boolean(nome?.trim())))]
+  let ultimaSincronizacao: { em: string; sucesso: boolean; erro: string | null; consultas: number } | null = null
+  const dentistasClinicorp: string[] = []
+
+  try {
+    const idsInternos = itens.filter((i) => i.origem === 'interno').map((i) => i.id)
+    const vinculos = idsInternos.length && typeof prisma.tratamentoVinculo?.findMany === 'function'
+      ? await prisma.tratamentoVinculo.findMany({
+          where: { ordemId: { in: idsInternos } },
+          select: { ordemId: true, pacienteChave: true },
+        })
+      : []
+    const vinculoPorOrdem = new Map(vinculos.map((v) => [v.ordemId, v.pacienteChave]))
+    const chaves = [...new Set(itens.map((i) => chavePacienteRecepcao(i.origem, i.id, i.paciente, vinculoPorOrdem)).filter(Boolean))]
+
+    const [consultas, ultima] = await Promise.all([
+      chaves.length && typeof prisma.clinicorpConsulta?.findMany === 'function'
+        ? prisma.clinicorpConsulta.findMany({
+            where: { pacienteChave: { in: chaves }, data: { gte: new Date(`${hoje}T00:00:00Z`) } },
+            orderBy: [{ data: 'asc' }, { horaInicio: 'asc' }],
+          })
+        : Promise.resolve([]),
+      typeof prisma.clinicorpSincronizacao?.findFirst === 'function'
+        ? prisma.clinicorpSincronizacao.findFirst({ where: { concluidaEm: { not: null } }, orderBy: { id: 'desc' } })
+        : Promise.resolve(null),
+    ])
+
+    if (ultima?.concluidaEm) {
+      ultimaSincronizacao = {
+        em: ultima.concluidaEm.toISOString(),
+        sucesso: ultima.sucesso,
+        erro: ultima.erro,
+        consultas: ultima.consultas,
+      }
+    }
+
+    const porChave = new Map<string, ConsultaClinicorpRecepcao[]>()
+    for (const c of consultas) {
+      if (c.dentistaNome?.trim()) dentistasClinicorp.push(c.dentistaNome.trim())
+      const lista = porChave.get(c.pacienteChave) ?? []
+      lista.push({
+        clinicorpId: c.clinicorpId,
+        data: c.data.toISOString().slice(0, 10),
+        horaInicio: c.horaInicio,
+        horaFim: c.horaFim,
+        status: c.status as StatusConsulta,
+        dentistaNome: c.dentistaNome ?? (c.dentistaId ? `Profissional ${c.dentistaId}` : null),
+        categoria: c.categoria,
+        observacoes: c.observacoes,
+      })
+      porChave.set(c.pacienteChave, lista)
+    }
+
+    for (const item of itens) {
+      const chave = chavePacienteRecepcao(item.origem, item.id, item.paciente, vinculoPorOrdem)
+      const situacaoVisual = situacaoVisualItem(item.situacao, item.decisaoDentista)
+      item.clinicorp = resumirAgendaClinicorpParaOrdem(porChave.get(chave) ?? [], situacaoVisual, hoje)
+    }
+  } catch {
+    // Falha ao ler espelho local do Clinicorp não bloqueia a fila da recepção.
+  }
+
+  const dentistas = [...new Set([
+    ...clientes.map((c) => c.dentista),
+    ...dentistasClinicorp,
+    ...itens.map((i) => i.dentista),
+    ...itens.map((i) => i.agendamentoDentista),
+  ].filter((nome): nome is string => Boolean(nome?.trim())).map((nome) => nome.trim()))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
+  const clinicas = [...new Set(itens.map((i) => i.clinica).filter((nome) => Boolean(nome?.trim())))]
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
 
   return {
-    itens,
+    itens: ordenarItensRecepcao(itens, 'urgencia'),
     externosDisponiveis,
     dentistas,
+    clinicas,
+    hoje,
+    clinicorpConfigurado: clinicorpConfigurado(),
+    ultimaSincronizacao,
     emitidoEm: new Date().toISOString(),
     usuario: { nome: usuario.nome, email: usuario.email, tipo: usuario.tipo || 'operador' },
   }
@@ -467,4 +569,28 @@ export async function retornarAgendadoDaRecepcao(input: { ordemId: number; expec
   if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página.' }
   revalidarRecepcao()
   return { success: true }
+}
+
+export async function sincronizarClinicorpRecepcao(): Promise<{
+  success: boolean
+  mensagem?: string
+  error?: string
+}> {
+  await requireRecepcao()
+  const { sincronizarClinicorp } = await import('@/lib/controle-tratamentos')
+  const resultado = await sincronizarClinicorp('manual')
+  revalidarRecepcao()
+  revalidatePath('/tratamentos')
+
+  if (!resultado.sucesso) {
+    return {
+      success: false,
+      error: resultado.erro || 'Não foi possível sincronizar a agenda do Clinicorp.',
+    }
+  }
+
+  return {
+    success: true,
+    mensagem: `${resultado.consultas} consulta(s) sincronizada(s) com o Clinicorp.`,
+  }
 }

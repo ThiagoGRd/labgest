@@ -35,6 +35,7 @@ import {
 } from '@labgest/shared'
 import { buscarAgendaCompleta, clinicorpConfigurado } from '@/lib/clinicorp'
 import { hojeIso } from '@/lib/labs-externos-utils'
+import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 
 /** Tratamentos encerrados continuam visíveis por este período, para comparação. */
@@ -362,6 +363,52 @@ export interface ResultadoSincronizacao {
   alertasNovos: number
 }
 
+const SITUACOES_RECEPCAO_SYNC = [
+  'aguardando_recepcao',
+  'aguardando_distribuicao',
+  'com_dentista',
+  'aguardando_resultado_dentista',
+  'aguardando_envio_laboratorio',
+  'em_transito_laboratorio',
+]
+
+async function carregarChavesRecepcao(): Promise<string[]> {
+  const inicioFinalizadosRecentes = new Date()
+  inicioFinalizadosRecentes.setDate(inicioFinalizadosRecentes.getDate() - 60)
+
+  const ordensRecepcao = await prisma.ordem.findMany({
+    where: {
+      status: { notIn: ['Entregue', 'Cancelado'] },
+      OR: [
+        { situacaoLogistica: { in: SITUACOES_RECEPCAO_SYNC } },
+        { status: 'Em Prova' },
+        { situacaoLogistica: 'no_laboratorio', historicoEtapas: { array_contains: [{ acao: 'registrou_no_laboratorio' }] } },
+        { status: 'Finalizado', dataFinalizacao: { gte: inicioFinalizadosRecentes } },
+      ],
+    },
+    select: { id: true, nomePaciente: true },
+  })
+
+  const vinculosRecepcao = ordensRecepcao.length
+    ? await prisma.tratamentoVinculo.findMany({
+        where: { ordemId: { in: ordensRecepcao.map((o) => o.id) } },
+        select: { ordemId: true, pacienteChave: true },
+      })
+    : []
+  const vinculoPorOrdem = new Map(vinculosRecepcao.map((v) => [v.ordemId, v.pacienteChave]))
+
+  const chaves = ordensRecepcao.map((o) => vinculoPorOrdem.get(o.id) ?? normalizarNome(o.nomePaciente))
+  try {
+    const externos = await consultarCustodiaExterna(prisma)
+    if (externos.disponivel) {
+      for (const item of externos.itens) chaves.push(normalizarNome(item.paciente))
+    }
+  } catch {
+    // Isola falha de recepção externa para não interromper a sincronização principal.
+  }
+  return chaves.filter(Boolean)
+}
+
 /** Lê a agenda do Clinicorp, guarda as consultas dos pacientes acompanhados e reavalia os alertas. */
 export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<ResultadoSincronizacao> {
   const hoje = hojeIso()
@@ -372,13 +419,13 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
   try {
     if (!clinicorpConfigurado()) throw new Error('Clinicorp não configurado: defina CLINICORP_URL, CLINICORP_SUBSCRIBER e CLINICORP_AUTH.')
 
-    const ordens = await carregarOrdens(hoje)
+    const [ordens, chavesRecepcao] = await Promise.all([carregarOrdens(hoje), carregarChavesRecepcao()])
     const vinculos = await prisma.tratamentoVinculo.findMany({ where: { ordemId: { in: ordens.map((o) => o.id) } } })
     const vinculoPorOrdem = new Map(vinculos.map((v) => [v.ordemId, v.pacienteChave]))
     const chaveDe = (ordem: OrdemControlada) => vinculoPorOrdem.get(ordem.id) ?? normalizarNome(ordem.nomePaciente)
-    const chaves = new Set(ordens.map(chaveDe).filter(Boolean))
+    const chaves = new Set([...ordens.map(chaveDe), ...chavesRecepcao].filter(Boolean))
 
-    const maisAntiga = ordens.length ? ordens.map(inicioDaOrdem).sort()[0] : hoje
+    const maisAntiga = ordens.length ? ordens.map(inicioDaOrdem).sort()[0] : somarDias(hoje, -30)
     const piso = somarDias(hoje, -MAXIMO_RETROATIVO_DIAS)
     const de = [somarDias(maisAntiga, -MARGEM_INICIO_DIAS), piso].sort()[1]
     const ate = somarDias(hoje, DIAS_FUTUROS)
