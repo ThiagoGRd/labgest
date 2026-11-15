@@ -1,4 +1,7 @@
 {
   "framework": "nextjs",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ../packages"
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet . ../packages",
+  "crons": [
+    { "path": "/api/cron/clinicorp-sync", "schedule": "0 9 * * *" }
+  ]
 }

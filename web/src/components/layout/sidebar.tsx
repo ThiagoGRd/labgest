@@ -21,6 +21,7 @@ import {
   Building2,
   FlaskConical,
   Route,
+  Activity,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -45,6 +46,7 @@ const navigation: NavigationItem[] = [
   { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
   { name: 'Produção', href: '/producao', icon: Kanban, hasBadge: true },
   { name: 'Recepção', href: '/recepcao', icon: Route },
+  { name: 'Tratamentos', href: '/tratamentos', icon: Activity },
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },

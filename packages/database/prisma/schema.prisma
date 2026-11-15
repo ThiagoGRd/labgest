@@ -408,3 +408,78 @@ model labs_externos_pedidos {
   @@index([prazo], map: "idx_lep_prazo")
   @@index([situacao], map: "idx_lep_situacao")
 }
+
+// ─── Controle de tratamentos (migração 013) ─────────────────────────────────
+// Tabelas independentes: não há relação declarada com Ordem de propósito, para
+// que as consultas existentes de ordens não dependam desta migração.
+
+model ClinicorpConsulta {
+  id             Int      @id @default(autoincrement())
+  clinicorpId    String   @unique @map("clinicorp_id") @db.VarChar(40)
+  pacienteNome   String   @map("paciente_nome") @db.VarChar(255)
+  pacienteChave  String   @map("paciente_chave") @db.VarChar(255)
+  data           DateTime @db.Date
+  horaInicio     String?  @map("hora_inicio") @db.VarChar(5)
+  horaFim        String?  @map("hora_fim") @db.VarChar(5)
+  status         String   @default("agendado") @db.VarChar(20)
+  dentistaId     String?  @map("dentista_id") @db.VarChar(40)
+  dentistaNome   String?  @map("dentista_nome") @db.VarChar(255)
+  categoria      String?  @db.VarChar(255)
+  observacoes    String?
+  contaManual    Boolean? @map("conta_manual")
+  sincronizadoEm DateTime @default(now()) @map("sincronizado_em") @db.Timestamptz(6)
+
+  @@index([pacienteChave, data], map: "idx_clinicorp_consultas_paciente")
+  @@map("clinicorp_consultas")
+}
+
+model TratamentoVinculo {
+  ordemId       Int      @id @map("ordem_id")
+  pacienteChave String   @map("paciente_chave") @db.VarChar(255)
+  pacienteNome  String   @map("paciente_nome") @db.VarChar(255)
+  criadoPor     String?  @map("criado_por") @db.VarChar(255)
+  criadoEm      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("tratamento_vinculos")
+}
+
+model LimiteTratamento {
+  tipoWorkflow     String   @id @map("tipo_workflow") @db.VarChar(50)
+  consultasAtencao Int      @map("consultas_atencao") @db.SmallInt
+  consultasMax     Int      @map("consultas_max") @db.SmallInt
+  diasAtencao      Int      @map("dias_atencao") @db.SmallInt
+  diasMax          Int      @map("dias_max") @db.SmallInt
+  atualizadoPor    String?  @map("atualizado_por") @db.VarChar(255)
+  atualizadoEm     DateTime @default(now()) @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("limites_tratamento")
+}
+
+model AlertaTratamento {
+  id          Int       @id @default(autoincrement())
+  ordemId     Int       @map("ordem_id")
+  tipo        String    @db.VarChar(30)
+  mensagem    String
+  criadoEm    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  cienteEm    DateTime? @map("ciente_em") @db.Timestamptz(6)
+  cientePor   String?   @map("ciente_por") @db.VarChar(255)
+  cienteNota  String?   @map("ciente_nota")
+  resolvidoEm DateTime? @map("resolvido_em") @db.Timestamptz(6)
+
+  @@unique([ordemId, tipo])
+  @@index([resolvidoEm, cienteEm], map: "idx_alertas_tratamento_abertos")
+  @@map("alertas_tratamento")
+}
+
+model ClinicorpSincronizacao {
+  id          Int       @id @default(autoincrement())
+  iniciadaEm  DateTime  @default(now()) @map("iniciada_em") @db.Timestamptz(6)
+  concluidaEm DateTime? @map("concluida_em") @db.Timestamptz(6)
+  origem      String    @default("manual") @db.VarChar(20)
+  sucesso     Boolean   @default(false)
+  consultas   Int       @default(0)
+  erro        String?
+  sugestoes   Json      @default("{}")
+
+  @@map("clinicorp_sincronizacoes")
+}
