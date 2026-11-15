@@ -262,6 +262,57 @@ test('inteligencia financeira calcula custo medio ponderado, termometro de reaju
   assert.equal(ranking[0].classificacao, 'estrela')
   assert.equal(ranking[1].clienteNome, 'Dr. Retrabalho')
   assert.equal(ranking[1].classificacao, 'atencao_retrabalho')
+
+  // Testa se a aba Inteligência & Custos está presente nas abas do FinanceiroView
+  const customLoad = loader({
+    'next/navigation': { useRouter: () => ({ push: () => {}, refresh: () => {} }) },
+    'sonner': { toast: { error: () => {}, success: () => {} } },
+    '@/actions/financeiro': { cancelarConta: async () => {}, estornarBaixa: async () => {}, sincronizarFinanceiroRetroativo: async () => {} },
+    '@/components/financeiro/baixa-conta-modal': { BaixaContaModal: () => null },
+    '@/components/financeiro/editar-conta-modal': { EditarContaModal: () => null },
+    '@/components/financeiro/nova-conta-modal': { NovaContaModal: () => null },
+    '@/components/layout/dashboard-layout': { DashboardLayout: ({ children }) => children },
+    '@/components/layout/header': { Header: () => null },
+    '@/components/ui/reason-modal': { ReasonModal: () => null },
+  })
+  const { FinanceiroView } = customLoad('web/src/app/(dashboard)/financeiro/financeiro-view.tsx')
+
+  const html = renderToStaticMarkup(
+    React.createElement(FinanceiroView, {
+      criterioReceber: 'vencimento',
+      dados: {
+        periodo: '2026-11',
+        receber: [],
+        receberCompetencia: [],
+        pagar: [],
+        clientes: [],
+        contasFinanceiras: [],
+        movimentacoes: [],
+        resumo: {
+          entradas: 0,
+          saidas: 0,
+          resultadoRealizado: 0,
+          recebidoCompetencia: 0,
+          pagoCompetencia: 0,
+          previstoReceber: 0,
+          totalPrevistoReceber: 0,
+          previstoPagar: 0,
+          totalPrevistoPagar: 0,
+          resultadoProjetado: 0,
+          vencidoReceber: 0,
+          quantidadeVencidas: 0,
+        },
+        mesesDisponiveis: ['2026-11'],
+        inteligencia: {
+          reajusteServicos: [reajuste],
+          rentabilidadeClientes: ranking,
+          reposicaoEstoque: { alertas: [], custoTotalReposicao: 0, valorTotalEmEstoque: 0 },
+        },
+      },
+    }),
+  )
+
+  assert.match(html, /Inteligência &amp; Custos|Inteligência & Custos/)
 })
 
 test('resolverUrlArquivoLab resolve caminhos relativos do Supabase sem alterar URLs completas', () => {

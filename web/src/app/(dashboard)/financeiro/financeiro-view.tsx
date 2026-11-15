@@ -76,6 +76,7 @@ interface FinanceiroViewProps { dados: FinanceiroData; criterioReceber: 'vencime
 
 const tabItems = [
   { value: 'visao', label: 'Visão geral', short: 'Resumo' },
+  { value: 'inteligencia', label: 'Inteligência & Custos', short: 'Inteligência' },
   { value: 'receber', label: 'A receber', short: 'Receber' },
   { value: 'pagar', label: 'A pagar', short: 'Pagar' },
   { value: 'caixa', label: 'Fluxo de caixa', short: 'Caixa' },
