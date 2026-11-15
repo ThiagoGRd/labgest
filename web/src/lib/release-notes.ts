@@ -1,5 +1,5 @@
 // Versão atual do sistema — incrementar a cada release
-export const VERSAO_ATUAL = '2.4.0'
+export const VERSAO_ATUAL = '2.5.0'
 
 export interface NotaRelease {
   versao: string
@@ -12,6 +12,17 @@ export interface NotaRelease {
 }
 
 export const HISTORICO_RELEASES: NotaRelease[] = [
+  {
+    versao: '2.5.0',
+    data: '15 de Novembro de 2026',
+    titulo: '✨ Precisão Clínica SaaS, Bancada Unificada & Zero Duplicidade',
+    novidades: [
+      { tipo: 'melhoria', texto: 'Novo visual Precisão Clínica SaaS em todo o sistema — contraste mais limpo, números tabulares e leitura rápida de prazos.' },
+      { tipo: 'melhoria', texto: 'Aba Produção unificada na Bancada Lab com sincronização direta das consultas do Clinicorp e aplicação de etapa em 1 clique.' },
+      { tipo: 'novo', texto: 'Criação de OS unificada para múltiplas arcadas (Superior, Inferior ou Superior + Inferior) e opção de anexar itens em OS aberta.' },
+      { tipo: 'novo', texto: 'Detector e unificador de ordens duplicadas na aba Ordens para consolidar casos separados do mesmo paciente.' },
+    ]
+  },
   {
     versao: '2.4.0',
     data: '15 de Abril de 2025',
