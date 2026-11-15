@@ -22,6 +22,7 @@ import {
   FlaskConical,
   Route,
   X,
+  Activity,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
@@ -47,6 +48,7 @@ const navigation: NavigationItem[] = [
   { name: 'Ordens', href: '/ordens', icon: ClipboardList, hasBadge: true },
   { name: 'Produção', href: '/producao', icon: Kanban, hasBadge: true },
   { name: 'Recepção', href: '/recepcao', icon: Route },
+  { name: 'Tratamentos', href: '/tratamentos', icon: Activity },
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Serviços', href: '/servicos', icon: Package },
   { name: 'Estoque', href: '/estoque', icon: Boxes },
@@ -69,7 +71,7 @@ const groups = [
   { name: 'Visão geral', hrefs: ['/dashboard', '/prioridades'] },
   { name: 'Operação', hrefs: ['/ordens', '/producao', '/recepcao', '/lab-interno', '/labs-externos'] },
   { name: 'Cadastros e materiais', hrefs: ['/clientes', '/servicos', '/estoque'] },
-  { name: 'Gestão', hrefs: ['/financeiro', '/relatorios'] },
+  { name: 'Gestão', hrefs: ['/tratamentos', '/financeiro', '/relatorios'] },
 ]
 
 export function Sidebar({ user }: SidebarProps) {

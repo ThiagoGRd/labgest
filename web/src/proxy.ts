@@ -20,7 +20,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
   const caminho = request.nextUrl.pathname
-  const rotaPublica = caminho.startsWith('/login') || caminho.startsWith('/auth') || caminho.startsWith('/check/')
+  const rotaPublica = caminho.startsWith('/login') || caminho.startsWith('/auth') || caminho.startsWith('/check/') || caminho.startsWith('/api/cron/')
 
   if (!user && !rotaPublica) return NextResponse.redirect(new URL('/login', request.url))
   if (user && caminho.startsWith('/login')) return NextResponse.redirect(new URL('/dashboard', request.url))
