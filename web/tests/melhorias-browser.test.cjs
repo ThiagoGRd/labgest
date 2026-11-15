@@ -196,6 +196,11 @@ test('browser Chromium valida abas e acoes reais de Financeiro, Lab Interno, Con
             export const saveNotificacoesConfig = ok
             export const dispararResumoMatinalWhatsapp = async () => ({ success: true, enviados: 2 })
             export const getMensagensNaoLidasLab = async () => 0
+            export const aplicarEtapaClinicorpNaOrdem = ok
+            export const sincronizarEtapasClinicorpLab = async () => ({ sincronizadas: 0, consultas: 0 })
+            export const getOrdemById = async () => null
+            export const enviarMensagemLab = ok
+            export const definirEtapaFluxoProtese = ok
             export const logout = ok
           `,
         }))
@@ -351,8 +356,9 @@ test('browser Chromium valida abas e acoes reais de Financeiro, Lab Interno, Con
     assert.deepEqual(runtimeErrors, [])
   } finally {
     ws.close()
-    proc.kill()
+    proc.kill('SIGKILL')
     await new Promise((resolve) => server.close(resolve))
-    fs.rmSync(userDataDir, { recursive: true, force: true })
+    await new Promise((r) => setTimeout(r, 150))
+    fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })

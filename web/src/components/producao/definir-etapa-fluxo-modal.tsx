@@ -63,7 +63,7 @@ export function DefinirEtapaFluxoModal({ ordem, onClose, onSuccess }: DefinirEta
       dismissible={!salvando}
     >
       <div className="space-y-5">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/50">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Serviço da ordem</p>
           <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{ordem.servico}</p>
         </div>

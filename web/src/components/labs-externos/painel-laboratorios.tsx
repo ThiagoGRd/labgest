@@ -38,7 +38,7 @@ export function PainelLaboratorios({ pedidos }: { pedidos: LabExternoPedido[] })
   }, [pedidos, hoje])
 
   return (
-    <section aria-label="Desempenho dos laboratórios" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+    <section aria-label="Desempenho dos laboratórios" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
       <h2 className="text-base font-bold text-slate-900 dark:text-white">Desempenho dos laboratórios</h2>
       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Pedidos enviados nos últimos {JANELA_ANALISE_DIAS} dias</p>
 

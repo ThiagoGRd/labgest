@@ -218,7 +218,7 @@ function ListaPrioridades({
   vazio: string
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/40 sm:p-5">
+    <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/40 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-slate-950 dark:text-white">{titulo}</h2>

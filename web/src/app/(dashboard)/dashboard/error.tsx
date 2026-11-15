@@ -13,7 +13,7 @@ export default function DashboardError({ error, reset }: { error: Error & { dige
   return (
     <DashboardLayout>
     <div className="flex min-h-[60vh] items-center justify-center p-6">
-      <div className="max-w-md rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm dark:border-red-500/20 dark:bg-slate-900">
+      <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm dark:border-red-500/20 dark:bg-slate-900">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
           <AlertTriangle className="h-6 w-6" />
         </div>

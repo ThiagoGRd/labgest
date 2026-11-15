@@ -23,10 +23,11 @@ function stub(name) {
   if(name==='react-to-print') return `exports.useReactToPrint=({contentRef})=>()=>{window.printedReport=contentRef.current.textContent}`
   if(name==='@/actions/ciclos') return `exports.confirmarRetorno=async(...args)=>{window.actionCalls.push({action:'confirmarRetorno',args});return {success:true}}`
   if(name==='@/actions/workflow-protese') return `exports.definirEtapaFluxoProtese=async(...args)=>{window.actionCalls.push({action:'definirEtapaFluxoProtese',args});return {success:true}}`
+  if(name==='@/actions/ordens') return `exports.detectarOrdensDuplicadas=async()=>[];exports.unificarOrdensDuplicadas=async()=>({success:true});exports.getOrdemById=async()=>null`
   if(name.startsWith('@/actions/')) return `module.exports=new Proxy({}, {get:()=>()=>{window.blockedActions++;throw Error('External action blocked')}})`
   if(name==='@/components/layout/header') return `${R}exports.Header=({title,subtitle,action})=>e('header',null,e('h1',null,title),e('p',null,subtitle),action&&e('button',{onClick:action.onClick},action.label))`
   if(name==='@/components/layout/dashboard-layout') return `${R}exports.DashboardLayout=({children})=>e('div',null,children)`
-  if(name.startsWith('@/components/') && !['@/components/ui/button','@/components/ui/input','@/components/ui/card','@/components/ui/badge','@/components/ui/modal','@/components/ui/select','@/components/producao/confirmar-retorno-modal','@/components/producao/definir-etapa-fluxo-modal','@/components/prioridades/relatorio-prioridades'].includes(name)) return `${R}module.exports=new Proxy({}, {get:(_,name)=>name==='__esModule'?true:({children})=>e('div',{'data-stub':String(name)},children)})`
+  if(name.startsWith('@/components/') && !['@/components/ui/button','@/components/ui/input','@/components/ui/card','@/components/ui/badge','@/components/ui/modal','@/components/ui/select','@/components/ui/empty-state','@/components/producao/confirmar-retorno-modal','@/components/producao/definir-etapa-fluxo-modal','@/components/prioridades/relatorio-prioridades','@/components/labs-externos/campos','@/components/lab-interno/filas','@/components/lab-interno/ordem-card','@/components/lab-interno/painel-gestao','@/components/lab-interno/pipeline-fila','@/components/lab-interno/fila-triagem-whatsapp'].includes(name)) return `${R}module.exports=new Proxy({}, {get:(_,name)=>name==='__esModule'?true:({children})=>e('div',{'data-stub':String(name)},children)})`
   return null
 }
 function bundle(version) {
@@ -52,7 +53,10 @@ function bundle(version) {
   }
   const react=load('react'), client=load('react-dom/client'), nav=load('next/navigation')
   const views={}
-  for(const [route,file,exp] of [['dashboard','dashboard-view','DashboardView'],['prioridades','prioridades-view','PrioridadesView'],['producao','producao-view','ProducaoView'],['ordens','ordens-view','OrdensView']]) views[route]=[load(`@/app/(dashboard)/${route}/${file}`),exp]
+  const routes = version === 'before'
+    ? [['dashboard','dashboard-view','DashboardView']]
+    : [['dashboard','dashboard-view','DashboardView'],['prioridades','prioridades-view','PrioridadesView'],['lab-interno','lab-interno-view','LabInternoView'],['ordens','ordens-view','OrdensView']]
+  for(const [route,file,exp] of routes) views[route]=[load(`@/app/(dashboard)/${route}/${file}`),exp]
   const fixture=fs.readFileSync(path.join(__dirname,'attention-fixtures.cjs'),'utf8')
   return `const process={env:{NODE_ENV:'development'}};const modules={${Object.entries(mods).map(([id,src])=>`${id}:${src}`).join(',')}};const cache={};function require(id){if(cache[id])return cache[id].exports;const m=cache[id]={exports:{}};modules[id](m,m.exports,require);return m.exports}window.blockedActions=0;window.actionCalls=[];${fixture};const React=require(${react});function App(){const pathname=require(${nav}).usePathname();const route=pathname.slice(1);const v=${JSON.stringify(views)}[route];return v?React.createElement(require(v[0])[v[1]],fixtures[route]):React.createElement('p',null,'Relatório simulado: '+location.search)}require(${client}).createRoot(document.getElementById('root')).render(React.createElement(App));`
 }
@@ -85,7 +89,7 @@ async function main(){
    for(const version of ['before','after']){
     await go('/dashboard'+(version==='before'?'?before=1':''));await call('Page.captureScreenshot',{format:'png'}).then(r=>fs.writeFileSync(`${out}/${version}-${width}.png`,Buffer.from(r.data,'base64')))
    }
-   for(const [label,url,expected] of [['Ordens atrasadas','/prioridades?atencao=atrasadas','Prazo vencido — em prova clínica'],['Entregas para hoje','/prioridades?atencao=hoje','Entregas para hoje'],['Retornos respondidos','/producao?atencao=retornos','Ciclo #1'],['Etapa a definir','/producao?atencao=sem-etapa','Definir tipo e etapa']]){
+   for(const [label,url,expected] of [['Ordens atrasadas','/prioridades?atencao=atrasadas','Prazo vencido — em prova clínica'],['Entregas para hoje','/prioridades?atencao=hoje','Entregas para hoje'],['Retornos respondidos','/lab-interno?atencao=retornos','Ciclo #1'],['Etapa a definir','/lab-interno?atencao=sem-etapa','Definir tipo e etapa']]){
     await go('/dashboard');await evaluate(`Array.from(document.querySelectorAll('a')).find(e=>e.textContent.includes(${JSON.stringify(label)})).click()`);await wait(`location.pathname+location.search===${JSON.stringify(url)}`);await wait(`document.body.innerText.includes(${JSON.stringify(expected)})`)
     await go(url);assert.ok((await text()).includes(expected));if(cssPath){await noOverflow();await screenshot(url.slice(1).replace('?atencao=','-')+'-'+width)};await call('Page.reload');await wait(`document.body.innerText.includes(${JSON.stringify(expected)})`)
     const input=url.startsWith('/prioridades')?'Buscar prioridades':'Buscar na seleção do painel'
@@ -93,16 +97,16 @@ async function main(){
     await click('Limpar seleção');await wait('!location.search.includes("atencao")');await evaluate('history.back()');await wait('location.search.includes("atencao")');await wait(`document.body.innerText.includes('Limpar seleção')`);await evaluate('history.forward()');await wait('!location.search.includes("atencao")');await wait(`!document.body.innerText.includes('Limpar seleção')`)
     await go(url+'&empty=1');assert.ok((await text()).match(/Nenhum/))
    }
-   for(const route of ['producao','prioridades']){await go('/'+route+'?atencao=invalido');assert.ok(!(await text()).includes('Limpar seleção'))}
-   await go('/producao?atencao=retornos');assert.ok((await text()).includes('Pausado'));assert.ok((await text()).includes('Ciclo #1'));assert.ok((await text()).includes('Ciclo #2'))
-   await go('/producao?atencao=sem-etapa');assert.ok(!(await text()).includes('Pausado'));assert.ok(!(await text()).includes('Bia'))
+   for(const route of ['lab-interno','prioridades']){await go('/'+route+'?atencao=invalido');assert.ok(!(await text()).includes('Limpar seleção'))}
+   await go('/lab-interno?atencao=retornos');assert.ok((await text()).includes('Pausado'));assert.ok((await text()).includes('Ciclo #1'));assert.ok((await text()).includes('Ciclo #2'))
+   await go('/lab-interno?atencao=sem-etapa');assert.ok(!(await text()).includes('Pausado'));assert.ok(!(await text()).includes('Bia'))
    await go('/prioridades?atencao=hoje');await search('Buscar prioridades','ZZZ');await click('Relatório geral');assert.ok(await evaluate('window.printedReport.includes("Bia Sintética")'),'general report retains excluded proof row despite context/search')
-   await go('/producao?atencao=retornos')
+   await go('/lab-interno?atencao=retornos')
    assert.equal(await evaluate(`Array.from(document.querySelectorAll('article')).filter(a=>a.textContent.includes('Ciclo #1')).some(a=>Array.from(a.querySelectorAll('button')).some(b=>b.textContent==='Confirmar retorno'))`),false,'old and paused cycles cannot confirm')
    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).filter(b=>b.textContent==='Confirmar retorno').length`),1)
    await click('Confirmar retorno');await wait(`!!document.querySelector('[role=dialog]')`);assert.ok(await evaluate(`document.querySelector('[role=dialog]').textContent.includes('Paciente: Ana Sintética')`))
-   if(cssPath){await screenshot('modal-retorno-'+width);assert.ok(await evaluate(`(()=>{const dialog=document.querySelector('[role=dialog]');const edge=dialog.getBoundingClientRect();return Array.from(dialog.querySelectorAll('button')).every(b=>b.getBoundingClientRect().right<=edge.right && b.getBoundingClientRect().left>=edge.left)})()`),'return modal buttons fit horizontally')}await click('Confirmar retorno e iniciar acabamento');await wait('window.actionCalls.length===1');assert.deepEqual(await evaluate('window.actionCalls'),[{action:'confirmarRetorno',args:[11,7]}]);await wait(`!document.querySelector('[role=dialog]')`)
-   await go('/producao?atencao=sem-etapa');await click('Definir tipo e etapa');await wait(`!!document.querySelector('[role=dialog]')`);assert.ok((await text()).includes('OS #1'))
+   if(cssPath){await screenshot('modal-retorno-'+width);assert.ok(await evaluate(`(()=>{const dialog=document.querySelector('[role=dialog]');const edge=dialog.getBoundingClientRect();return Array.from(dialog.querySelectorAll('button')).every(b=>b.getBoundingClientRect().right<=edge.right && b.getBoundingClientRect().left>=edge.left)})()`),'return modal buttons fit horizontally')}await click('Confirmar retorno e iniciar acabamento');await wait('window.actionCalls.length===1');assert.deepEqual(await evaluate('window.actionCalls'),[{action:'confirmarRetorno',args:[11,10]}]);await wait(`!document.querySelector('[role=dialog]')`)
+   await go('/lab-interno?atencao=sem-etapa');await click('Definir tipo e etapa');await wait(`!!document.querySelector('[role=dialog]')`);assert.ok((await text()).includes('OS #1'))
    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Confirmar etapa').disabled`),true)
    await mouse('[role=combobox]');await wait(`!!document.querySelector('[role=option]')`);await mouse('[role=option]');await wait(`!document.querySelector('[role=listbox]')`)
    await evaluate(`document.querySelectorAll('[role=combobox]')[1].id='etapa-teste'`);await mouse('#etapa-teste');await wait(`!!document.querySelector('[role=option]')`);await mouse('[role=option]');await wait(`!document.querySelector('[role=listbox]')`);if(cssPath)await screenshot('modal-etapa-'+width);await click('Confirmar etapa');await wait('window.actionCalls.length===1');assert.deepEqual(await evaluate('window.actionCalls'),[{action:'definirEtapaFluxoProtese',args:[1,'protese_total_removivel','moldagem_estudo']}]);await wait(`!document.querySelector('[role=dialog]')`)

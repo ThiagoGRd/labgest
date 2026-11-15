@@ -50,7 +50,7 @@ export function NovaContaModal({ isOpen, onClose, tipoInicial, clientes }: NovaC
     <Modal isOpen={isOpen} onClose={onClose} title={tipo === 'receber' ? 'Nova conta a receber' : 'Nova conta a pagar'} description="Previsão financeira" mobileFullscreen dismissible={!loading}>
       <form id={formId} action={handleSubmit} className="space-y-5">
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-zinc-800">
+        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
           <Button type="button" variant={tipo === 'receber' ? 'default' : 'ghost'} onClick={() => setTipo('receber')}>A receber</Button>
           <Button type="button" variant={tipo === 'pagar' ? 'default' : 'ghost'} onClick={() => setTipo('pagar')}>A pagar</Button>
         </div>

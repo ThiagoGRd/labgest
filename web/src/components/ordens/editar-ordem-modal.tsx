@@ -167,7 +167,7 @@ export function EditarOrdemModal({ isOpen, onClose, onSuccess, ordem }: EditarOr
                 name="motivoStatus"
                 value={formData.motivoStatus}
                 onChange={handleChange}
-                className="min-h-20 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className="min-h-20 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                 placeholder="Ex.: aguardando nova moldagem da clínica"
                 required
               />

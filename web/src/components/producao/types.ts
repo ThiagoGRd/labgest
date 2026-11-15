@@ -1,6 +1,21 @@
+import type { ResultadoInferenciaClinicorp } from '@labgest/shared'
+
+export interface ItemCasoOrdem {
+  servicoId?: number | null
+  servicoNome: string
+  arcada?: 'Superior' | 'Inferior' | 'Superior + Inferior' | string | null
+  elementos?: string | null
+  corDentes?: string | null
+  material?: string | null
+  tipoProtese?: string | null
+  valor?: number | null
+  origemOrdemId?: number | null
+}
+
 export interface OrdemProducao {
   id: number
   paciente: string
+  cpfPaciente?: string | null
   dentista: string
   servico: string
   status: string
@@ -36,8 +51,11 @@ export interface OrdemProducao {
   cicloRespostaEm?: string | null
   cicloObs?: string | null
   cicloFotos?: string[]
+  itensCaso?: ItemCasoOrdem[]
+  clinicorpEtapa?: ResultadoInferenciaClinicorp | null
 }
 
 export type FilaProducao = 'laboratorio' | 'clinica' | 'fornecedor' | 'sem_etapa'
 export type VisualizacaoProducao = 'kanban' | 'lista'
+
 

@@ -26,41 +26,41 @@ function DashboardContent({ children, user }: DashboardLayoutProps) {
 
   return (
     <Dialog.Root open={isOpenMobile} onOpenChange={setIsOpenMobile} modal={isMobile}>
-    <div className="min-h-screen mesh-bg relative overflow-hidden">
-      <Sidebar user={usuarioExibido} />
-      
-      {/* Mobile Top Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-16 glass-panel border-b border-white/20 dark:border-white/10 flex items-center justify-between px-4">
-        <div className="flex items-center gap-3 w-full">
-          <Dialog.Trigger asChild>
-          <button
-            id="admin-menu-trigger"
-            aria-label="Abrir menu"
-            className="p-2 -ml-2 rounded-xl text-foreground hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
-          >
-            <Menu className="h-6 w-6" />
-          </button>
-          </Dialog.Trigger>
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <span className="text-white font-black text-xs">LG</span>
+      <div className="min-h-screen mesh-bg relative overflow-x-hidden">
+        <Sidebar user={usuarioExibido} />
+
+        {/* Mobile Top Header */}
+        <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-16 border-b border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3 w-full">
+            <Dialog.Trigger asChild>
+              <button
+                id="admin-menu-trigger"
+                aria-label="Abrir menu"
+                className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+            </Dialog.Trigger>
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-xs">
+                <span className="text-white font-bold text-xs tracking-tight">LG</span>
+              </div>
+              <span className="text-slate-900 dark:text-white font-bold text-lg tracking-tight">LabGest</span>
             </div>
-            <span className="text-foreground font-bold text-lg tracking-tight">LabGest</span>
           </div>
         </div>
-      </div>
 
-      <main
-        className={cn(
-          "transition-all duration-300 min-h-screen flex flex-col pt-16 md:pt-0",
-          collapsed ? "md:ml-20" : "md:ml-64"
-        )}
-      >
-        <div className="flex-1 animate-in p-4 md:p-6">
-          {children}
-        </div>
-      </main>
-    </div>
+        <main
+          className={cn(
+            'transition-all duration-300 min-h-screen flex flex-col pt-16 md:pt-0',
+            collapsed ? 'md:ml-20' : 'md:ml-64'
+          )}
+        >
+          <div className="flex-1 animate-in p-3 sm:p-4 md:p-6">
+            {children}
+          </div>
+        </main>
+      </div>
     </Dialog.Root>
   )
 }

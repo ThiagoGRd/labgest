@@ -20,7 +20,7 @@ export default function PrioridadesLoading() {
         <Skeleton className="h-20 rounded-2xl" />
         <div className="grid gap-5 xl:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-72 rounded-3xl" />
+            <Skeleton key={index} className="h-72 rounded-2xl" />
           ))}
         </div>
       </div>

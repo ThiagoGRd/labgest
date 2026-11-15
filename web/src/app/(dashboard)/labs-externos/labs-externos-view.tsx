@@ -168,7 +168,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs,
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <section aria-label="Lista de pedidos" className="min-w-0 space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -239,7 +239,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs,
                 {filtrados.length > visiveis.length && (
                   <div className="flex flex-col items-center gap-1 pt-2">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Mostrando {visiveis.length} de {filtrados.length.toLocaleString('pt-BR')}</p>
-                    <button type="button" onClick={() => setLimite((l) => l + POR_PAGINA)} className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-zinc-900 dark:text-slate-200 dark:hover:bg-white/10">
+                    <button type="button" onClick={() => setLimite((l) => l + POR_PAGINA)} className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/10">
                       Mostrar mais
                     </button>
                   </div>
@@ -249,7 +249,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs,
           </section>
 
           <aside className="min-w-0 space-y-4 xl:sticky xl:top-28 xl:self-start">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white">Laboratórios parceiros</h2>
@@ -263,7 +263,7 @@ export function LabsExternosView({ pedidos, atrasados, retrabalhos, stats, labs,
 
             <PainelLaboratorios pedidos={pedidos} />
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Como o pedido anda</h2>
               <ol className="mt-3 space-y-3">
                 {ETAPAS.map((etapa) => {

@@ -13,7 +13,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   Clock3,
-  Kanban,
+  FlaskConical,
   Loader2,
   Package,
   PackageCheck,
@@ -141,7 +141,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       value: initialData.emAndamento.toString(),
       detail: `${initialData.entregasHoje} com entrega hoje`,
       icon: Clock3,
-      href: '/producao',
+      href: '/lab-interno',
       tone: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
       trend: 'neutra' as const,
     },
@@ -188,15 +188,15 @@ export function DashboardView({ initialData }: DashboardViewProps) {
       label: 'Retornos respondidos',
       value: initialData.retornosPendentes,
       description: 'Dentista já aprovou ou pediu ajuste',
-      href: '/producao?atencao=retornos',
+      href: '/lab-interno?atencao=retornos',
       icon: RotateCcw,
-      tone: 'text-violet-600 bg-violet-50 dark:bg-violet-500/10 dark:text-violet-300',
+      tone: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-300',
     },
     {
       label: 'Etapa a definir',
       value: initialData.semEtapa,
       description: 'Ordens antigas sem fluxo detalhado',
-      href: '/producao?atencao=sem-etapa',
+      href: '/lab-interno?atencao=sem-etapa',
       icon: Tags,
       tone: 'text-orange-600 bg-orange-50 dark:bg-orange-500/10 dark:text-orange-300',
     },
@@ -215,11 +215,11 @@ export function DashboardView({ initialData }: DashboardViewProps) {
         subtitle={totalAtencao > 0 ? `${totalAtencao} ações pedem atenção hoje` : 'Operação em dia — nenhuma ação crítica agora'}
       />
 
-      <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-6 p-3 sm:p-6">
         <nav aria-label="Atalhos principais" className="flex gap-2 overflow-x-auto pb-1">
-          <Link href="/ordens" className={buttonVariants({ className: 'shrink-0 bg-indigo-600 text-white hover:bg-indigo-700' })}><ClipboardList className="h-4 w-4" /> Ordens de serviço</Link>
+          <Link href="/ordens" className={buttonVariants({ className: 'shrink-0' })}><ClipboardList className="h-4 w-4" /> Ordens de serviço</Link>
           <Link href="/prioridades" className={buttonVariants({ variant: 'outline', className: 'shrink-0' })}><AlertTriangle className="h-4 w-4" /> Prioridades</Link>
-          <Link href="/producao" className={buttonVariants({ variant: 'outline', className: 'shrink-0' })}><Kanban className="h-4 w-4" /> Produção</Link>
+          <Link href="/lab-interno" className={buttonVariants({ variant: 'outline', className: 'shrink-0' })}><FlaskConical className="h-4 w-4" /> Bancada Lab</Link>
           <Link href="/financeiro" className={buttonVariants({ variant: 'outline', className: 'shrink-0' })}><WalletCards className="h-4 w-4" /> Financeiro</Link>
         </nav>
 
@@ -229,20 +229,20 @@ export function DashboardView({ initialData }: DashboardViewProps) {
               <h2 className="text-lg font-bold text-slate-950 dark:text-white">O que precisa de atenção</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">Atalhos para as filas que podem travar a operação.</p>
             </div>
-            <Link href="/prioridades" className="hidden text-sm font-semibold text-indigo-600 hover:text-indigo-700 sm:block">Abrir cronograma</Link>
+            <Link href="/prioridades" className="hidden text-sm font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 sm:block">Abrir cronograma</Link>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {atencoes.map((item) => (
-              <Link key={item.label} href={item.href} className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-all hover:border-indigo-200 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:bg-slate-900 dark:hover:border-indigo-500/30">
+              <Link key={item.label} href={item.href} className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-all hover:border-indigo-300 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-500/40">
                 <div className={`rounded-xl p-2.5 ${item.tone}`}><item.icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{item.label}</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700 dark:bg-white/10 dark:text-slate-200">{item.value}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{item.value}</span>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+                <ArrowRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-500 dark:text-slate-600" />
               </Link>
             ))}
           </div>
@@ -250,15 +250,15 @@ export function DashboardView({ initialData }: DashboardViewProps) {
 
         <section aria-label="Indicadores principais" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => (
-            <Link key={stat.name} href={stat.href} className="group rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-              <Card className="h-full hover:-translate-y-0.5 hover:border-indigo-200 dark:hover:border-indigo-500/30">
+            <Link key={stat.name} href={stat.href} className="group rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <Card className="h-full hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-500/40">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.name}</p>
-                      <p className="mt-2 truncate text-3xl font-bold tracking-tight text-slate-950 dark:text-white">{stat.value}</p>
+                      <p className="mt-2 truncate text-3xl font-bold tracking-tight tabular-nums text-slate-950 dark:text-white">{stat.value}</p>
                     </div>
-                    <div className={`rounded-2xl p-3 ${stat.tone}`}><stat.icon className="h-5 w-5" /></div>
+                    <div className={`rounded-xl p-3 ${stat.tone}`}><stat.icon className="h-5 w-5" /></div>
                   </div>
                   <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     {stat.trend === 'alta' && <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />}
@@ -273,7 +273,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <Card className="overflow-hidden xl:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-slate-100 dark:border-white/5">
+            <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <CardTitle>Próximas entregas</CardTitle>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Clique no paciente para abrir a ordem completa.</p>
@@ -285,19 +285,19 @@ export function DashboardView({ initialData }: DashboardViewProps) {
                 <div className="flex flex-col items-center px-6 py-14 text-center">
                   <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                   <p className="mt-3 font-semibold text-slate-800 dark:text-slate-100">Nenhuma entrega futura pendente</p>
-                  <p className="mt-1 text-sm text-slate-500">As novas ordens aparecerão aqui automaticamente.</p>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">As novas ordens aparecerão aqui automaticamente.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-white/5">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {initialData.proximasEntregas.map((ordem) => (
                     <button
                       key={ordem.id}
                       type="button"
                       onClick={() => abrirOrdem(ordem.id)}
                       disabled={openingOrdemId === ordem.id}
-                      className="group flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 sm:gap-4 sm:px-6 dark:hover:bg-white/5"
+                      className="group flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 sm:gap-4 sm:px-6 dark:hover:bg-slate-800/50"
                     >
-                      <div className="hidden rounded-xl bg-slate-100 p-3 text-slate-500 sm:block dark:bg-white/5 dark:text-slate-400"><Package className="h-5 w-5" /></div>
+                      <div className="hidden rounded-xl bg-slate-100 p-3 text-slate-500 sm:block dark:bg-slate-800 dark:text-slate-400"><Package className="h-5 w-5" /></div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-bold text-slate-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-400">{ordem.paciente}</p>
@@ -307,7 +307,7 @@ export function DashboardView({ initialData }: DashboardViewProps) {
                         <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{ordem.servico} · {ordem.cliente}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-bold capitalize text-slate-900 dark:text-white">{formatDate(ordem.dataEntrega)}</p>
+                        <p className="text-sm font-bold capitalize tabular-nums text-slate-900 dark:text-white">{formatDate(ordem.dataEntrega)}</p>
                         <Badge variant={getStatusVariant(ordem.status)} className="mt-1 hidden sm:inline-flex">{ordem.status}</Badge>
                       </div>
                     </button>
@@ -320,35 +320,35 @@ export function DashboardView({ initialData }: DashboardViewProps) {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-emerald-600" /> Financeiro em resumo</CardTitle>
+                <CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Financeiro em resumo</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Saldo em aberto</p>
-                  <p className="mt-1 text-3xl font-bold text-slate-950 dark:text-white">{formatCurrency(initialData.saldoEmAberto)}</p>
-                  <p className="mt-1 text-xs text-slate-500">{initialData.contasEmAberto} conta{initialData.contasEmAberto === 1 ? '' : 's'} pendente{initialData.contasEmAberto === 1 ? '' : 's'}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Saldo em aberto</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{formatCurrency(initialData.saldoEmAberto)}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{initialData.contasEmAberto} conta{initialData.contasEmAberto === 1 ? '' : 's'} pendente{initialData.contasEmAberto === 1 ? '' : 's'}</p>
                 </div>
-                <div className="rounded-2xl bg-amber-50 p-4 dark:bg-amber-500/10">
+                <div className="rounded-xl border border-amber-200/70 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">Vencem em até 7 dias</p>
-                      <p className="mt-1 text-lg font-bold text-amber-900 dark:text-amber-100">{formatCurrency(initialData.vencendoSeteDias)}</p>
+                      <p className="mt-1 text-lg font-bold tabular-nums text-amber-900 dark:text-amber-100">{formatCurrency(initialData.vencendoSeteDias)}</p>
                     </div>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-700 shadow-sm dark:bg-black/20 dark:text-amber-200">{initialData.contasVencendoSeteDias}</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold tabular-nums text-amber-700 shadow-2xs dark:bg-slate-900 dark:text-amber-200">{initialData.contasVencendoSeteDias}</span>
                   </div>
                 </div>
                 <Link href="/financeiro" className={buttonVariants({ variant: 'outline', className: 'w-full' })}>Abrir financeiro <ArrowRight className="h-4 w-4" /></Link>
               </CardContent>
             </Card>
 
-            <Card className={initialData.prontasParaEntrega ? 'border-emerald-200 dark:border-emerald-500/20' : ''}>
+            <Card className={initialData.prontasParaEntrega ? 'border-emerald-200 dark:border-emerald-500/30' : ''}>
               <CardContent className="flex items-center gap-4 p-5">
-                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><PackageCheck className="h-6 w-6" /></div>
+                <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><PackageCheck className="h-6 w-6" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-slate-900 dark:text-white">Prontas para entrega</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{initialData.prontasParaEntrega} aguardando retirada ou confirmação</p>
                 </div>
-                <Link href="/ordens" aria-label="Ver ordens prontas" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-white/10"><ArrowRight className="h-4 w-4" /></Link>
+                <Link href="/ordens" aria-label="Ver ordens prontas" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800"><ArrowRight className="h-4 w-4" /></Link>
               </CardContent>
             </Card>
           </div>

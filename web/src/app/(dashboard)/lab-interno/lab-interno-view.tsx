@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { AlertTriangle, ClipboardList, Loader2, Search, X } from 'lucide-react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { AlertTriangle, ClipboardList, Info, Loader2, RefreshCw, Search, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -16,12 +16,21 @@ import { OrdemCard, ordemAtrasada } from '@/components/lab-interno/ordem-card'
 import { PainelGestao } from '@/components/lab-interno/painel-gestao'
 import { PipelineFila, type FiltroOrdens } from '@/components/lab-interno/pipeline-fila'
 import { FilaTriagemWhatsapp } from '@/components/lab-interno/fila-triagem-whatsapp'
+import { AtencaoProducao } from '@/app/(dashboard)/producao/atencao-producao'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
+import { DefinirEtapaFluxoModal } from '@/components/producao/definir-etapa-fluxo-modal'
+import { VisualizarOrdemModal } from '@/components/ordens/visualizar-ordem-modal'
 import type { FilaProducao, OrdemProducao } from '@/components/producao/types'
+import { contextoAtencao, limparAtencao, type RetornoDashboard } from '@/lib/dashboard-attention'
 import { hojeIso } from '@/lib/labs-externos-utils'
 import type { OrdemFinalizada } from '@/lib/lab-interno-utils'
 import { filaDaOrdem, ordenarOrdensOperacionais } from '@/lib/producao-utils'
 import type { ItemTriagemWhatsappOs } from '@/lib/triagem-whatsapp-os'
+import {
+  aplicarEtapaClinicorpNaOrdem,
+  sincronizarEtapasClinicorpLab,
+} from '@/actions/lab-interno'
+import { getOrdemById } from '@/actions/ordens'
 import {
   concluirEtapaLaboratorial,
   confirmarRecebimentoFornecedor,
@@ -33,7 +42,18 @@ interface Props {
   ordens: OrdemProducao[]
   historico: OrdemFinalizada[]
   triagem?: ItemTriagemWhatsappOs[]
+  semEtapaIds?: number[]
+  retornosDashboard?: RetornoDashboard[]
+  clinicorpConfigurado?: boolean
+  ultimaSincronizacao?: {
+    em: string
+    sucesso: boolean
+    erro: string | null
+    consultas: number
+  } | null
 }
+
+type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
 
 const POR_PAGINA = 20
 const PRIORIDADES = ['Urgente', 'Alta', 'Normal', 'Baixa']
@@ -44,14 +64,39 @@ const TITULOS: Record<Exclude<FiltroOrdens, FilaProducao>, { titulo: string; des
   retornos: { titulo: 'Retornos da clínica', descricao: 'A clínica já respondeu a prova; confirme o retorno para iniciar novo ciclo de 10 dias.' },
 }
 
-export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
+function formatarSincronizacao(iso?: string | null) {
+  if (!iso) return 'Ainda não sincronizado'
+  return new Date(iso).toLocaleString('pt-BR', {
+    timeZone: 'America/Maceio',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export function LabInternoView({
+  ordens,
+  historico,
+  triagem = [],
+  semEtapaIds = [],
+  retornosDashboard = [],
+  clinicorpConfigurado = false,
+  ultimaSincronizacao = null,
+}: Props) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const contexto = contextoAtencao(searchParams.get('atencao'), 'lab-interno')
   const [filtro, setFiltro] = useState<FiltroOrdens>('laboratorio')
   const [busca, setBusca] = useState('')
   const [prioridade, setPrioridade] = useState('')
   const [limite, setLimite] = useState(POR_PAGINA)
   const [processandoId, setProcessandoId] = useState<number | null>(null)
+  const [sincronizandoClinicorp, setSincronizandoClinicorp] = useState(false)
   const [ordemRetornoModal, setOrdemRetornoModal] = useState<OrdemProducao | null>(null)
+  const [ordemEtapaModal, setOrdemEtapaModal] = useState<OrdemProducao | null>(null)
+  const [ordemVisualizar, setOrdemVisualizar] = useState<OrdemDetalhada | null>(null)
   const [ordemProblemaModal, setOrdemProblemaModal] = useState<OrdemProducao | null>(null)
   const [motivoProblema, setMotivoProblema] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -59,7 +104,7 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
 
   const ordenadas = useMemo(() => ordenarOrdensOperacionais(ordens), [ordens])
 
-  const { contagens, atrasadas, retornos, noLaboratorio } = useMemo(() => {
+  const { contagens, atrasadas, retornos, noLaboratorio, divergenciasClinicorp } = useMemo(() => {
     const cont: Record<FilaProducao, number> = { laboratorio: 0, clinica: 0, fornecedor: 0, sem_etapa: 0 }
     for (const ordem of ordens) cont[filaDaOrdem(ordem)] += 1
     return {
@@ -67,8 +112,14 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
       atrasadas: ordens.filter((o) => ordemAtrasada(o, hoje)).length,
       retornos: ordens.filter((o) => o.cicloDentistaDeci).length,
       noLaboratorio: ordens.filter((o) => filaDaOrdem(o) === 'laboratorio'),
+      divergenciasClinicorp: ordens.filter((o) => o.clinicorpEtapa?.divergente).length,
     }
   }, [ordens, hoje])
+
+  const semEtapaOrdens = useMemo(
+    () => ordens.filter((o) => semEtapaIds.includes(o.id)),
+    [ordens, semEtapaIds],
+  )
 
   const filtradas = useMemo(() => {
     let lista = ordenadas
@@ -94,6 +145,52 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
   function mudarFiltro(novo: FiltroOrdens) {
     setFiltro(novo)
     setLimite(POR_PAGINA)
+  }
+
+  async function abrirOrdemDetalhes(ordemId: number) {
+    try {
+      const dados = await getOrdemById(ordemId)
+      if (!dados) {
+        toast.error('Ordem não encontrada.')
+        return
+      }
+      setOrdemVisualizar(dados)
+    } catch {
+      toast.error('Não foi possível abrir os detalhes da OS.')
+    }
+  }
+
+  function handleSincronizarClinicorp() {
+    setSincronizandoClinicorp(true)
+    startTransition(async () => {
+      const res = await sincronizarEtapasClinicorpLab()
+      setSincronizandoClinicorp(false)
+      if (res.sucesso) {
+        const atualizadas = res.etapasAtualizadas ?? 0
+        toast.success(
+          atualizadas > 0
+            ? `Clinicorp sincronizado! ${res.consultas} consultas e ${atualizadas} etapa(s) avançada(s).`
+            : `Clinicorp sincronizado (${res.consultas} consultas avaliadas).`,
+        )
+        router.refresh()
+      } else {
+        toast.error(res.erro || 'Não foi possível sincronizar com o Clinicorp.')
+      }
+    })
+  }
+
+  function handleAplicarClinicorp(ordem: OrdemProducao) {
+    setProcessandoId(ordem.id)
+    startTransition(async () => {
+      const res = await aplicarEtapaClinicorpNaOrdem(ordem.id)
+      setProcessandoId(null)
+      if (res.success) {
+        toast.success(`OS #${ordem.id} atualizada para: ${res.etapa}`)
+        router.refresh()
+      } else {
+        toast.error(res.error || 'Não foi possível aplicar a etapa.')
+      }
+    })
   }
 
   function handleConcluirEtapa(ordem: OrdemProducao) {
@@ -159,7 +256,28 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
 
   return (
     <DashboardLayout>
-      <Header title="Laboratório interno" subtitle="Bancada operacional, prazos de retorno (10 dias) e triagem inteligente" />
+      <Header
+        title="Bancada do Laboratório"
+        subtitle="Etapas unificadas, prazos de bancada (10 dias) e sincronização com consultas do Clinicorp"
+      />
+
+      <VisualizarOrdemModal
+        isOpen={Boolean(ordemVisualizar)}
+        onClose={() => setOrdemVisualizar(null)}
+        ordem={ordemVisualizar}
+      />
+
+      {ordemEtapaModal && (
+        <DefinirEtapaFluxoModal
+          ordem={ordemEtapaModal}
+          onClose={() => setOrdemEtapaModal(null)}
+          onSuccess={() => {
+            setOrdemEtapaModal(null)
+            toast.success('Etapa da OS atualizada!')
+            router.refresh()
+          }}
+        />
+      )}
 
       <ConfirmarRetornoModal
         isOpen={ordemRetornoModal !== null}
@@ -200,7 +318,7 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
               value={motivoProblema}
               onChange={(e) => setMotivoProblema(e.target.value)}
               placeholder="Ex: Distorção na moldagem do implante 14 / Escaneamento sem registro de mordida..."
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -223,22 +341,78 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
       </Modal>
 
       <main className="space-y-6 p-4 sm:p-6">
+        {/* Barra de Sincronização Automática Clinicorp */}
+        <section aria-label="Sincronização de etapas com o Clinicorp" className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Etapas sincronizadas pelo Clinicorp
+                </h2>
+                {divergenciasClinicorp > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    {divergenciasClinicorp} sugestão(ões) da agenda
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Última atualização: {formatarSincronizacao(ultimaSincronizacao?.em)}
+                {ultimaSincronizacao && ` · ${ultimaSincronizacao.consultas} consultas avaliadas`}
+                <span
+                  title="A API do Clinicorp disponibiliza categoria, observações da consulta e comparecimentos — não expõe evolução livre de prontuário clínico."
+                  className="ml-1.5 inline-flex items-center gap-1 text-slate-400"
+                >
+                  <Info className="h-3 w-3" /> Baseado em categoria, observações e comparecimentos da agenda
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!clinicorpConfigurado || sincronizandoClinicorp || isPending}
+              onClick={handleSincronizarClinicorp}
+              className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+            >
+              {sincronizandoClinicorp ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {clinicorpConfigurado ? 'Sincronizar Clinicorp & Etapas' : 'Clinicorp não configurado'}
+            </Button>
+          </div>
+        </section>
+
+        {contexto && (
+          <AtencaoProducao
+            contexto={contexto}
+            ordens={contexto === 'sem-etapa' ? semEtapaOrdens : ordens}
+            retornos={retornosDashboard}
+            onLimpar={() => router.push(limparAtencao(pathname, searchParams.toString()))}
+            onAbrir={abrirOrdemDetalhes}
+            onDefinir={(ordem) => setOrdemEtapaModal(ordem)}
+            onConfirmar={(ordem) => setOrdemRetornoModal(ordem)}
+          />
+        )}
+
         <FilaTriagemWhatsapp itensIniciais={triagem} />
 
         <PipelineFila filtro={filtro} contagens={contagens} atrasadas={atrasadas} retornos={retornos} onChange={mudarFiltro} />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <section aria-label="Lista de trabalhos" className="min-w-0 space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {info.titulo} <span className="ml-1 text-sm font-medium text-slate-400">{filtradas.length.toLocaleString('pt-BR')}</span>
+                    {info.titulo} <span className="ml-1 text-sm font-medium text-slate-400 tabular-nums">{filtradas.length.toLocaleString('pt-BR')}</span>
                   </h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{info.descricao}</p>
                 </div>
                 {filtro !== 'todas' && (
-                  <button type="button" onClick={() => mudarFiltro('todas')} className="inline-flex items-center gap-1 self-start text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                  <button type="button" onClick={() => mudarFiltro('todas')} className="inline-flex items-center gap-1 self-start text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
                     <X className="h-3.5 w-3.5" /> Ver todos
                   </button>
                 )}
@@ -274,7 +448,7 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
                 title={comFiltroExtra ? 'Nenhum trabalho encontrado' : 'Nada por aqui'}
                 description={comFiltroExtra ? 'Tente outro nome ou limpe os filtros.' : 'Quando houver trabalhos nesta fila, eles aparecem nesta lista.'}
                 action={comFiltroExtra ? (
-                  <button type="button" onClick={() => { setBusca(''); setPrioridade('') }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/10">Limpar busca</button>
+                  <button type="button" onClick={() => { setBusca(''); setPrioridade('') }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Limpar busca</button>
                 ) : (
                   <Link href="/ordens" className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Ver ordens</Link>
                 )}
@@ -291,6 +465,9 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
                       onIniciarNoLab={handleIniciarFluxo}
                       onConfirmarRetorno={(o) => setOrdemRetornoModal(o)}
                       onReceberFornecedor={handleReceberFornecedor}
+                      onDefinirEtapa={(o) => setOrdemEtapaModal(o)}
+                      onAplicarClinicorp={handleAplicarClinicorp}
+                      onAbrirOs={abrirOrdemDetalhes}
                       onReportarProblema={(o) => {
                         setOrdemProblemaModal(o)
                         setMotivoProblema('')
@@ -301,7 +478,7 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
                 {filtradas.length > visiveis.length && (
                   <div className="flex flex-col items-center gap-1 pt-2">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Mostrando {visiveis.length} de {filtradas.length.toLocaleString('pt-BR')}</p>
-                    <button type="button" onClick={() => setLimite((l) => l + POR_PAGINA)} className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-zinc-900 dark:text-slate-200 dark:hover:bg-white/10">Mostrar mais</button>
+                    <button type="button" onClick={() => setLimite((l) => l + POR_PAGINA)} className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Mostrar mais</button>
                   </div>
                 )}
               </>
@@ -316,4 +493,3 @@ export function LabInternoView({ ordens, historico, triagem = [] }: Props) {
     </DashboardLayout>
   )
 }
-

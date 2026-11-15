@@ -10,7 +10,7 @@ export default function TratamentosError({ reset }: { error: Error; reset: () =>
     <DashboardLayout>
       <Header title="Controle de tratamentos" subtitle="Não foi possível carregar os dados" />
       <main className="flex min-h-[60vh] items-center justify-center p-6">
-        <section className="max-w-md rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm dark:border-red-900/50 dark:bg-zinc-900">
+        <section className="max-w-md rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm dark:border-red-900/50 dark:bg-slate-900">
           <AlertTriangle className="mx-auto h-10 w-10 text-red-600" />
           <h2 className="mt-4 text-lg font-bold text-slate-900 dark:text-white">O controle de tratamentos não carregou</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">

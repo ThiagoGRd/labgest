@@ -78,7 +78,7 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
                   etapa === op
                     ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                    : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
                 }`}
               >
                 <Tag className="h-3.5 w-3.5 opacity-70" />
@@ -100,7 +100,7 @@ export function AbrirCicloModal({ isOpen, onClose, ordemId, paciente, servico, n
                 className={`flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all ${
                   prazoDias === d
                     ? 'bg-indigo-600 border-indigo-600 text-white'
-                    : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
                 }`}
               >
                 {d}d

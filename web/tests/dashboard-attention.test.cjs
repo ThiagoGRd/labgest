@@ -13,7 +13,8 @@ function helper() {
 }
 test('four attention shortcuts target distinct announced selections', () => {
   const src = read('app/(dashboard)/dashboard/dashboard-view.tsx')
-  for (const url of ['/prioridades?atencao=atrasadas', '/prioridades?atencao=hoje', '/producao?atencao=retornos', '/producao?atencao=sem-etapa']) assert.ok(src.includes(url), url)
+  for (const url of ['/prioridades?atencao=atrasadas', '/prioridades?atencao=hoje', '/lab-interno?atencao=retornos', '/lab-interno?atencao=sem-etapa']) assert.ok(src.includes(url), url)
+  assert.ok(!src.includes('/producao'), 'Dashboard should not link to retired /producao route')
 })
 test('attention precedes metrics; monthly report is collapsed after search', () => {
   const dashboard = read('app/(dashboard)/dashboard/dashboard-view.tsx')
@@ -28,17 +29,22 @@ test('context validation and clearing preserve unrelated URL parameters', () => 
   for (const value of [null, '', 'invalid', 'retornos']) assert.equal(h.contextoAtencao(value, 'prioridades'), null)
   assert.equal(h.contextoAtencao('atrasadas', 'prioridades'), 'atrasadas')
   assert.equal(h.contextoAtencao('hoje', 'prioridades'), 'hoje')
+  assert.equal(h.contextoAtencao('retornos', 'lab-interno'), 'retornos')
+  assert.equal(h.contextoAtencao('sem-etapa', 'lab-interno'), 'sem-etapa')
   assert.equal(h.contextoAtencao('retornos', 'producao'), 'retornos')
   assert.equal(h.contextoAtencao('sem-etapa', 'producao'), 'sem-etapa')
-  assert.equal(h.limparAtencao('/producao', 'atencao=retornos&busca=Ana'), '/producao?busca=Ana')
+  assert.equal(h.limparAtencao('/lab-interno', 'atencao=retornos&busca=Ana'), '/lab-interno?busca=Ana')
   assert.equal(h.limparAtencao('/prioridades', 'atencao=hoje'), '/prioridades')
 })
-test('production loads all responded cycles and exact no-stage IDs without latest-cycle shortcut', () => {
-  const src = read('app/(dashboard)/producao/page.tsx')
+test('lab-interno loads all responded cycles and exact no-stage IDs without latest-cycle shortcut; /producao redirects', () => {
+  const src = read('actions/lab-interno.ts')
   assert.match(src, /prisma\.cicloProducao\.findMany/)
   assert.match(src, /where: retornosRespondidos/)
   assert.match(src, /where: ordensSemEtapa/)
   assert.doesNotMatch(src, /take: 1/)
+  const prodRedirect = read('app/(dashboard)/producao/page.tsx')
+  assert.match(prodRedirect, /redirect\(/)
+  assert.match(prodRedirect, /\/lab-interno/)
 })
 test('shared query predicates preserve paused, null and date boundary semantics', () => {
   const h = helper()

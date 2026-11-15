@@ -51,7 +51,7 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
   const atrasado = !entregue && prazo.tom === 'atrasado'
 
   return (
-    <article className={`relative flex overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-zinc-900 ${
+    <article className={`relative flex overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 ${
       atrasado ? 'border-red-200 dark:border-red-500/30' : 'border-slate-200 dark:border-white/10'
     } ${entregue ? 'opacity-80' : ''}`}>
       <div className={`w-1.5 shrink-0 ${atrasado ? 'bg-red-500' : etapa.barra}`} aria-hidden />
@@ -118,7 +118,7 @@ export function PedidoCard({ pedido, ocupado, onArquivo, onMover, onEditar, onRe
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+              <DropdownMenuContent align="end" className="w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
                 {!pedido.arquivado && <DropdownMenuItem onClick={() => onEditar(pedido)}><Pencil className="mr-2 h-4 w-4" />Editar pedido</DropdownMenuItem>}
                 {!pedido.arquivado && !entregue && !pedido.isRetrabalho && (
                   <DropdownMenuItem onClick={() => onRetrabalho(pedido.id)}><RefreshCw className="mr-2 h-4 w-4" />Marcar como retrabalho</DropdownMenuItem>

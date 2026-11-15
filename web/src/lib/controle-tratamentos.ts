@@ -34,6 +34,7 @@ import {
   type TipoProteseId,
 } from '@labgest/shared'
 import { buscarAgendaCompleta, clinicorpConfigurado } from '@/lib/clinicorp'
+import { aplicarInferenciasClinicorpAutomaticas } from '@/lib/clinicorp-etapas'
 import { hojeIso } from '@/lib/labs-externos-utils'
 import { consultarCustodiaExterna } from '@/lib/recepcao-externa-db'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
@@ -372,6 +373,7 @@ export interface ResultadoSincronizacao {
   consultas: number
   erro?: string
   alertasNovos: number
+  etapasAtualizadas?: number
 }
 
 const SITUACOES_RECEPCAO_SYNC = [
@@ -391,6 +393,7 @@ async function carregarChavesRecepcao(): Promise<string[]> {
     where: {
       status: { notIn: ['Entregue', 'Cancelado'] },
       OR: [
+        { status: { notIn: ['Finalizado', 'Entregue', 'Cancelado'] } },
         { situacaoLogistica: { in: SITUACOES_RECEPCAO_SYNC } },
         { status: 'Em Prova' },
         { situacaoLogistica: 'no_laboratorio', historicoEtapas: { array_contains: [{ acao: 'registrou_no_laboratorio' }] } },
@@ -425,6 +428,7 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
   const hoje = hojeIso()
   const registro = await prisma.clinicorpSincronizacao.create({ data: { origem } })
   let consultasGravadas = 0
+  let etapasAtualizadas = 0
   let erro: string | undefined
 
   try {
@@ -516,6 +520,12 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
       if (parecidos.length) sugestoes[String(ordem.id)] = parecidos
     }
 
+    try {
+      etapasAtualizadas = await aplicarInferenciasClinicorpAutomaticas('clinicorp-sync')
+    } catch (falhaEtapas) {
+      console.error('Falha ao atualizar etapas via Clinicorp:', falhaEtapas)
+    }
+
     await prisma.clinicorpSincronizacao.update({
       where: { id: registro.id },
       data: { concluidaEm: new Date(), sucesso: true, consultas: consultasGravadas, sugestoes },
@@ -528,5 +538,5 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
 
   // Os alertas de tempo independem do Clinicorp: são reavaliados mesmo se a agenda falhar.
   const alertas = await atualizarAlertas()
-  return { sucesso: !erro, consultas: consultasGravadas, erro, alertasNovos: alertas.novos }
+  return { sucesso: !erro, consultas: consultasGravadas, erro, alertasNovos: alertas.novos, etapasAtualizadas }
 }

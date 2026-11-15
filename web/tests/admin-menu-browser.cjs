@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=r
 const {createRequire}=require('node:module'),esbuild=require('esbuild'),{chromium}=require('playwright')
 const web=path.resolve(__dirname,'..'),root=path.dirname(web),req=createRequire(path.join(web,'package.json'))
 const qa=process.env.MENU_QA||path.join(root,'delivery/menu-qa')
-const destinations=[['Dashboard','/dashboard'],['Prioridades','/prioridades'],['Ordens','/ordens'],['Produção','/producao'],['Recepção','/recepcao'],['Lab Interno','/lab-interno'],['Labs Externos','/labs-externos'],['Clientes','/clientes'],['Serviços','/servicos'],['Estoque','/estoque'],['Financeiro','/financeiro'],['Relatórios','/relatorios'],['Configurações','/configuracoes']]
+const destinations=[['Dashboard','/dashboard'],['Prioridades','/prioridades'],['Ordens','/ordens'],['Bancada Lab','/lab-interno'],['Recepção','/recepcao'],['Labs Externos','/labs-externos'],['Clientes','/clientes'],['Serviços','/servicos'],['Estoque','/estoque'],['Financeiro','/financeiro'],['Relatórios','/relatorios'],['Configurações','/configuracoes']]
 async function main(){let server,browser;const errors=[],external=[],results=[]
  try{
  await fs.mkdir(qa,{recursive:true})
@@ -22,19 +22,20 @@ async function main(){let server,browser;const errors=[],external=[],results=[]
  const go=async route=>{await page.goto(origin+route);await page.locator('h1').waitFor()}
  const check=async(name,fn)=>{try{await fn();results.push('PASS '+name)}catch(e){results.push('FAIL '+name+': '+e.stack)}}
  await page.setViewportSize({width:1280,height:900})
- await check('13 destinations, conservative groups, active exact/child and nonmatching prefix',async()=>{
+ await check('12 destinations, conservative groups, active exact/child and nonmatching prefix',async()=>{
  await go('/dashboard');const aside=page.locator('aside');await page.getByRole('heading',{name:'Visão geral',exact:true}).waitFor()
- for(const [group,names] of [['Visão geral',['Dashboard','Prioridades']],['Operação',['Ordens','Produção','Recepção','Lab Interno','Labs Externos']],['Cadastros e materiais',['Clientes','Serviços','Estoque']],['Gestão',['Financeiro','Relatórios']]]){
+ for(const [group,names] of [['Visão geral',['Dashboard','Prioridades']],['Operação',['Ordens','Bancada Lab','Recepção','Labs Externos']],['Cadastros e materiais',['Clientes','Serviços','Estoque']],['Gestão',['Financeiro','Relatórios']]]){
  const region=page.getByRole('navigation',{name:group,exact:true});assert.deepEqual(await region.getByRole('link').evaluateAll(es=>es.map(e=>e.getAttribute('aria-label')||e.textContent.trim().replace(/3$/,''))),names)
  }
- assert.equal(await aside.locator('nav a').count(),13)
+ assert.equal(await aside.locator('nav a').count(),12)
+ assert.equal(await aside.locator('a[href="/producao"]').count(),0)
  for(const [name,href] of destinations){const link=aside.getByRole('link',{name:new RegExp('^'+name+'(?:\\s*3)?$')});assert.equal(await link.getAttribute('href'),href);await link.click();await page.waitForFunction(p=>location.pathname===p,href);assert.equal(await link.getAttribute('aria-current'),'page');await page.evaluate(p=>{history.pushState({},'',p+'/detalhe');dispatchEvent(new PopStateEvent('popstate'))},href);await page.waitForFunction(h=>document.querySelector('a[href="'+h+'"][aria-current="page"]'),href)}
  await page.evaluate(()=>{history.pushState({},'','/ordens-extra');dispatchEvent(new PopStateEvent('popstate'))});await page.waitForTimeout(100);assert.equal(await aside.locator('[aria-current]').count(),0);await shot('desktop')
  })
  await check('expanded desktop/mobile links expose the real unread badge in their accessible names',async()=>{
  for(const width of [1280,390]){
  await page.setViewportSize({width,height:900});await page.evaluate(()=>localStorage.setItem('sidebar-collapsed','false'));await go('/ordens');if(width===390)await page.getByRole('button',{name:'Abrir menu',exact:true}).click()
- for(const [name,href] of [['Ordens','/ordens'],['Produção','/producao']]){
+ for(const [name,href] of [['Ordens','/ordens'],['Bancada Lab','/lab-interno']]){
  const link=page.locator('aside a[href="'+href+'"]');await link.getByText('3',{exact:true}).waitFor();assert.ok(await link.getByText('3',{exact:true}).isVisible());await page.locator('aside').getByRole('link',{name:new RegExp('^'+name+'\\s*3$')}).waitFor()
  }
  if(width===390)await page.keyboard.press('Escape')

@@ -170,7 +170,7 @@ export function TratamentoCard({ tratamento, sincronizado, hoje }: { tratamento:
       : nivel
 
   return (
-    <article className={cn('rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900', (t.encerrado || t.pausado) ? 'border-l-slate-300 dark:border-l-white/20' : nivelVisual.borda)}>
+    <article className={cn('rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900', (t.encerrado || t.pausado) ? 'border-l-slate-300 dark:border-l-white/20' : nivelVisual.borda)}>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
@@ -297,7 +297,7 @@ export function TratamentoCard({ tratamento, sincronizado, hoje }: { tratamento:
                   placeholder="Providência combinada com o dentista ou laboratório (opcional)"
                   aria-label="Providência para ciência"
                   maxLength={1000}
-                  className={cn(campoClasse, 'flex-1 bg-white py-2 dark:bg-zinc-900')}
+                  className={cn(campoClasse, 'flex-1 bg-white py-2 dark:bg-slate-900')}
                 />
                 <div className="flex shrink-0 gap-2">
                   <button type="button" onClick={() => { setCienteAberto(false); setNotaCiencia('') }} disabled={pendente} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:bg-white/5 dark:text-slate-200">

@@ -32,7 +32,7 @@ export function PipelineFila({ filtro, contagens, atrasadas, retornos, onChange 
               className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
                 ativo
                   ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500 dark:border-indigo-400 dark:bg-indigo-500/10 dark:ring-indigo-400'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:bg-zinc-900 dark:hover:border-white/20'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20'
               }`}
             >
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${fila.icone_bg}`}><Icone className="h-5 w-5" /></span>

@@ -3,11 +3,19 @@
 import { prisma } from '@labgest/database'
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import {
+  agruparOrdensDuplicadas,
+  escolherFluxoPrincipal,
+  normalizarNome,
+  type TipoProteseId,
+} from '@labgest/shared'
 import { requireUser } from '@/lib/auth-utils'
 import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 import { validarExclusaoOrdem } from '@/lib/exclusao-ordem'
 import { parseDateLocal } from '@/lib/date-utils'
 import { isCpfValido, normalizarCpf } from '@/lib/cpf'
+import { extrairItensCaso } from '@/lib/clinicorp-etapas'
+import type { ItemCasoOrdem } from '@/components/producao/types'
 import {
   getWorkflowForServico,
   getNextEtapa,
@@ -22,7 +30,6 @@ import {
   type ChecklistEstetico,
   type TipoWorkflow,
   calcularPrazoPasso,
-  getFluxoProtese,
   getPrimeiroPassoLaboratorial,
   inferirTipoProtese,
   isTipoProtese,
@@ -101,6 +108,7 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
         id: true,
         nomePaciente: true,
         cpfPaciente: true,
+        clienteId: true,
         clienteNome: true,
         servicoNome: true,
         status: true,
@@ -119,6 +127,10 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
         motivoPausa: true,
         pausadoEm: true,
         updatedAt: true,
+        arcadas: true,
+        elementos: true,
+        corDentes: true,
+        checklistEstetico: true,
         cliente: { select: { nome: true } },
         servico: { select: { nome: true } },
         contasReceber: {
@@ -150,6 +162,7 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
       id: o.id,
       paciente: o.nomePaciente,
       cpfPaciente: o.cpfPaciente || '',
+      clienteId: o.clienteId ?? undefined,
       cliente: { nome: o.clienteNome || o.cliente?.nome || 'Cliente Desconhecido' },
       servico: o.servicoNome || o.servico?.nome || 'Serviço',
       status: o.status || 'Aguardando',
@@ -167,6 +180,10 @@ export async function getOrdens(filtros: FiltrosOrdens = {}) {
       motivoPausa: o.motivoPausa,
       pausadoEm: o.pausadoEm?.toISOString() || null,
       updatedAt: o.updatedAt?.toISOString() || null,
+      arcadas: o.arcadas || 1,
+      elementos: o.elementos || '',
+      corDentes: o.corDentes || '',
+      itensCaso: extrairItensCaso(o.checklistEstetico),
       cobranca: o.contasReceber[0] ? {
         id: o.contasReceber[0].id,
         valor: Number(o.contasReceber[0].valor),
@@ -193,12 +210,15 @@ export async function createBatchOrdens(data: {
   prioridade: string
   observacoes: string
   arquivos?: string[]
+  unificarEmUnicaOs?: boolean
+  anexarOrdemId?: number
   itens: Array<{
     servicoId: string
     elementos: string
     corDentes: string
     material: string
     arcadas?: number
+    arcada?: 'Superior' | 'Inferior' | 'Superior + Inferior' | string
     tipoProtese?: string
   }>
 }) {
@@ -218,7 +238,7 @@ export async function createBatchOrdens(data: {
     if (servicos.length !== idsServicos.length) return { success: false, error: 'Um dos serviços não existe ou está inativo' }
     const servicosPorId = new Map(servicos.map((servico) => [servico.id, servico]))
 
-    const operacoes = data.itens.map((item) => {
+    const itensResolvidos = data.itens.map((item) => {
       const servico = servicosPorId.get(Number(item.servicoId))!
       const valor = Number(servico.preco)
       const tipoProtese = isTipoProtese(item.tipoProtese)
@@ -226,49 +246,244 @@ export async function createBatchOrdens(data: {
         : isTipoProtese(servico.tipoWorkflow)
           ? servico.tipoWorkflow
           : inferirTipoProtese(servico.nome)
-      const primeiroPasso = tipoProtese ? getPrimeiroPassoLaboratorial(tipoProtese) : null
-      const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
-      const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
-      const arcadas = item.arcadas === 2 ? 2 : 1
+      const arcadaLabel = item.arcada?.trim()
+        || (item.arcadas === 2 ? 'Superior + Inferior' : 'Superior')
+      const arcadasItem = item.arcadas === 2 || arcadaLabel === 'Superior + Inferior' ? 2 : 1
+      const itemCaso: ItemCasoOrdem = {
+        servicoId: servico.id,
+        servicoNome: servico.nome,
+        arcada: arcadaLabel,
+        elementos: item.elementos?.trim() || null,
+        corDentes: item.corDentes?.trim() || null,
+        material: item.material?.trim() || null,
+        tipoProtese: tipoProtese || null,
+        valor,
+      }
+      return { servico, valor, tipoProtese, arcadaLabel, arcadasItem, itemCaso, raw: item }
+    })
 
-      return prisma.ordem.create({
+    const formatarNomeCombinado = (lista: ItemCasoOrdem[]) => {
+      const partes = lista.map((i) => {
+        const suf = i.arcada ? ` (${i.arcada})` : i.elementos ? ` (${i.elementos})` : ''
+        return `${i.servicoNome}${suf}`
+      })
+      return [...new Set(partes)].join(' + ').slice(0, 250)
+    }
+
+    const calcularTotalArcadas = (lista: ItemCasoOrdem[]) => {
+      const temAmbas = lista.some((i) => i.arcada === 'Superior + Inferior')
+      const temSup = lista.some((i) => i.arcada?.toLowerCase().includes('superior'))
+      const temInf = lista.some((i) => i.arcada?.toLowerCase().includes('inferior'))
+      return temAmbas || (temSup && temInf) || lista.length >= 2 ? 2 : 1
+    }
+
+    let ordemCriadaOuAnexadaId: number | null = null
+    let servicoIdsParaItemOrdem: Array<{ servicoId: number; valor: number; elementos: string | null; especificacao: Prisma.InputJsonObject }> = []
+
+    if (data.anexarOrdemId) {
+      const agora = new Date()
+      const resAnexo = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${data.anexarOrdemId} FOR UPDATE`
+        const existente = await tx.ordem.findUnique({ where: { id: data.anexarOrdemId } })
+        if (!existente) return { success: false as const, error: 'Ordem para anexar não encontrada' }
+        if (STATUS_ENCERRADOS.includes(existente.status || '')) {
+          return { success: false as const, error: 'A ordem selecionada já está encerrada' }
+        }
+
+        const itensAnteriores = extrairItensCaso(existente.checklistEstetico)
+        const baseExistente: ItemCasoOrdem[] = itensAnteriores.length > 0
+          ? itensAnteriores
+          : [{
+              servicoId: existente.servicoId,
+              servicoNome: existente.servicoNome,
+              arcada: existente.arcadas === 2 ? 'Superior + Inferior' : null,
+              elementos: existente.elementos,
+              corDentes: existente.corDentes,
+              material: existente.material,
+              tipoProtese: existente.tipoWorkflow,
+              valor: Number(existente.valorFinal ?? existente.valor),
+              origemOrdemId: existente.id,
+            }]
+
+        const todosItens = [...baseExistente, ...itensResolvidos.map((i) => i.itemCaso)]
+        const valorAdicional = itensResolvidos.reduce((acc, i) => acc + i.valor, 0)
+        const novoValor = Number(existente.valor || 0) + valorAdicional
+        const novoValorFinal = Number(existente.valorFinal ?? existente.valor ?? 0) + valorAdicional
+        const arcadasAtualizadas = Math.max(existente.arcadas || 1, calcularTotalArcadas(todosItens))
+        const elementosCombinados = [...new Set([existente.elementos, ...itensResolvidos.map((i) => i.raw.elementos?.trim())].filter(Boolean))].join(', ').slice(0, 100)
+        const coresCombinadas = [...new Set([existente.corDentes, ...itensResolvidos.map((i) => i.raw.corDentes?.trim())].filter(Boolean))].join(' / ').slice(0, 50)
+        const materiaisCombinados = [...new Set([existente.material, ...itensResolvidos.map((i) => i.raw.material?.trim())].filter(Boolean))].join(', ').slice(0, 100)
+        const obsCombinadas = [existente.observacoes?.trim(), data.observacoes?.trim()].filter(Boolean).join('\n').trim()
+        const arquivosCombinados = [...new Set([...(Array.isArray(existente.arquivoStl) ? (existente.arquivoStl as string[]) : []), ...(data.arquivos || [])])]
+        const checklistPreservado = preservarFichaClinica(existente.checklistEstetico)
+        const historicoAtual = Array.isArray(existente.historicoEtapas) ? (existente.historicoEtapas as Prisma.InputJsonObject[]) : []
+
+        await tx.ordem.update({
+          where: { id: existente.id },
+          data: {
+            servicoNome: formatarNomeCombinado(todosItens),
+            valor: novoValor,
+            valorFinal: novoValorFinal,
+            arcadas: arcadasAtualizadas,
+            elementos: elementosCombinados || existente.elementos,
+            corDentes: coresCombinadas || existente.corDentes,
+            material: materiaisCombinados || existente.material,
+            observacoes: obsCombinadas || existente.observacoes,
+            arquivoStl: arquivosCombinados,
+            checklistEstetico: {
+              ...checklistPreservado,
+              itensCaso: todosItens as unknown as Prisma.InputJsonValue[],
+            },
+            historicoEtapas: [
+              ...historicoAtual,
+              {
+                etapa: existente.etapaAtual || 'recebimento',
+                acao: 'anexou_servicos_na_os',
+                adicionados: itensResolvidos.map((i) => `${i.servico.nome} (${i.arcadaLabel})`).join(' + '),
+                data: agora.toISOString(),
+                por: usuario.email,
+              },
+            ],
+          },
+        })
+        return { success: true as const, id: existente.id }
+      })
+
+      if (!resAnexo.success) return resAnexo
+      ordemCriadaOuAnexadaId = resAnexo.id
+      servicoIdsParaItemOrdem = itensResolvidos.map((i) => ({
+        servicoId: i.servico.id,
+        valor: i.valor,
+        elementos: i.raw.elementos || null,
+        especificacao: { arcada: i.arcadaLabel, cor: i.raw.corDentes || '', material: i.raw.material || '', tipoProtese: i.tipoProtese || 'geral' },
+      }))
+    } else if (data.unificarEmUnicaOs !== false) {
+      const agora = new Date()
+      const itensCaso = itensResolvidos.map((i) => i.itemCaso)
+      const primeiro = itensResolvidos[0]
+      const tipoPrincipal = escolherFluxoPrincipal(itensResolvidos.map((i) => i.tipoProtese))
+        ?? (isTipoProtese(primeiro.tipoProtese) ? primeiro.tipoProtese : null)
+      const primeiroPasso = tipoPrincipal ? getPrimeiroPassoLaboratorial(tipoPrincipal) : null
+      const tipoWorkflow = tipoPrincipal || getWorkflowForServico(primeiro.servico.nome)
+      const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
+      const arcadas = calcularTotalArcadas(itensCaso)
+      const valorTotal = itensResolvidos.reduce((acc, i) => acc + i.valor, 0)
+      const elementosCombinados = [...new Set(itensResolvidos.map((i) => {
+        const el = i.raw.elementos?.trim()
+        return el ? `${i.arcadaLabel}: ${el}` : i.arcadaLabel
+      }).filter(Boolean))].join(' | ').slice(0, 100)
+      const coresCombinadas = [...new Set(itensResolvidos.map((i) => i.raw.corDentes?.trim()).filter(Boolean))].join(' / ').slice(0, 50)
+      const materiaisCombinados = [...new Set(itensResolvidos.map((i) => i.raw.material?.trim()).filter(Boolean))].join(', ').slice(0, 100)
+
+      const criada = await prisma.ordem.create({
         data: {
           clienteId: cliente.id,
           clienteNome: cliente.nome,
-          servicoId: servico.id,
-          servicoNome: servico.nome,
+          servicoId: primeiro.servico.id,
+          servicoNome: formatarNomeCombinado(itensCaso),
           nomePaciente: data.paciente,
           cpfPaciente,
           dataEntrega,
-          valor: valor,
-          valorFinal: valor,
+          valor: valorTotal,
+          valorFinal: valorTotal,
           prioridade: data.prioridade,
-          corDentes: item.corDentes,
-          elementos: item.elementos,
-          material: item.material,
+          corDentes: coresCombinadas || primeiro.raw.corDentes,
+          elementos: elementosCombinados || primeiro.raw.elementos,
+          material: materiaisCombinados || primeiro.raw.material,
           observacoes: data.observacoes,
           status: primeiroPasso ? 'Em Produção' : 'Aguardando',
           localizacaoAtual: 'laboratorio',
           situacaoLogistica: 'no_laboratorio',
           etapaAtual: primeiraEtapa,
           subetapaAtual: primeiroPasso?.nome,
-          tipoWorkflow: tipoWorkflow,
+          tipoWorkflow,
           passoFluxoAtual: primeiroPasso?.id,
           arcadas,
-          prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, arcadas) : null,
+          prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(agora, primeiroPasso, arcadas) : null,
           tentativaAtual: 0,
-          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString(), por: usuario.email }],
-          checklistEstetico: {},
+          historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', itens: itensCaso.length, data: agora.toISOString(), por: usuario.email }],
+          checklistEstetico: {
+            itensCaso: itensCaso as unknown as Prisma.InputJsonValue[],
+          },
           arquivoStl: data.arquivos || [],
-        }
+        },
       })
-    })
+      ordemCriadaOuAnexadaId = criada.id
+      servicoIdsParaItemOrdem = itensResolvidos.map((i) => ({
+        servicoId: i.servico.id,
+        valor: i.valor,
+        elementos: i.raw.elementos || null,
+        especificacao: { arcada: i.arcadaLabel, cor: i.raw.corDentes || '', material: i.raw.material || '', tipoProtese: i.tipoProtese || 'geral' },
+      }))
+    } else {
+      const operacoes = itensResolvidos.map((resolved) => {
+        const { servico, valor, tipoProtese, arcadasItem, itemCaso, raw } = resolved
+        const primeiroPasso = tipoProtese ? getPrimeiroPassoLaboratorial(tipoProtese) : null
+        const tipoWorkflow = tipoProtese || getWorkflowForServico(servico.nome)
+        const primeiraEtapa = primeiroPasso?.macroetapa || 'recebimento'
 
-    await prisma.$transaction(operacoes)
+        return prisma.ordem.create({
+          data: {
+            clienteId: cliente.id,
+            clienteNome: cliente.nome,
+            servicoId: servico.id,
+            servicoNome: `${servico.nome}${resolved.arcadaLabel ? ` (${resolved.arcadaLabel})` : ''}`.slice(0, 250),
+            nomePaciente: data.paciente,
+            cpfPaciente,
+            dataEntrega,
+            valor,
+            valorFinal: valor,
+            prioridade: data.prioridade,
+            corDentes: raw.corDentes,
+            elementos: raw.elementos || resolved.arcadaLabel,
+            material: raw.material,
+            observacoes: data.observacoes,
+            status: primeiroPasso ? 'Em Produção' : 'Aguardando',
+            localizacaoAtual: 'laboratorio',
+            situacaoLogistica: 'no_laboratorio',
+            etapaAtual: primeiraEtapa,
+            subetapaAtual: primeiroPasso?.nome,
+            tipoWorkflow,
+            passoFluxoAtual: primeiroPasso?.id,
+            arcadas: arcadasItem,
+            prazoEtapaAtual: primeiroPasso ? calcularPrazoPasso(new Date(), primeiroPasso, arcadasItem) : null,
+            tentativaAtual: 0,
+            historicoEtapas: [{ etapa: primeiraEtapa, acao: 'criou', data: new Date().toISOString(), por: usuario.email }],
+            checklistEstetico: {
+              itensCaso: [itemCaso] as unknown as Prisma.InputJsonValue[],
+            },
+            arquivoStl: data.arquivos || [],
+          },
+        })
+      })
+      const criadas = await prisma.$transaction(operacoes)
+      ordemCriadaOuAnexadaId = criadas[0]?.id ?? null
+    }
+
+    if (ordemCriadaOuAnexadaId && servicoIdsParaItemOrdem.length > 0) {
+      try {
+        await prisma.itemOrdem.createMany({
+          data: servicoIdsParaItemOrdem.map((item) => ({
+            ordemId: BigInt(ordemCriadaOuAnexadaId!),
+            servicoId: BigInt(item.servicoId),
+            quantidade: 1,
+            valorUnitario: item.valor,
+            valorTotal: item.valor,
+            elementosDentais: item.elementos ? [item.elementos] : [],
+            especificacaoProtese: item.especificacao,
+          })),
+        })
+      } catch {
+        // Não bloqueia criação da OS caso a tabela auxiliar itens_ordem tenha restrição diferente
+      }
+    }
+
     revalidatePath('/ordens')
     revalidatePath('/producao')
     revalidatePath('/lab-interno')
-    return { success: true }
+    revalidatePath('/dashboard')
+    revalidatePath('/prioridades')
+    return { success: true, ordemId: ordemCriadaOuAnexadaId }
   } catch (error) {
     console.error('Erro ao criar ordens em lote:', error)
     return { success: false, error: 'Erro ao criar ordens' }
@@ -405,6 +620,8 @@ export async function getOrdemById(id: number) {
       observacoes: ordem.observacoes || '',
       arquivos: (ordem.arquivoStl as string[]) || [],
       elementos: ordem.elementos || '',
+      arcadas: ordem.arcadas || 1,
+      itensCaso: extrairItensCaso(ordem.checklistEstetico),
       // Original facts for the read-only detail; no fallback dates/stages or inferred payments.
       ficha: {
         status: ordem.status,
@@ -695,6 +912,9 @@ function preservarFichaClinica(checklistAtual: unknown): Prisma.InputJsonObject 
       preservado[chave] = val
     }
   }
+  if (Array.isArray(obj.itensCaso) && obj.itensCaso.length > 0) {
+    preservado.itensCaso = obj.itensCaso as Prisma.InputJsonValue[]
+  }
   return preservado
 }
 
@@ -927,5 +1147,284 @@ export async function getFotosProva(ordemId: number) {
   } catch (error) {
     console.error('Erro ao buscar fotos:', error)
     return []
+  }
+}
+
+export async function verificarOrdemAtivaPaciente(params: {
+  clienteId?: number
+  nomePaciente?: string
+  cpfPaciente?: string
+}) {
+  await requireUser()
+  const cpfLimpo = normalizarCpf(params.cpfPaciente || '')
+  const nomeNorm = normalizarNome(params.nomePaciente || '')
+  if (cpfLimpo.length !== 11 && !nomeNorm) return null
+
+  const candidatas = await prisma.ordem.findMany({
+    where: {
+      status: { notIn: STATUS_ENCERRADOS },
+      ...(params.clienteId ? { clienteId: params.clienteId } : {}),
+    },
+    select: {
+      id: true,
+      nomePaciente: true,
+      cpfPaciente: true,
+      clienteId: true,
+      servicoNome: true,
+      status: true,
+      dataEntrega: true,
+      valor: true,
+      valorFinal: true,
+      arcadas: true,
+    },
+    orderBy: { id: 'desc' },
+    take: 50,
+  })
+
+  const encontrada = candidatas.find((o) => {
+    if (cpfLimpo.length === 11 && o.cpfPaciente === cpfLimpo) return true
+    return Boolean(nomeNorm && normalizarNome(o.nomePaciente) === nomeNorm)
+  })
+
+  if (!encontrada) return null
+  return {
+    id: encontrada.id,
+    paciente: encontrada.nomePaciente,
+    servico: encontrada.servicoNome,
+    status: encontrada.status || 'Aguardando',
+    dataEntrega: encontrada.dataEntrega.toISOString(),
+    valor: Number(encontrada.valorFinal ?? encontrada.valor),
+    arcadas: encontrada.arcadas || 1,
+  }
+}
+
+export async function detectarOrdensDuplicadas() {
+  await requireUser()
+  const ativas = await prisma.ordem.findMany({
+    where: { status: { notIn: STATUS_ENCERRADOS } },
+    select: {
+      id: true,
+      nomePaciente: true,
+      cpfPaciente: true,
+      clienteId: true,
+      clienteNome: true,
+      servicoNome: true,
+      status: true,
+      valor: true,
+      valorFinal: true,
+      arcadas: true,
+      elementos: true,
+      corDentes: true,
+      dataEntrega: true,
+      tipoWorkflow: true,
+      passoFluxoAtual: true,
+      etapaAtual: true,
+    },
+    orderBy: { id: 'asc' },
+  })
+
+  return agruparOrdensDuplicadas(
+    ativas.map((o) => ({
+      id: o.id,
+      nomePaciente: o.nomePaciente,
+      cpfPaciente: o.cpfPaciente,
+      clienteId: o.clienteId,
+      clienteNome: o.clienteNome,
+      servicoNome: o.servicoNome,
+      status: o.status,
+      valor: Number(o.valorFinal ?? o.valor),
+      arcadas: o.arcadas,
+      elementos: o.elementos,
+      corDentes: o.corDentes,
+      dataEntrega: o.dataEntrega.toISOString(),
+      tipoWorkflow: o.tipoWorkflow,
+      passoFluxoAtual: o.passoFluxoAtual,
+      etapaAtual: o.etapaAtual,
+    })),
+  )
+}
+
+export async function unificarOrdensDuplicadas(principalId: number, secundariasIds: number[]) {
+  const usuario = await requireUser()
+  const idsSecundarias = [...new Set(secundariasIds.filter((id) => Number.isInteger(id) && id > 0 && id !== principalId))]
+  if (!Number.isInteger(principalId) || principalId <= 0 || idsSecundarias.length === 0) {
+    return { success: false, error: 'Selecione a ordem principal e pelo menos uma ordem duplicada para unificar.' }
+  }
+
+  const todosIds = [principalId, ...idsSecundarias].sort((a, b) => a - b)
+
+  try {
+    const resultado = await prisma.$transaction(async (tx) => {
+      for (const idLock of todosIds) {
+        await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${idLock} FOR UPDATE`
+      }
+
+      const ordens = await tx.ordem.findMany({ where: { id: { in: todosIds } } })
+      const principal = ordens.find((o) => o.id === principalId)
+      const secundarias = idsSecundarias
+        .map((id) => ordens.find((o) => o.id === id))
+        .filter((o): o is NonNullable<typeof o> => Boolean(o))
+
+      if (!principal || secundarias.length !== idsSecundarias.length) {
+        return { success: false as const, error: 'Uma ou mais ordens não foram encontradas.' }
+      }
+
+      const algumaEncerrada = [principal, ...secundarias].some((o) => STATUS_ENCERRADOS.includes(o.status || ''))
+      if (algumaEncerrada) {
+        return { success: false as const, error: 'Apenas ordens ativas podem ser unificadas.' }
+      }
+
+      const extrairListaItens = (ordem: typeof principal): ItemCasoOrdem[] => {
+        const existentes = extrairItensCaso(ordem.checklistEstetico)
+        if (existentes.length > 0) return existentes
+        return [{
+          servicoId: ordem.servicoId,
+          servicoNome: ordem.servicoNome,
+          arcada: ordem.arcadas === 2 ? 'Superior + Inferior' : ordem.elementos || null,
+          elementos: ordem.elementos,
+          corDentes: ordem.corDentes,
+          material: ordem.material,
+          tipoProtese: ordem.tipoWorkflow,
+          valor: Number(ordem.valorFinal ?? ordem.valor),
+          origemOrdemId: ordem.id,
+        }]
+      }
+
+      const todosItens = [principal, ...secundarias].flatMap(extrairListaItens)
+      const servicosFormatados = todosItens.map((item) => {
+        const suf = item.arcada ? ` (${item.arcada})` : item.elementos ? ` (${item.elementos})` : ''
+        return `${item.servicoNome}${suf}`
+      })
+      const servicoCombinado = [...new Set(servicosFormatados)].join(' + ').slice(0, 250)
+      const valorTotal = [principal, ...secundarias].reduce((acc, o) => acc + Number(o.valor || 0), 0)
+      const valorFinalTotal = [principal, ...secundarias].reduce((acc, o) => acc + Number(o.valorFinal ?? o.valor ?? 0), 0)
+      const elementosCombinados = [...new Set([principal, ...secundarias].map((o) => o.elementos?.trim()).filter(Boolean))].join(', ').slice(0, 100)
+      const coresCombinadas = [...new Set([principal, ...secundarias].map((o) => o.corDentes?.trim()).filter(Boolean))].join(' / ').slice(0, 50)
+      const materiaisCombinados = [...new Set([principal, ...secundarias].map((o) => o.material?.trim()).filter(Boolean))].join(', ').slice(0, 100)
+      const observacoesCombinadas = [...new Set([principal, ...secundarias].map((o) => o.observacoes?.trim()).filter(Boolean))].join('\n').trim()
+      const arquivosCombinados = [...new Set([principal, ...secundarias].flatMap((o) => Array.isArray(o.arquivoStl) ? (o.arquivoStl as string[]) : []))]
+      const fotosCasoCombinadas = [...new Set([principal, ...secundarias].flatMap((o) => Array.isArray(o.fotosCaso) ? (o.fotosCaso as string[]) : []))]
+      const tipoFluxoPrincipal = escolherFluxoPrincipal(
+        [principal, ...secundarias].map((o) => (isTipoProtese(o.tipoWorkflow) ? o.tipoWorkflow : inferirTipoProtese(o.servicoNome)) as TipoProteseId | null),
+      )
+
+      const agora = new Date()
+      const historicoPrincipal = Array.isArray(principal.historicoEtapas)
+        ? (principal.historicoEtapas as Prisma.InputJsonObject[])
+        : []
+
+      const fichaPreservada = preservarFichaClinica(principal.checklistEstetico)
+      await tx.ordem.update({
+        where: { id: principalId },
+        data: {
+          servicoNome: servicoCombinado || principal.servicoNome,
+          valor: valorTotal,
+          valorFinal: valorFinalTotal,
+          arcadas: 2,
+          elementos: elementosCombinados || principal.elementos,
+          corDentes: coresCombinadas || principal.corDentes,
+          material: materiaisCombinados || principal.material,
+          observacoes: observacoesCombinadas || principal.observacoes,
+          arquivoStl: arquivosCombinados,
+          fotosCaso: fotosCasoCombinadas,
+          ...(tipoFluxoPrincipal && !principal.tipoWorkflow ? { tipoWorkflow: tipoFluxoPrincipal } : {}),
+          checklistEstetico: {
+            ...fichaPreservada,
+            itensCaso: todosItens as unknown as Prisma.InputJsonValue[],
+          },
+          historicoEtapas: [
+            ...historicoPrincipal,
+            {
+              etapa: principal.etapaAtual || 'recebimento',
+              acao: 'unificou_ordens_duplicadas',
+              unificadas: idsSecundarias,
+              data: agora.toISOString(),
+              por: usuario.email,
+            },
+          ],
+        },
+      })
+
+      // Move cobranças ativas e ciclos das ordens secundárias para a principal
+      await tx.contaReceber.updateMany({
+        where: { ordemId: { in: idsSecundarias }, status: { not: 'Cancelado' } },
+        data: { ordemId: principalId },
+      })
+
+      const totalCiclosPrincipal = await tx.cicloProducao.count({ where: { ordemId: principalId } })
+      const ciclosSecundarias = await tx.cicloProducao.findMany({
+        where: { ordemId: { in: idsSecundarias } },
+        orderBy: [{ ordemId: 'asc' }, { numeroCiclo: 'asc' }],
+      })
+      for (let idx = 0; idx < ciclosSecundarias.length; idx++) {
+        await tx.cicloProducao.update({
+          where: { id: ciclosSecundarias[idx].id },
+          data: {
+            ordemId: principalId,
+            numeroCiclo: totalCiclosPrincipal + idx + 1,
+          },
+        })
+      }
+
+      const vinculoPrincipal = await tx.tratamentoVinculo.findUnique({ where: { ordemId: principalId } })
+      if (!vinculoPrincipal) {
+        const vinculoSec = await tx.tratamentoVinculo.findFirst({ where: { ordemId: { in: idsSecundarias } } })
+        if (vinculoSec) {
+          await tx.tratamentoVinculo.create({
+            data: {
+              ordemId: principalId,
+              pacienteChave: vinculoSec.pacienteChave,
+              pacienteNome: vinculoSec.pacienteNome,
+              criadoPor: usuario.email,
+            },
+          })
+        }
+      }
+      await tx.tratamentoVinculo.deleteMany({ where: { ordemId: { in: idsSecundarias } } })
+      await tx.alertaTratamento.updateMany({
+        where: { ordemId: { in: idsSecundarias }, resolvidoEm: null },
+        data: { resolvidoEm: agora },
+      })
+
+      for (const sec of secundarias) {
+        const histSec = Array.isArray(sec.historicoEtapas) ? (sec.historicoEtapas as Prisma.InputJsonObject[]) : []
+        await tx.ordem.update({
+          where: { id: sec.id },
+          data: {
+            status: 'Cancelado',
+            motivoCancelamento: `Unificada na OS #${principalId}`,
+            canceladoEm: agora,
+            canceladoPor: usuario.email,
+            historicoEtapas: [
+              ...histSec,
+              {
+                etapa: sec.etapaAtual || 'recebimento',
+                acao: 'unificada_em_os',
+                principalId,
+                data: agora.toISOString(),
+                por: usuario.email,
+              },
+            ],
+          },
+        })
+      }
+
+      return { success: true as const, principalId, unificadas: idsSecundarias.length }
+    })
+
+    if (!resultado.success) return resultado
+
+    revalidatePath('/ordens')
+    revalidatePath('/producao')
+    revalidatePath('/lab-interno')
+    revalidatePath('/prioridades')
+    revalidatePath('/recepcao')
+    revalidatePath('/tratamentos')
+    revalidatePath('/financeiro')
+    revalidatePath('/dashboard')
+    return resultado
+  } catch (error) {
+    console.error('Erro ao unificar ordens duplicadas:', error)
+    return { success: false, error: 'Não foi possível unificar as ordens duplicadas.' }
   }
 }

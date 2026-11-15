@@ -50,7 +50,7 @@ function getDaysRemaining(dateStr: string, isFinished: boolean = false) {
   if (diff < 0) return { text: `${Math.abs(diff)}d atrasado`, isLate: true, color: 'text-red-600 bg-red-50 dark:bg-red-900/20' }
   if (diff === 0) return { text: 'Hoje', isLate: false, isToday: true, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' }
   if (diff === 1) return { text: 'Amanhã', isLate: false, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' }
-  return { text: `${diff}d`, isLate: false, color: 'text-slate-500 bg-slate-100 dark:bg-zinc-800' }
+  return { text: `${diff}d`, isLate: false, color: 'text-slate-500 bg-slate-100 dark:bg-slate-800' }
 }
 
 export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClick }: KanbanCardProps) {
@@ -65,9 +65,9 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClic
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
       onClick={onClick}
       className={`
-        bg-white dark:bg-zinc-900 
+        bg-white dark:bg-slate-900 
         rounded-xl 
-        border border-slate-200 dark:border-zinc-800 
+        border border-slate-200 dark:border-slate-800 
         border-l-[6px] ${getPriorityColor(ordem.prioridade)} 
         p-4 
         cursor-grab active:cursor-grabbing 
@@ -81,7 +81,7 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClic
       {/* Header com ID e Menu */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 cursor-grab">
+          <div className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-grab">
             <GripVertical className="h-4 w-4" />
           </div>
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -120,12 +120,12 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClic
         {elementos.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
             {elementos.slice(0, 3).map((elem: string, i: number) => (
-              <span key={i} className="text-[9px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700">
+              <span key={i} className="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                 {elem}
               </span>
             ))}
             {elementos.length > 3 && (
-              <span className="text-[9px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-400 px-1.5 py-0.5 rounded">
+              <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">
                 +{elementos.length - 3}
               </span>
             )}
@@ -134,7 +134,7 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClic
       </div>
 
       {/* Footer com Metadados */}
-      <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* Foto do Dentista */}
           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" title={ordem.dentista}>
@@ -157,7 +157,7 @@ export function KanbanCard({ ordem, onDragStart, etapaId, onClick, onPatientClic
       {/* Indicador de Anexos (se houver) */}
       {/* 
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="bg-white dark:bg-zinc-800 shadow-sm border border-slate-200 dark:border-zinc-700 rounded-full p-1">
+        <div className="bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 rounded-full p-1">
           <Paperclip className="h-3 w-3 text-slate-400" />
         </div>
       </div>

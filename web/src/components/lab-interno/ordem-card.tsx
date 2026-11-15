@@ -1,6 +1,20 @@
 'use client'
 
-import { AlertTriangle, CalendarClock, CheckCircle2, ExternalLink, Flame, Palette, Play, RefreshCw, Stethoscope, Truck } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Eye,
+  Flame,
+  Layers,
+  Palette,
+  Play,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+  Stethoscope,
+  Truck,
+} from 'lucide-react'
 import { formatDate } from '@/lib/date-utils'
 import { descreverPrazo, hojeIso, paraIso, type TomPrazo } from '@/lib/labs-externos-utils'
 import { calcularRelogiosOrdem, filaDaOrdem, prazoOperacional, timestampValido } from '@/lib/producao-utils'
@@ -12,14 +26,14 @@ const TOM_PRAZO: Record<TomPrazo, string> = {
   atrasado: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20',
   hoje: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20',
   proximo: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20',
-  ok: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10',
-  neutro: 'bg-slate-100 text-slate-500 ring-slate-500/20 dark:bg-white/10 dark:text-slate-400 dark:ring-white/10',
+  ok: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700',
+  neutro: 'bg-slate-100 text-slate-500 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700',
 }
 
 const SELO_PRIORIDADE: Record<string, string> = {
   Urgente: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20',
   Alta: 'bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-400/20',
-  Baixa: 'bg-slate-100 text-slate-500 ring-slate-500/20 dark:bg-white/10 dark:text-slate-400 dark:ring-white/10',
+  Baixa: 'bg-slate-100 text-slate-500 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700',
 }
 
 /** Dia do prazo em AAAA-MM-DD: datas "só dia" são lidas direto; horários são convertidos ao fuso do laboratório. */
@@ -65,7 +79,7 @@ function Progresso({ etapa }: { etapa: string }) {
   return (
     <ol className="flex items-center gap-1" aria-label={`Etapa ${atual + 1} de ${SEQUENCIA_ETAPAS.length}: ${etapaLabel(etapa)}`}>
       {SEQUENCIA_ETAPAS.map((id, i) => (
-        <li key={id} title={etapaLabel(id)} className={`h-1.5 w-4 rounded-full ${i <= atual ? 'bg-indigo-500' : 'bg-slate-200 dark:bg-white/10'}`} />
+        <li key={id} title={etapaLabel(id)} className={`h-1.5 w-4 rounded-full ${i <= atual ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
       ))}
     </ol>
   )
@@ -79,6 +93,9 @@ export interface OrdemCardProps {
   onIniciarNoLab?: (ordem: OrdemProducao) => void
   onReceberFornecedor?: (ordem: OrdemProducao) => void
   onReportarProblema?: (ordem: OrdemProducao) => void
+  onDefinirEtapa?: (ordem: OrdemProducao) => void
+  onAplicarClinicorp?: (ordem: OrdemProducao) => void
+  onAbrirOs?: (ordemId: number) => void
 }
 
 export function OrdemCard({
@@ -89,6 +106,9 @@ export function OrdemCard({
   onIniciarNoLab,
   onReceberFornecedor,
   onReportarProblema,
+  onDefinirEtapa,
+  onAplicarClinicorp,
+  onAbrirOs,
 }: OrdemCardProps) {
   const hoje = hojeIso()
   const filaId = filaDaOrdem(ordem)
@@ -99,10 +119,13 @@ export function OrdemCard({
   const retornoPendente = Boolean(ordem.cicloDentistaDeci)
   const tipo = isTipoProtese(ordem.tipoWorkflow) ? FLUXOS_PROTESE[ordem.tipoWorkflow].nomeCurto : null
   const etapaAtual = ordem.subetapa || etapaLabel(ordem.etapa)
+  const clinicorp = ordem.clinicorpEtapa
+  const temSinalClinicorp = Boolean(clinicorp && (clinicorp.ultimaConsulta || clinicorp.proximaConsulta || clinicorp.passoSugeridoNome))
+  const qtdItens = ordem.itensCaso?.length ?? 0
 
   return (
-    <article className={`relative flex overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-zinc-900 ${
-      atrasada ? 'border-red-200 dark:border-red-500/30' : 'border-slate-200 dark:border-white/10'
+    <article className={`relative flex overflow-hidden rounded-2xl border bg-white shadow-xs transition-all hover:shadow-sm dark:bg-slate-900 ${
+      atrasada ? 'border-red-200 dark:border-red-500/30' : 'border-slate-200 dark:border-slate-800'
     } ${pausada ? 'opacity-75' : ''}`}>
       <div className={`w-1.5 shrink-0 ${atrasada ? 'bg-red-500' : fila.barra}`} aria-hidden />
 
@@ -115,7 +138,13 @@ export function OrdemCard({
             {ordem.prioridade !== 'Normal' && SELO_PRIORIDADE[ordem.prioridade] && (
               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${SELO_PRIORIDADE[ordem.prioridade]}`}>{ordem.prioridade}</span>
             )}
-            {pausada && <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/20 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10">Pausada</span>}
+            {(qtdItens > 1 || (ordem.arcadas ?? 1) >= 2) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-400/20">
+                <Layers className="h-3 w-3" />
+                {qtdItens > 1 ? `${qtdItens} serviços unificados` : '2 arcadas'}
+              </span>
+            )}
+            {pausada && <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">Pausada</span>}
             {retornoPendente && (
               <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-400/20">
                 <RefreshCw className="h-3 w-3" /> Retorno da clínica ({ordem.cicloDentistaDeci === 'aprovado' ? 'Aprovado' : 'Ajustes'})
@@ -133,17 +162,43 @@ export function OrdemCard({
           </div>
 
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-            <span className="font-medium text-slate-800 dark:text-slate-100">{ordem.servico}</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-100">{ordem.servico}</span>
             {tipo && <span className="text-slate-400"> · {tipo}</span>}
           </p>
+
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Etapa atual: <span className="font-medium text-slate-700 dark:text-slate-200">{etapaAtual}</span>
+            Etapa atual: <span className="font-semibold text-slate-800 dark:text-slate-200">{etapaAtual}</span>
             {ordem.cicloObs && (
               <span className="ml-2 inline-block rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                 Obs. dentista: {ordem.cicloObs}
               </span>
             )}
           </p>
+
+          {temSinalClinicorp && clinicorp && (
+            <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
+              clinicorp.divergente
+                ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200'
+                : 'border-slate-200 bg-slate-50/80 text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300'
+            }`}>
+              <div className="flex min-w-0 items-center gap-2">
+                <Sparkles className={`h-3.5 w-3.5 shrink-0 ${clinicorp.divergente ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-500'}`} />
+                <span className="truncate">
+                  <strong className="font-semibold">Agenda Clinicorp:</strong> {clinicorp.motivo}
+                </span>
+              </div>
+              {clinicorp.divergente && clinicorp.passoSugeridoNome && onAplicarClinicorp && !pausada && (
+                <button
+                  type="button"
+                  disabled={processando}
+                  onClick={() => onAplicarClinicorp(ordem)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  Aplicar: {clinicorp.passoSugeridoNome}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1.5"><Stethoscope className="h-3.5 w-3.5" />{ordem.dentista}</span>
@@ -155,7 +210,7 @@ export function OrdemCard({
 
         <div className="flex shrink-0 flex-col items-start justify-between gap-3 sm:items-end">
           <div className="flex flex-col gap-1.5 sm:items-end">
-            <span className={`inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${TOM_PRAZO[prazo.tom]}`}>
+            <span className={`inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset tabular-nums ${TOM_PRAZO[prazo.tom]}`}>
               <CalendarClock className="h-3.5 w-3.5" />
               {prazo.texto}
               {prazo.data && <span className="font-normal opacity-80">· {formatDate(new Date(`${prazo.data}T00:00:00Z`))}</span>}
@@ -208,6 +263,17 @@ export function OrdemCard({
               </button>
             )}
 
+            {onDefinirEtapa && !pausada && (
+              <button
+                type="button"
+                disabled={processando}
+                onClick={() => onDefinirEtapa(ordem)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" /> Ajustar etapa
+              </button>
+            )}
+
             {onReportarProblema && !pausada && (
               <button
                 type="button"
@@ -220,23 +286,25 @@ export function OrdemCard({
               </button>
             )}
 
-            <a
-              href={`/ordens?busca=${ordem.id}&status=todos`}
-              className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
-            >
-              Ver OS
-            </a>
-
-            <a
-              href="/producao"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Abrir na Produção
-            </a>
+            {onAbrirOs ? (
+              <button
+                type="button"
+                onClick={() => onAbrirOs(ordem.id)}
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Eye className="h-3.5 w-3.5" /> Ver OS
+              </button>
+            ) : (
+              <a
+                href={`/ordens?busca=${ordem.id}&status=todos`}
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Ver OS
+              </a>
+            )}
           </div>
         </div>
       </div>
     </article>
   )
 }
-

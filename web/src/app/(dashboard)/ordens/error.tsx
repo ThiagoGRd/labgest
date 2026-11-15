@@ -8,7 +8,7 @@ export default function OrdensError({ reset }: { error: Error & { digest?: strin
   return (
     <DashboardLayout>
       <div className="flex min-h-[65vh] items-center justify-center">
-        <div className="max-w-md rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm dark:border-red-900/60 dark:bg-slate-900">
+        <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm dark:border-red-900/60 dark:bg-slate-900">
           <AlertTriangle className="mx-auto h-10 w-10 text-red-600" />
           <h1 className="mt-4 text-xl font-semibold text-slate-950 dark:text-white">Não foi possível carregar as ordens</h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">

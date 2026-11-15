@@ -13,9 +13,11 @@ export function ordensAtrasadas(hoje: Date) {
 export function entregasDoDia(hoje: Date, amanha: Date) {
   return { ...ordensAtivas, dataEntrega: { gte: hoje, lt: amanha } }
 }
-export function contextoAtencao(value: string | null, pagina: 'prioridades' | 'producao') {
+export function contextoAtencao(value: string | null, pagina: 'prioridades'): 'atrasadas' | 'hoje' | null
+export function contextoAtencao(value: string | null, pagina: 'producao' | 'lab-interno'): 'retornos' | 'sem-etapa' | null
+export function contextoAtencao(value: string | null, pagina: 'prioridades' | 'producao' | 'lab-interno') {
   if (pagina === 'prioridades' && (value === 'atrasadas' || value === 'hoje')) return value
-  if (pagina === 'producao' && (value === 'retornos' || value === 'sem-etapa')) return value
+  if ((pagina === 'producao' || pagina === 'lab-interno') && (value === 'retornos' || value === 'sem-etapa')) return value
   return null
 }
 export function limparAtencao(pathname: string, query: string) {

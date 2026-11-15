@@ -41,41 +41,41 @@ export default async function CheckOrderPage({ params }: { params: Promise<{ id:
 
         {/* Header */}
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-xl shadow-indigo-600/30">
-            <span className="text-white font-black text-2xl">LG</span>
+          <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-xl tracking-tight">LG</span>
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">LabGest Tracking</h1>
-            <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Consulta de Status em Tempo Real</p>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">LabGest Tracking</h1>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Consulta de Status em Tempo Real</p>
           </div>
         </div>
 
         {/* Status Card */}
-        <Card className="overflow-hidden border-none shadow-2xl">
-          <div className="bg-indigo-600 p-8 text-white">
+        <Card className="overflow-hidden border border-slate-200 shadow-lg">
+          <div className="bg-indigo-600 p-6 sm:p-8 text-white">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">Identificação do Caso</p>
-                <h2 className="text-4xl font-black tracking-tighter">#{ordem.id.toString().padStart(6, '0')}</h2>
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight tabular-nums">#{ordem.id.toString().padStart(6, '0')}</h2>
               </div>
-              <Badge className="bg-white text-indigo-600 border-none px-4 py-2 rounded-xl text-xs shadow-lg">
+              <Badge className="bg-white text-indigo-700 border-none px-3.5 py-1.5 rounded-xl text-xs shadow-xs">
                 {ordem.status}
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-2 gap-6">
               <div>
                 <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest mb-1">Paciente</p>
-                <p className="text-xl font-bold truncate">{ordem.paciente}</p>
+                <p className="text-lg sm:text-xl font-bold truncate">{ordem.paciente}</p>
               </div>
               <div className="text-right">
                 <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest mb-1">Dentista</p>
-                <p className="text-lg font-bold truncate">{ordem.cliente.nome}</p>
+                <p className="text-base sm:text-lg font-bold truncate">{ordem.cliente.nome}</p>
               </div>
             </div>
           </div>
 
-          <CardContent className="p-8 space-y-8 bg-white/80 backdrop-blur-xl">
+          <CardContent className="p-6 sm:p-8 space-y-8 bg-white">
             {/* Timeline */}
             <div className="relative">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-8">Etapa da Produção</h3>

@@ -31,7 +31,7 @@ export function ResumoProducao({ contagens, selecionada, retornos, onSelecionar 
           type="button"
           onClick={() => onSelecionar(id)}
           aria-pressed={selecionada === id}
-          className={`rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${CORES[cor]} ${selecionada === id ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
+          className={`rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${CORES[cor]} ${selecionada === id ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-slate-950' : ''}`}
         >
           <div className="flex items-start justify-between gap-3">
             <Icone className="h-5 w-5" />

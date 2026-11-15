@@ -24,7 +24,16 @@ import { ConfirmarEntregaCobrancaModal } from '@/components/ordens/confirmar-ent
 import { ComprovanteEntregaModal, type ComprovanteEntregaModalProps } from '@/components/ordens/comprovante-entrega-modal'
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal'
 import { gerarNotificacaoWhatsApp } from '@/actions/notificacoes'
-import { cancelarOrdem, deleteOrdem, getOrdemById, type FiltrosOrdens, type getOrdens } from '@/actions/ordens'
+import {
+  cancelarOrdem,
+  deleteOrdem,
+  detectarOrdensDuplicadas,
+  getOrdemById,
+  unificarOrdensDuplicadas,
+  type FiltrosOrdens,
+  type getOrdens,
+} from '@/actions/ordens'
+import { Modal } from '@/components/ui/modal'
 import {
   Search,
   Eye,
@@ -45,6 +54,8 @@ import {
   Loader2,
   CheckCircle2,
   CalendarDays,
+  AlertTriangle,
+  Layers,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -60,6 +71,7 @@ import { toast } from 'sonner'
 type ResultadoOrdens = Awaited<ReturnType<typeof getOrdens>>
 type Ordem = ResultadoOrdens['ordens'][number]
 type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
+type GrupoDuplicata = Awaited<ReturnType<typeof detectarOrdensDuplicadas>>[number]
 type BadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
 type DadosFicha = ComponentProps<typeof FichaImpressao>['ordem']
 type DadosEtiqueta = ComponentProps<typeof EtiquetaImpressao>['ordem']
@@ -154,6 +166,10 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null)
   const [ordemParaEntregar, setOrdemParaEntregar] = useState<Ordem | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [gruposDuplicatas, setGruposDuplicatas] = useState<GrupoDuplicata[]>([])
+  const [duplicatasModalOpen, setDuplicatasModalOpen] = useState(false)
+  const [principalPorGrupo, setPrincipalPorGrupo] = useState<Record<string, number>>({})
+  const [unificandoGrupo, setUnificandoGrupo] = useState<string | null>(null)
   const [mesRelatorio, setMesRelatorio] = useState(() => new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Maceio',
     year: 'numeric',
@@ -165,9 +181,50 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
   const etiquetaRef = useRef<HTMLDivElement>(null)
   const [notaEntregaDados, setNotaEntregaDados] = useState<DadosNotaEntrega | null>(null)
 
+  const recarregarDuplicatas = async () => {
+    try {
+      const grupos = await detectarOrdensDuplicadas()
+      setGruposDuplicatas(grupos)
+    } catch {
+      // Silencioso para não bloquear a listagem
+    }
+  }
+
   useEffect(() => {
     setSearch(filtros.busca || '')
   }, [filtros.busca])
+
+  useEffect(() => {
+    let ativo = true
+    detectarOrdensDuplicadas()
+      .then((grupos) => {
+        if (ativo) setGruposDuplicatas(grupos)
+      })
+      .catch(() => {})
+    return () => {
+      ativo = false
+    }
+  }, [resultado.totalGeral, resultado.contadores.ativas])
+
+  const handleUnificarGrupo = async (grupo: GrupoDuplicata) => {
+    const principalId = principalPorGrupo[grupo.chave] ?? grupo.ordemPrincipalId
+    const secundariasIds = grupo.ordens.map((o) => o.id).filter((id) => id !== principalId)
+    setUnificandoGrupo(grupo.chave)
+    try {
+      const res = await unificarOrdensDuplicadas(principalId, secundariasIds)
+      if (!res.success) {
+        toast.error(res.error || 'Não foi possível unificar as ordens.')
+        return
+      }
+      toast.success(`Ordens unificadas na OS #${principalId}.`)
+      setGruposDuplicatas((prev) => prev.filter((g) => g.chave !== grupo.chave))
+      router.refresh()
+    } catch {
+      toast.error('Erro inesperado ao unificar ordens.')
+    } finally {
+      setUnificandoGrupo(null)
+    }
+  }
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
@@ -355,16 +412,106 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
         {printEtiqueta && <EtiquetaImpressao ref={etiquetaRef} ordem={printEtiqueta} />}
       </div>
 
-      <NovaOrdemModal 
-        isOpen={modalOpen} 
+      <NovaOrdemModal
+        isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         clientes={clientes}
         servicos={servicos}
         onSuccess={() => {
           setModalOpen(false)
+          recarregarDuplicatas()
           router.refresh()
         }}
       />
+
+      <Modal
+        isOpen={duplicatasModalOpen}
+        onClose={() => setDuplicatasModalOpen(false)}
+        title="Unificar Ordens Duplicadas"
+        description="Mescle ordens abertas do mesmo paciente (ex: Superior e Inferior lançadas separadamente)"
+        size="xl"
+      >
+        {gruposDuplicatas.length === 0 ? (
+          <div className="py-10 text-center">
+            <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
+            <p className="mt-3 font-semibold text-slate-900 dark:text-white">Nenhuma duplicata em aberto</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Todas as ordens ativas já estão consolidadas por paciente.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {gruposDuplicatas.map((grupo) => {
+              const principalSelecionada = principalPorGrupo[grupo.chave] ?? grupo.ordemPrincipalId
+              const processando = unificandoGrupo === grupo.chave
+              return (
+                <div key={grupo.chave} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/60">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white">{grupo.paciente}</h3>
+                        <Badge variant="warning">{grupo.ordens.length} OS em aberto</Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{grupo.clienteNome}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={processando}
+                      onClick={() => handleUnificarGrupo(grupo)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
+                      Unificar em 1 OS ({formatCurrency(grupo.valorTotal)})
+                    </Button>
+                  </div>
+
+                  <p className="mt-2.5 rounded-xl border border-indigo-200/80 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/25 dark:bg-indigo-500/10 dark:text-indigo-200">
+                    <span className="font-bold">Resultado unificado:</span> {grupo.servicoCombinado}
+                  </p>
+
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Escolha qual OS permanece ativa como principal (as demais serão arquivadas como unificadas):
+                    </p>
+                    {grupo.ordens.map((ordem) => (
+                      <label
+                        key={ordem.id}
+                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors ${
+                          principalSelecionada === ordem.id
+                            ? 'border-indigo-500 bg-white shadow-2xs dark:border-indigo-500 dark:bg-slate-900'
+                            : 'border-slate-200 bg-white/70 hover:bg-white dark:border-slate-800 dark:bg-slate-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <input
+                            type="radio"
+                            name={`principal-${grupo.chave}`}
+                            checked={principalSelecionada === ordem.id}
+                            onChange={() => setPrincipalPorGrupo((prev) => ({ ...prev, [grupo.chave]: ordem.id }))}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold tabular-nums text-slate-900 dark:text-white">OS #{ordem.id}</span>
+                              <Badge variant={getStatusVariant(ordem.status || 'Aguardando')}>{ordem.status || 'Aguardando'}</Badge>
+                              {ordem.passoFluxoAtual && <Badge variant="default">Com etapa definida</Badge>}
+                            </div>
+                            <p className="mt-0.5 truncate text-xs text-slate-600 dark:text-slate-300">
+                              {ordem.servicoNome}{ordem.elementos ? ` · Elem: ${ordem.elementos}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="shrink-0 font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                          {formatCurrency(ordem.valor)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Modal>
 
       <VisualizarOrdemModal
         isOpen={viewModalOpen}
@@ -427,7 +574,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                 aria-label="Filtrar por dentista"
                 value={filtros.clienteId || ''}
                 onChange={(event) => atualizarFiltros({ cliente: event.target.value })}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 <option value="">Todos os dentistas</option>
                 {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
@@ -436,7 +583,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                 aria-label="Filtrar por tipo de prótese"
                 value={filtros.tipoWorkflow || ''}
                 onChange={(event) => atualizarFiltros({ tipo: event.target.value })}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 <option value="">Todos os tipos</option>
                 {Object.values(FLUXOS_PROTESE).map((fluxo) => <option key={fluxo.id} value={fluxo.id}>{fluxo.nomeCurto}</option>)}
@@ -445,7 +592,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                 aria-label="Ordenar ordens"
                 value={filtros.ordenar || 'prazo'}
                 onChange={(event) => atualizarFiltros({ ordenar: event.target.value })}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 <option value="prazo">Prazo mais próximo</option>
                 <option value="atualizadas">Última movimentação</option>
@@ -474,7 +621,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                   type="button"
                   aria-pressed={(filtros.status || 'ativas') === valor}
                   onClick={() => atualizarFiltros({ status: valor })}
-                  className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`shrink-0 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
                     (filtros.status || 'ativas') === valor
                       ? 'bg-indigo-600 text-white'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -494,16 +641,16 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
             { label: 'Prontas para entrega', value: resultado.contadores.finalizadas },
             { label: 'Pausadas', value: resultado.contadores.pausadas },
           ].map((item) => (
-            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
               <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{item.value}</p>
             </div>
           ))}
         </div>
 
-        <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+        <details className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <summary className="cursor-pointer font-semibold">Relatórios e impressão</summary>
-          <Card className="border-indigo-200/70 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+          <Card className="mt-3 border-indigo-200/70 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/5">
             <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-semibold text-slate-900 dark:text-white">Demonstrativo mensal para a clínica</p>
@@ -526,7 +673,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                   aria-label="Clínica do demonstrativo"
                   value={clienteRelatorio}
                   onChange={(event) => setClienteRelatorio(event.target.value)}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-64 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-64 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 >
                   <option value="">Todas as clínicas</option>
                   {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
@@ -548,36 +695,63 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
           </Card>
         </details>
 
+        {gruposDuplicatas.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                  {gruposDuplicatas.length} paciente(s) com ordens duplicadas em aberto
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Ex: Superior e Inferior ou Prótese Total + Protocolo lançados em OS separadas para o mesmo paciente.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setDuplicatasModalOpen(true)}
+              className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <Layers className="h-4 w-4" />
+              Revisar e Unificar
+            </Button>
+          </div>
+        )}
+
         {/* Orders Table */}
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-black/5 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/50">
-                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900">
+                  <th className="text-left text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Paciente / Serviço
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Dentista
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Status
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Etapa
                   </th>
-                  <th className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-left text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Entrega
                   </th>
-                  <th className="text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-right text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Valor
                   </th>
-                  <th className="text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-6 py-4">
+                  <th className="text-right text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-6 py-3.5">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/5 dark:divide-white/5 relative">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 relative">
                 {ordens.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-0">
@@ -591,20 +765,25 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                   ordens.map((ordem) => {
                     const daysInfo = getDaysRemaining(ordem.dataEntrega, ordem.status, ordem.pausadoEm, ordem.dataEntregaReal)
                     return (
-                      <tr key={ordem.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
+                      <tr key={ordem.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0">
                             <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
-                              <FileText className="h-6 w-6" />
+                              <FileText className="h-5 w-5" />
                             </div>
                           </div>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-bold text-slate-900 dark:text-slate-100">{ordem.paciente}</span>
                               <Badge variant={getPriorityVariant(ordem.prioridade)}>
                                 {ordem.prioridade}
                               </Badge>
+                              {(ordem.itensCaso.length > 1 || ordem.arcadas >= 2) && (
+                                <Badge variant="default">
+                                  {ordem.itensCaso.length > 1 ? `${ordem.itensCaso.length} serviços` : 'Sup + Inf'}
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{ordem.servico}</p>
                             {ordem.arquivos && ordem.arquivos.length > 0 && (
@@ -646,7 +825,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                            )}
                          </div>
                          {workflowLabel(ordem.tipoWorkflow) && (
-                           <p className="text-[9px] font-bold text-indigo-500 uppercase mt-0.5 flex items-center gap-1">
+                           <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mt-0.5 flex items-center gap-1">
                              <GitBranch className="h-2.5 w-2.5" />
                              {workflowLabel(ordem.tipoWorkflow)}
                            </p>
@@ -663,13 +842,13 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                             <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                           </div>
                           <div suppressHydrationWarning>
-                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{isValidDeliveryDate(ordem.dataEntrega) ? formatDate(ordem.dataEntrega) : '—'}</p>
+                            <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100">{isValidDeliveryDate(ordem.dataEntrega) ? formatDate(ordem.dataEntrega) : '—'}</p>
                             <p className={`text-[10px] font-bold uppercase ${daysInfo.color}`}>{daysInfo.text}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-black text-slate-900 dark:text-slate-100 text-base">{formatCurrency(ordem.valor)}</span>
+                        <span className="font-bold tabular-nums text-slate-900 dark:text-slate-100 text-base">{formatCurrency(ordem.valor)}</span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -679,7 +858,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                                 onClick={() => abrirOrdem(ordem.id, 'fluxo')}
                                 disabled={openingOrdemId === ordem.id}
                                 aria-label={`Abrir fluxo da OS ${ordem.id}`}
-                                className="p-2 text-slate-400 hover:text-purple-600 dark:text-slate-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded-xl transition-all"
+                                className="p-2 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all"
                                 title="Fluxo de Trabalho"
                               >
                                 {openingOrdemId === ordem.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <GitBranch className="h-5 w-5" />}
@@ -702,7 +881,7 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                                 <MoreHorizontal className="h-5 w-5" />
                               </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl">
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
                               <DropdownMenuLabel className="text-xs font-bold text-slate-500 uppercase px-2 py-1.5">Ações</DropdownMenuLabel>
 
                               {ordem.status === 'Finalizado' && (
@@ -714,33 +893,33 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
                                     <CheckCircle2 className="mr-2 h-4 w-4" />
                                     Marcar como Entregue
                                   </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                                  <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
                                 </>
                               )}
 
-                              <DropdownMenuItem onClick={() => abrirOrdem(ordem.id, 'ver')} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                              <DropdownMenuItem onClick={() => abrirOrdem(ordem.id, 'ver')} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 focus:bg-slate-50 dark:focus:bg-slate-800">
                                 <Eye className="mr-2 h-4 w-4 text-slate-400" />
                                 Visualizar Detalhes
                               </DropdownMenuItem>
 
-                              <DropdownMenuItem onClick={() => handleNotify(ordem.id)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                              <DropdownMenuItem onClick={() => handleNotify(ordem.id)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 focus:bg-slate-50 dark:focus:bg-slate-800">
                                 <Bell className="mr-2 h-4 w-4 text-slate-400" />
                                 Notificar WhatsApp
                               </DropdownMenuItem>
                               
-                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
                               
-                              <DropdownMenuItem onClick={() => onPrintClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                              <DropdownMenuItem onClick={() => onPrintClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 focus:bg-slate-50 dark:focus:bg-slate-800">
                                 <Printer className="mr-2 h-4 w-4 text-slate-400" />
                                 Imprimir Ficha
                               </DropdownMenuItem>
                               
-                              <DropdownMenuItem onClick={() => onPrintEtiquetaClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 focus:bg-slate-50 dark:focus:bg-zinc-800">
+                              <DropdownMenuItem onClick={() => onPrintEtiquetaClick(ordem)} className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 focus:bg-slate-50 dark:focus:bg-slate-800">
                                 <Package className="mr-2 h-4 w-4 text-slate-400" />
                                 Imprimir Etiqueta
                               </DropdownMenuItem>
                               
-                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-zinc-800" />
+                              <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
                               
                               {!['Finalizado', 'Entregue', 'Cancelado'].includes(ordem.status) && (
                                 <>

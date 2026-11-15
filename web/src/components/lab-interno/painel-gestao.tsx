@@ -40,7 +40,7 @@ export function PainelGestao({ noLaboratorio, historico }: PainelGestaoProps) {
 
   return (
     <>
-      <section aria-label="Carga do laboratório" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section aria-label="Carga do laboratório" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
         <h2 className="text-base font-bold text-slate-900 dark:text-white">Carga do laboratório</h2>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Trabalhos para executar, por etapa</p>
         {noLaboratorio.length === 0 ? (
@@ -62,7 +62,7 @@ export function PainelGestao({ noLaboratorio, historico }: PainelGestaoProps) {
         )}
       </section>
 
-      <section aria-label="Desempenho do laboratório" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section aria-label="Desempenho do laboratório" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
         <h2 className="text-base font-bold text-slate-900 dark:text-white">Desempenho</h2>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Trabalhos finalizados nos últimos {JANELA_DESEMPENHO_DIAS} dias</p>
         <dl className="mt-3 divide-y divide-slate-100 dark:divide-white/5">
@@ -87,7 +87,7 @@ export function PainelGestao({ noLaboratorio, historico }: PainelGestaoProps) {
         </dl>
       </section>
 
-      <section aria-label="Como ler esta página" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+      <section aria-label="Como ler esta página" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
         <h2 className="text-base font-bold text-slate-900 dark:text-white">Quem está com a peça</h2>
         <ul className="mt-3 space-y-3">
           {FILAS.map((fila) => {

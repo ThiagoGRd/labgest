@@ -244,7 +244,7 @@ export function RecepcaoView({
         {!externosDisponiveis ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Fluxo dos laboratórios externos indisponível ou ainda não ativado. Esta lista mostra somente os trabalhos internos.</p> : null}
 
         {clinicorpConfigurado !== undefined ? (
-          <section aria-label="Integração com Clinicorp" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+          <section aria-label="Integração com Clinicorp" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-slate-900">
             <div className="flex items-center gap-3 text-xs sm:text-sm">
               <div className={`rounded-xl p-2 ${clinicorpConfigurado ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
                 <CalendarClock className="h-4 w-4" />
@@ -271,7 +271,7 @@ export function RecepcaoView({
           </section>
         ) : null}
 
-        <section aria-label="Origem dos trabalhos" className="rounded-2xl border bg-white p-3 shadow-sm dark:border-white/10 dark:bg-zinc-900 sm:p-4">
+        <section aria-label="Origem dos trabalhos" className="rounded-2xl border bg-white p-3 shadow-sm dark:border-white/10 dark:bg-slate-900 sm:p-4">
           <p className="mb-2 text-xs font-semibold text-slate-500">Origem dos trabalhos</p>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Filtrar por origem">
             {origens.map((item) => (
@@ -290,7 +290,7 @@ export function RecepcaoView({
           <Resumo icon={Clock3} label="Parados há mais de 24h" valor={parados} tone={parados || emRiscoClinicorp ? 'red' : 'slate'} detalhe={emRiscoClinicorp > 0 ? `${emRiscoClinicorp} com risco Clinicorp` : undefined} />
         </section>
 
-        <section className="rounded-2xl border bg-white p-3 shadow-sm dark:border-white/10 dark:bg-zinc-900 sm:p-4 space-y-3">
+        <section className="rounded-2xl border bg-white p-3 shadow-sm dark:border-white/10 dark:bg-slate-900 sm:p-4 space-y-3">
           <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtrar movimentações da recepção">
             {filtros.map((item) => (
               <button key={item.id} type="button" role="tab" aria-selected={filtro === item.id} onClick={() => setFiltro(item.id)} className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${filtro === item.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300'}`}>
@@ -382,7 +382,7 @@ export function RecepcaoView({
 function Resumo({ icon: Icon, label, valor, tone, detalhe }: { icon: typeof PackageCheck; label: string; valor: number; tone: string; detalhe?: string }) {
   const cores: Record<string, string> = { blue: 'text-blue-600 bg-blue-50', amber: 'text-amber-700 bg-amber-50', violet: 'text-violet-600 bg-violet-50', red: 'text-red-600 bg-red-50', slate: 'text-slate-600 bg-slate-50' }
   return (
-    <div className="flex items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900">
+    <div className="flex items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
       <div className={`rounded-xl p-2.5 ${cores[tone]}`}><Icon className="h-5 w-5" /></div>
       <div className="min-w-0">
         <p className="text-2xl font-bold">{valor}</p>
@@ -425,7 +425,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
   }
 
   return (
-    <article className={`rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900 ${riscoClinicorp === 'hoje_sem_peca' || riscoClinicorp === 'resposta_pendente_com_consulta' || atrasado24h ? 'border-red-300 dark:border-red-800' : riscoClinicorp === 'amanha_sem_peca' ? 'border-amber-300 dark:border-amber-700' : ''}`}>
+    <article className={`rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900 ${riscoClinicorp === 'hoje_sem_peca' || riscoClinicorp === 'resposta_pendente_com_consulta' || atrasado24h ? 'border-red-300 dark:border-red-800' : riscoClinicorp === 'amanha_sem_peca' ? 'border-amber-300 dark:border-amber-700' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {recepcaoSomente ? (

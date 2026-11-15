@@ -5,11 +5,9 @@
 
 /* 1. Tailwind v4 Theme Configuration */
 @theme {
-  /* Fonts */
   --font-outfit: var(--font-outfit), ui-sans-serif, system-ui;
   --font-jakarta: var(--font-jakarta), ui-sans-serif, system-ui;
-  
-  /* Standard Colors - Modern & Premium */
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -37,100 +35,94 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
-  /* Radius & Shadows */
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
-  
-  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-  --shadow-glass-dark: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.1);
-  --shadow-soft-dark: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
 
-  /* Native Animations */
+  --shadow-glass: 0 4px 16px -2px rgba(15, 23, 42, 0.06);
+  --shadow-glass-dark: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-soft-dark: 0 2px 10px -2px rgba(0, 0, 0, 0.4);
+
   @keyframes fade-up {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.97); }
     to { opacity: 1; transform: scale(1); }
   }
   @keyframes modal-out {
     from { opacity: 1; transform: scale(1); }
-    to { opacity: 0; transform: scale(0.95); }
+    to { opacity: 0; transform: scale(0.97); }
   }
 
-  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  --animate-modal-in: modal-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  --animate-modal-out: modal-out 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  --animate-modal-in: modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-modal-out: modal-out 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* 2. Unified CSS Variables - Premium Palette */
+/* 2. Precision Clinical SaaS Palette */
 :root {
-  /* Surface Colors - Light Mode (Clean, Cool White/Gray) */
-  --background: 210 40% 98%; 
-  --foreground: 224 71% 4%;
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
 
   --card: 0 0% 100%;
-  --card-foreground: 224 71% 4%;
+  --card-foreground: 222 47% 11%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 224 71% 4%;
+  --popover-foreground: 222 47% 11%;
 
-  /* Brand Colors - Deep Indigo & Vibrant Purple */
-  --primary: 262 83% 58%; /* Vivid Purple */
+  --primary: 234 74% 55%;
   --primary-foreground: 210 40% 98%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 214 32% 96%;
+  --secondary-foreground: 222 47% 11%;
 
-  --muted: 220 14% 94%;
-  --muted-foreground: 220 8% 46%;
+  --muted: 214 32% 95%;
+  --muted-foreground: 215 16% 45%;
 
-  --accent: 262 83% 58% / 0.1;
-  --accent-foreground: 262 83% 58%;
+  --accent: 234 74% 55% / 0.08;
+  --accent-foreground: 234 74% 48%;
 
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 262 83% 58%;
+  --border: 214 32% 90%;
+  --input: 214 32% 88%;
+  --ring: 234 74% 55%;
 
-  --radius: 1rem;
+  --radius: 0.75rem;
 }
 
 .dark {
-  /* Surface Colors - Dark Mode (Deep Navy/Black) */
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
+  --background: 222 47% 7%;
+  --foreground: 213 31% 92%;
 
-  --card: 224 71% 6%; /* Slightly lighter than bg */
-  --card-foreground: 213 31% 91%;
+  --card: 222 47% 10%;
+  --card-foreground: 213 31% 92%;
 
-  --popover: 224 71% 6%;
-  --popover-foreground: 213 31% 91%;
+  --popover: 222 47% 10%;
+  --popover-foreground: 213 31% 92%;
 
-  /* Brand Colors - Lighter/Brighter for Dark Mode */
-  --primary: 263 70% 65%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 234 89% 70%;
+  --primary-foreground: 222 47% 11%;
 
-  --secondary: 223 47% 11%;
+  --secondary: 217 33% 15%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 223 47% 11%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 217 33% 15%;
+  --muted-foreground: 215 20% 65%;
 
-  --accent: 216 34% 17%;
+  --accent: 217 33% 17%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 62.8% 30.6%;
+  --destructive: 0 63% 38%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 216 34% 17%;
-  --input: 216 34% 17%;
-  --ring: 263 70% 65%;
+  --border: 217 33% 17%;
+  --input: 217 33% 18%;
+  --ring: 234 89% 70%;
 }
 
 /* 3. Base & Typography */
@@ -146,31 +138,32 @@ h1, h2, h3, h4, h5, h6 {
   @apply font-bold tracking-tight;
 }
 
-/* 4. Functional Utilities */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 4. Surface Utilities */
 .glass {
-  @apply bg-white/70 border border-white/20 shadow-glass backdrop-blur-xl;
-  @apply dark:bg-slate-900/60 dark:border-white/10 dark:shadow-glass-dark;
+  @apply bg-white/95 border border-slate-200 shadow-soft backdrop-blur-md;
+  @apply dark:bg-slate-900/95 dark:border-slate-800 dark:shadow-soft-dark;
 }
 
 .glass-panel {
-  @apply bg-white/80 border border-white/20 shadow-soft backdrop-blur-2xl;
-  @apply dark:bg-black/40 dark:border-white/10 dark:shadow-soft-dark;
+  @apply bg-white border border-slate-200 shadow-lg;
+  @apply dark:bg-slate-900 dark:border-slate-800 dark:shadow-glass-dark;
 }
-
 
 .mesh-bg {
   background-color: hsl(var(--background));
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(262, 83%, 58%, 0.15) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.1) 0, transparent 50%), 
-    radial-gradient(at 100% 100%, hsla(240, 50%, 30%, 0.1) 0, transparent 50%);
+  background-image:
+    radial-gradient(at 0% 0%, hsla(234, 74%, 55%, 0.04) 0, transparent 48%),
+    radial-gradient(at 100% 0%, hsla(160, 84%, 39%, 0.03) 0, transparent 45%);
 }
 
 .dark .mesh-bg {
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(263, 70%, 65%, 0.15) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.15) 0, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(240, 50%, 30%, 0.15) 0, transparent 50%);
+  background-image:
+    radial-gradient(at 0% 0%, hsla(234, 89%, 70%, 0.07) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(160, 84%, 39%, 0.04) 0, transparent 45%);
 }
 
 .animate-in {

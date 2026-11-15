@@ -138,7 +138,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
         <button
           type="button"
           onClick={() => setMostrarCapturaManual((v) => !v)}
-          className="inline-flex items-center gap-1.5 self-start rounded-xl border border-emerald-300 bg-white px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-sm hover:bg-emerald-50 dark:border-emerald-500/30 dark:bg-zinc-900 dark:text-emerald-200"
+          className="inline-flex items-center gap-1.5 self-start rounded-xl border border-emerald-300 bg-white px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-sm hover:bg-emerald-50 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200"
         >
           <MessageSquarePlus className="h-3.5 w-3.5" />
           {mostrarCapturaManual ? 'Fechar captura' : 'Colar OS / .STL do Grupo'}
@@ -146,7 +146,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
       </div>
 
       {mostrarCapturaManual && (
-        <form onSubmit={handleCapturarManual} className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5 space-y-3 dark:border-white/10 dark:bg-zinc-900">
+        <form onSubmit={handleCapturarManual} className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5 space-y-3 dark:border-white/10 dark:bg-slate-900">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -157,7 +157,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                 value={textoManual}
                 onChange={(e) => setTextoManual(e.target.value)}
                 placeholder="Ex: Paciente: Tais de Souza - Dra. Carla - Protocolo Superior Cor A2"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>
@@ -169,7 +169,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                 value={stlManual}
                 onChange={(e) => setStlManual(e.target.value)}
                 placeholder="Ex: uploads/Tais_Souza_Protocolo_A2.stl"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
               <p className="mt-1 text-[11px] text-slate-500">
                 O sistema corrige automaticamente erros de grafia comparando com os pacientes agendados no Clinicorp.
@@ -207,7 +207,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
             return (
               <div
                 key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900"
+                className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-slate-900"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                   <div className="flex flex-wrap items-center gap-2">
@@ -272,7 +272,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                     <input
                       value={editado.paciente}
                       onChange={(e) => atualizarCampo(item, 'paciente', e.target.value)}
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                   </div>
                   <div>
@@ -281,7 +281,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                       value={editado.dentista}
                       onChange={(e) => atualizarCampo(item, 'dentista', e.target.value)}
                       placeholder="Dentista responsável"
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                   </div>
                   <div>
@@ -289,7 +289,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                     <input
                       value={editado.servico}
                       onChange={(e) => atualizarCampo(item, 'servico', e.target.value)}
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                   </div>
                   <div>
@@ -298,7 +298,7 @@ export function FilaTriagemWhatsapp({ itensIniciais }: FilaTriagemWhatsappProps)
                       value={editado.cor}
                       onChange={(e) => atualizarCampo(item, 'cor', e.target.value)}
                       placeholder="Ex: A2"
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                   </div>
                 </div>

@@ -411,42 +411,42 @@ export function ConfiguracoesView({ initialConfig, usuarios, initialNotificacoes
                     <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                       Gatilhos Automáticos Anti-Falha Humana
                     </h4>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Saída do Laboratório → Avisar Recepção</span>
                         <span className="text-xs text-slate-500">Envia mensagem automática com link 1-toque assim que a peça sai da bancada para a clínica</span>
                       </div>
                       <input type="checkbox" checked={notificacoes.notificarSaidaLabParaRecepcao} onChange={e => setNotificacoes({...notificacoes, notificarSaidaLabParaRecepcao: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Chegada na Recepção → Avisar Dentista</span>
                         <span className="text-xs text-slate-500">Avisa imediatamente o dentista quando a recepção confirma que a peça chegou</span>
                       </div>
                       <input type="checkbox" checked={notificacoes.notificarChegadaRecepcaoParaDentista} onChange={e => setNotificacoes({...notificacoes, notificarChegadaRecepcaoParaDentista: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Cobrar Decisão de Prova (Sem resposta / Devolvida sem decisão)</span>
                         <span className="text-xs text-slate-500">Envia link direto para o dentista aprovar ou pedir ajuste quando a peça volta da clínica sem decisão</span>
                       </div>
                       <input type="checkbox" checked={notificacoes.cobrarRetornoProvaSemDecisao} onChange={e => setNotificacoes({...notificacoes, cobrarRetornoProvaSemDecisao: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Alerta de Problema Técnico na Peça / Moldagem</span>
                         <span className="text-xs text-slate-500">Dispara WhatsApp imediato para Dentista e Recepção quando a bancada reporta problema</span>
                       </div>
                       <input type="checkbox" checked={notificacoes.notificarProblemaTecnico} onChange={e => setNotificacoes({...notificacoes, notificarProblemaTecnico: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Notificar quando estoque estiver baixo</span>
                         <span className="text-xs text-slate-500">Envia alerta para Administradora e Auxiliar quando um insumo atinge o estoque mínimo</span>
                       </div>
                       <input type="checkbox" checked={notificacoes.estoqueBaixo} onChange={e => setNotificacoes({...notificacoes, estoqueBaixo: e.target.checked})} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </label>
-                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-lg cursor-pointer hover:bg-slate-100">
                       <div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 block">Resumo Matinal Diário (Agenda Clinicorp x Peças + Atrasos)</span>
                         <span className="text-xs text-slate-500">Envia briefing diário às 07:30 para Recepção, Auxiliar do Lab e Administradora</span>

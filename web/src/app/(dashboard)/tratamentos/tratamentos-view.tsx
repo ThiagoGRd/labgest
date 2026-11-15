@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 type Aba = 'acao' | 'andamento' | 'encerrados'
 const PESO = { critico: 0, atencao: 1, ok: 2 } as const
 const POR_PAGINA = 15
-const cartao = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900'
+const cartao = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900'
 
 function Indicador({ rotulo, valor, tom, ajuda }: { rotulo: string; valor: number; tom?: 'critico' | 'atencao'; ajuda: string }) {
   const cor = valor === 0 ? 'text-slate-900 dark:text-white' : tom === 'critico' ? 'text-red-600 dark:text-red-400' : tom === 'atencao' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'

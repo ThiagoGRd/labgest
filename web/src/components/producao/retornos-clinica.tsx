@@ -73,7 +73,7 @@ export function RetornosClinica({
           return (
             <article
               key={ordem.id}
-              className={`rounded-xl border bg-white p-4 shadow-sm dark:bg-zinc-900 ${
+              className={`rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900 ${
                 aprovado
                   ? 'border-emerald-200 dark:border-emerald-900/50'
                   : 'border-amber-200 dark:border-amber-900/50'

@@ -155,9 +155,9 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
     >
       <div className="space-y-6">
         <ResumoOrdem ordem={ordem} />
-        <details className="rounded-2xl border border-slate-200 p-4 dark:border-zinc-800">
+        <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
           <summary className="cursor-pointer font-semibold">Histórico da OS ({historico.length})</summary>
-          <div className="mt-5 space-y-6 border-l-2 border-indigo-100 pl-4 dark:border-zinc-800">
+          <div className="mt-5 space-y-6 border-l-2 border-indigo-100 pl-4 dark:border-slate-800">
             {historico.length === 0 && <p className="text-sm text-slate-500">Nenhuma movimentação registrada.</p>}
               {historico.map((h, i) => {
                 const isDevolucao = h.acao === 'devolveu'
@@ -168,7 +168,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                   <div key={i} className="relative">
                     <div className={`
                       absolute -left-[21px] top-1.5 h-3 w-3 rounded-full ring-4 ring-white dark:ring-zinc-900
-                      ${isDevolucao ? 'bg-red-500' : isFinalizado ? 'bg-emerald-500' : isCriacao ? 'bg-slate-900 dark:bg-white' : 'bg-slate-300 dark:bg-zinc-600'}
+                      ${isDevolucao ? 'bg-red-500' : isFinalizado ? 'bg-emerald-500' : isCriacao ? 'bg-slate-900 dark:bg-white' : 'bg-slate-300 dark:bg-slate-600'}
                     `} />
                     
                     <div className="flex flex-col">
@@ -200,7 +200,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
           </div>
         </details>
         <div className="space-y-6">
-          {(ordem.corDentes || ordem.elementos || ordem.material) && <section aria-label="Especificações do trabalho" className="rounded-xl border border-slate-200 p-4 text-sm dark:border-zinc-800"><h3 className="mb-2 font-semibold">Especificações do trabalho</h3>{ordem.corDentes && <p>Cor: {ordem.corDentes}</p>}{ordem.elementos && <p>Dentes: {ordem.elementos}</p>}{ordem.material && <p>Material: {ordem.material}</p>}</section>}
+          {(ordem.corDentes || ordem.elementos || ordem.material) && <section aria-label="Especificações do trabalho" className="rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-800"><h3 className="mb-2 font-semibold">Especificações do trabalho</h3>{ordem.corDentes && <p>Cor: {ordem.corDentes}</p>}{ordem.elementos && <p>Dentes: {ordem.elementos}</p>}{ordem.material && <p>Material: {ordem.material}</p>}</section>}
             {/* Ficha Clínica do Portal */}
             {hasFichaClinica && (
               <div>
@@ -268,7 +268,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                   <Camera className="h-4 w-4" />
                   Fotos Clínicas do Caso
                 </h4>
-                <div className="bg-slate-50/50 dark:bg-zinc-800/30 border border-slate-200 dark:border-zinc-700 rounded-xl p-4">
+                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
                   <div className="flex flex-wrap gap-3">
                     {ordem.fotosCaso.map((url: string, idx: number) => {
                       const fullUrl = url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/lab-files/${url}`
@@ -278,7 +278,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                           href={fullUrl} 
                           target="_blank" 
                           rel="noreferrer"
-                          className="relative h-24 w-24 rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden group shadow-sm hover:shadow-md transition-all"
+                          className="relative h-24 w-24 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden group shadow-sm hover:shadow-md transition-all"
                         >
                           <Image
                             src={fullUrl} 
@@ -297,7 +297,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
             )}
 
             {/* Chat do Pedido */}
-            <details className="rounded-2xl border border-slate-200 p-4 dark:border-zinc-800">
+            <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
               <summary className="mb-3 cursor-pointer font-semibold">Conversa da OS</summary>
               <ChatOrdem key={ordem.id}
                 ordemId={ordem.id} 
@@ -318,9 +318,9 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                     const urlArquivo = resolverUrlArquivoLab(arquivo)
                     const isStl = arquivo.toLowerCase().endsWith('.stl')
                     return (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg group hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => isStl && setPreviewUrl(urlArquivo)}>
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg group hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => isStl && setPreviewUrl(urlArquivo)}>
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <div className={`p-2 rounded-lg ${isStl ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800'}`}>
+                          <div className={`p-2 rounded-lg ${isStl ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
                             {isStl ? <Package className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                           </div>
                           <span className="text-xs font-medium truncate max-w-[150px]">{arquivo.split('/').pop()}</span>
@@ -331,7 +331,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                               <Eye className="h-4 w-4 text-indigo-600" />
                             </Button>
                           )}
-                          <a aria-label={`Baixar ${arquivo.split('/').pop()}`} href={urlArquivo} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500">
+                          <a aria-label={`Baixar ${arquivo.split('/').pop()}`} href={urlArquivo} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
                             <Download className="h-4 w-4" />
                           </a>
                         </div>
@@ -340,7 +340,7 @@ function ConteudoFicha({ isOpen, onClose, ordem }: VisualizarOrdemModalProps & {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl">
+                <div className="text-center py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <p className="text-sm text-slate-400">Nenhum arquivo anexado.</p>
                 </div>
               )}

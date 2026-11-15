@@ -120,12 +120,12 @@ function KanbanCard({
     <div
       draggable={!isPausada && !isTipoProtese(ordem.tipoWorkflow)}
       onDragStart={(e) => onDragStart(e, ordem, etapaId)}
-      className={`bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-l-4 ${getPriorityColor(ordem.prioridade)} ${isPausada || isTipoProtese(ordem.tipoWorkflow) ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} ${isPausada ? 'opacity-80' : ''} hover:shadow-md transition-all duration-200 group`}
+      className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 border-l-4 ${getPriorityColor(ordem.prioridade)} ${isPausada || isTipoProtese(ordem.tipoWorkflow) ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} ${isPausada ? 'opacity-80' : ''} hover:shadow-md transition-all duration-200 group`}
     >
       {/* Header */}
       <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <GripVertical className="h-4 w-4 text-slate-300 dark:text-zinc-600 flex-shrink-0" />
+          <GripVertical className="h-4 w-4 text-slate-300 dark:text-slate-600 flex-shrink-0" />
           <div className="min-w-0">
             <button
               onClick={onPatientClick}
@@ -133,19 +133,19 @@ function KanbanCard({
             >
               {ordem.paciente}
             </button>
-            <p className="text-xs text-slate-500 dark:text-zinc-500 truncate">{ordem.dentista}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 truncate">{ordem.dentista}</p>
           </div>
         </div>
-        <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-600 flex-shrink-0">#{ordem.id}</span>
+        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-600 flex-shrink-0">#{ordem.id}</span>
       </div>
 
       {/* Serviço */}
       <div className="px-4 pb-2">
-        <span className="text-xs font-medium text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
           {ordem.servico}
         </span>
         {ordem.subetapa && (
-          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-zinc-500">{ordem.subetapa}</p>
+          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-500">{ordem.subetapa}</p>
         )}
         {isEmProva ? (
           <p className="mt-2 flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-950/30 dark:text-sky-300">
@@ -186,8 +186,8 @@ function KanbanCard({
       {/* Prazo */}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
-          <span className={`text-xs font-medium ${isAtrasado ? 'text-red-500' : isEmProva ? 'text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`}>
+          <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+          <span className={`text-xs font-medium ${isAtrasado ? 'text-red-500' : isEmProva ? 'text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
             {isPausada
               ? 'Prazo suspenso'
               : isEmProva
@@ -212,7 +212,7 @@ function KanbanCard({
       </div>
 
       {/* Ações de Ciclo */}
-      <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex gap-2">
+      <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 flex gap-2">
         {fluxoEspecifico && (
           <button
             type="button"
@@ -299,7 +299,7 @@ function ChecklistModal({ isOpen, onClose, onConfirm, etapaDestino, loading }: C
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Mover para ${etapaDestino}?`} description="Confirme a mudança de etapa" size="sm" dismissible={!loading}>
       <div className="space-y-6">
-        <p className="text-sm text-slate-600 dark:text-zinc-300">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           A ordem será movimentada no Kanban e o histórico operacional será atualizado.
         </p>
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -574,13 +574,13 @@ export function ProducaoView({ initialOrdens, semEtapaIds, retornosDashboard }: 
               aria-label="Buscar paciente, dentista ou número da ordem"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-zinc-800 dark:text-white sm:w-64"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800 dark:text-white sm:w-64"
             />
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
               aria-label="Filtrar por prioridade"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800 dark:text-white"
             >
               <option value="todas">Todas as Prioridades</option>
               <option value="Baixa">Baixa</option>
@@ -707,7 +707,7 @@ export function ProducaoView({ initialOrdens, semEtapaIds, retornosDashboard }: 
             { cor: 'border-l-red-500', label: 'Urgente' },
           ].map(({ cor, label }) => (
             <div key={label} className="flex items-center gap-2">
-              <div className={`w-4 h-4 rounded border-l-4 ${cor} bg-slate-100 dark:bg-zinc-800`} />
+              <div className={`w-4 h-4 rounded border-l-4 ${cor} bg-slate-100 dark:bg-slate-800`} />
               <span>{label}</span>
             </div>
           ))}

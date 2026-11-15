@@ -142,12 +142,12 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
             <Card className="hidden overflow-hidden lg:block">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:border-zinc-800 dark:bg-zinc-900/60">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900/60">
                     <tr><th className="px-5 py-3">Serviço</th><th className="px-4 py-3">Fluxo</th><th className="px-4 py-3 text-right">Preço / custo</th><th className="px-4 py-3 text-center">Margem</th><th className="px-4 py-3 text-center">Prazo</th><th className="px-4 py-3 text-center">Pedidos</th><th className="px-4 py-3 text-center">Status</th><th className="w-14 px-3 py-3"><span className="sr-only">Ações</span></th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
                     {servicosFiltrados.map((servico) => (
-                      <tr key={servico.id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/50">
+                      <tr key={servico.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/50">
                         <td className="px-5 py-4"><p className="font-bold text-slate-900 dark:text-white">{servico.nome}</p><p className="mt-0.5 text-xs text-slate-500">{servico.categoria} · {servico.materiais.length} materiais</p></td>
                         <td className="max-w-52 px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{servico.tipoWorkflow ? FLUXOS_PROTESE[servico.tipoWorkflow].nomeCurto : <span className="text-amber-600">Fluxo geral</span>}</td>
                         <td className="px-4 py-4 text-right"><p className="font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p><p className="text-xs text-slate-500">{formatCurrency(servico.custoMateriais)}</p></td>
@@ -168,7 +168,7 @@ export function ServicosView({ initialData, materiaisDisponiveis, podeGerenciar 
                 <Card key={servico.id} className={!servico.ativo ? 'opacity-70' : ''}>
                   <CardContent className="space-y-4 p-4">
                     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge variant={servico.ativo ? 'success' : 'secondary'}>{servico.ativo ? 'Ativo' : 'Arquivado'}</Badge><h3 className="mt-2 font-bold text-slate-900 dark:text-white">{servico.nome}</h3><p className="text-xs text-slate-500">{servico.categoria}</p></div>{podeGerenciar && <ServicoMenu servico={servico} onEdit={() => setModalServico(servico)} onArchive={() => setServicoParaArquivar(servico)} onActivate={() => alterarStatus(servico, true)} disabled={isPending} />}</div>
-                    <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-zinc-800/50"><p className="text-xs text-slate-500">Fluxo</p><p className="font-medium text-slate-800 dark:text-slate-200">{servico.tipoWorkflow ? FLUXOS_PROTESE[servico.tipoWorkflow].nomeCurto : 'Fluxo geral'}</p></div>
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/50"><p className="text-xs text-slate-500">Fluxo</p><p className="font-medium text-slate-800 dark:text-slate-200">{servico.tipoWorkflow ? FLUXOS_PROTESE[servico.tipoWorkflow].nomeCurto : 'Fluxo geral'}</p></div>
                     <div className="grid grid-cols-3 gap-2 text-center"><div><p className="text-xs text-slate-500">Preço</p><p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(servico.preco)}</p></div><div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${margemColor(servico.margemLucro)}`}>{servico.margemLucro}%</p></div><div><p className="text-xs text-slate-500">Prazo</p><p className="text-sm font-bold text-slate-900 dark:text-white">{servico.tempoProducao}d</p></div></div>
                     {podeGerenciar && <Button type="button" variant="outline" className="w-full" onClick={() => setModalServico(servico)}><Edit3 className="h-4 w-4" /> Editar serviço</Button>}
                   </CardContent>

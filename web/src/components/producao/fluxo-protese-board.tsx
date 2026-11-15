@@ -90,9 +90,9 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
             </div>
           </header>
           <div className="min-h-[540px] space-y-3 rounded-b-2xl border-x border-b border-amber-200 bg-amber-50/30 p-3 dark:border-amber-900/50 dark:bg-amber-950/10">
-            <p className="rounded-lg bg-white/80 p-3 text-xs text-amber-800 dark:bg-zinc-900 dark:text-amber-300">Estas ordens continuam no Kanban geral até que a etapa específica seja definida.</p>
+            <p className="rounded-lg bg-white/80 p-3 text-xs text-amber-800 dark:bg-slate-900 dark:text-amber-300">Estas ordens continuam no Kanban geral até que a etapa específica seja definida.</p>
             {ordensSemPasso.map((ordem) => (
-              <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex items-start justify-between gap-2">
                   <button type="button" onClick={() => onAbrirOrdem(ordem.id)} className="min-w-0 truncate text-left text-sm font-bold text-slate-900 hover:text-indigo-600 dark:text-white">{ordem.paciente}</button>
                   <span className="shrink-0 font-mono text-[10px] text-slate-400">#{ordem.id}</span>
@@ -129,7 +129,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                 const timestampPrazo = timestampValido(prazo)
                 const atrasado = !pausada && timestampPrazo !== null && agora > timestampPrazo
                 return (
-                  <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  <article key={ordem.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex items-start justify-between gap-2">
                       <button type="button" onClick={() => onAbrirOrdem(ordem.id)} className="min-w-0 truncate text-left text-sm font-bold text-slate-900 hover:text-indigo-600 dark:text-white">{ordem.paciente}</button>
                       <span className="shrink-0 font-mono text-[10px] text-slate-400">#{ordem.id}</span>
@@ -153,7 +153,7 @@ export function FluxoProteseBoard({ tipo, ordens, onAbrirOrdem, onDefinirEtapa }
                     {!pausada && passo.responsavel === 'fornecedor' && !ordem.dataEnvioFornecedor && (
                       <div className="mt-4 space-y-2">
                         <label htmlFor={`fornecedor-${ordem.id}`} className="text-xs font-semibold text-slate-600 dark:text-slate-300">Nome do fornecedor</label>
-                        <input id={`fornecedor-${ordem.id}`} value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Ex.: Estruturas Silva" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-800" />
+                        <input id={`fornecedor-${ordem.id}`} value={fornecedores[ordem.id] || ''} onChange={(event) => setFornecedores((anterior) => ({ ...anterior, [ordem.id]: event.target.value }))} placeholder="Ex.: Estruturas Silva" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800" />
                         <Button type="button" className="w-full bg-orange-600 text-white hover:bg-orange-700" disabled={processando === ordem.id || !fornecedores[ordem.id]?.trim()} onClick={() => executar(ordem.id, () => registrarEnvioFornecedor(ordem.id, fornecedores[ordem.id] || ''))}>Registrar envio — 15 dias</Button>
                       </div>
                     )}

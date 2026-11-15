@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/auth-utils'
 import { inferirTipoProtese, isEtapaId, isTipoProtese, normalizarEtapa, statusParaEtapa } from '@/lib/workflow-config'
 import { garantirEfeitosFinalizacao } from '@/lib/finalizacao-ordem'
 import { extrairUltimoRetornoLabIso } from '@/lib/producao-utils'
+import { extrairItensCaso } from '@/lib/clinicorp-etapas'
 
 export async function getProducao() {
   await requireUser()
@@ -32,6 +33,7 @@ export async function getProducao() {
       return {
         id: o.id,
         paciente: o.nomePaciente,
+        cpfPaciente: o.cpfPaciente,
         dentista: o.clienteNome || o.cliente?.nome || 'Desconhecido',
         servico: o.servicoNome || o.servico?.nome || 'Serviço',
         status: o.status || 'Aguardando',
@@ -39,6 +41,7 @@ export async function getProducao() {
         etapa: normalizarEtapa(o.etapaAtual || 'recebimento'),
         subetapa: o.subetapaAtual,
         prioridade: o.prioridade || 'Normal',
+        dataPedido: o.dataPedido?.toISOString() ?? null,
         entrega: o.dataEntrega.toISOString(),
         cor: o.corDentes,
         elementos: o.elementos,
@@ -67,6 +70,7 @@ export async function getProducao() {
         cicloRespostaEm: cicloAtivo?.decisao ? cicloAtivo.updatedAt?.toISOString() ?? null : null,
         cicloObs: cicloAtivo?.observacoesDentista ?? null,
         cicloFotos: (cicloAtivo?.fotosProva as string[]) ?? [],
+        itensCaso: extrairItensCaso(o.checklistEstetico),
       }
     })
   } catch (error) {

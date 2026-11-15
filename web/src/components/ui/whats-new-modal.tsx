@@ -29,9 +29,9 @@ function ReleaseCard({ nota, defaultOpen = false }: { nota: NotaRelease; default
       >
         <div className="text-left">
           <p className="font-bold text-white text-sm">{nota.titulo}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">v{nota.versao} · {nota.data}</p>
+          <p className="text-xs text-slate-500 mt-0.5">v{nota.versao} · {nota.data}</p>
         </div>
-        {open ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
+        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
       </button>
 
       {open && (
@@ -45,7 +45,7 @@ function ReleaseCard({ nota, defaultOpen = false }: { nota: NotaRelease; default
                   <Icon className="h-3 w-3" />
                   {cfg.label}
                 </span>
-                <p className="text-sm text-zinc-300 leading-relaxed">{n.texto}</p>
+                <p className="text-sm text-slate-300 leading-relaxed">{n.texto}</p>
               </div>
             )
           })}
@@ -87,13 +87,13 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
       mobileFullscreen
     >
       <div className="space-y-5">
-          <div className="flex items-center gap-3 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600/20 via-purple-600/10 to-transparent p-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600/20 via-indigo-600/5 to-transparent p-4">
             <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">O que há de novo</p>
-              <p className="text-sm text-zinc-300">Melhorias pensadas para o dia a dia do laboratório.</p>
+              <p className="text-sm text-slate-300">Melhorias pensadas para o dia a dia do laboratório.</p>
             </div>
           </div>
 
@@ -103,7 +103,7 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
               <span className="text-[10px] font-black bg-indigo-600 text-white px-2.5 py-1 rounded-full uppercase tracking-wider">
                 Novo agora · v{latest.versao}
               </span>
-              <span className="text-xs text-zinc-500">{latest.data}</span>
+              <span className="text-xs text-slate-500">{latest.data}</span>
             </div>
             <h3 className="font-bold text-white text-base mb-4">{latest.titulo}</h3>
             <div className="space-y-3">
@@ -116,7 +116,7 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
                       <Icon className="h-3 w-3" />
                       {cfg.label}
                     </span>
-                    <p className="text-sm text-zinc-300 leading-relaxed">{n.texto}</p>
+                    <p className="text-sm text-slate-300 leading-relaxed">{n.texto}</p>
                   </div>
                 )
               })}
@@ -126,7 +126,7 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
           {/* Versões anteriores */}
           {anteriores.length > 0 && (
             <div>
-              <p className="text-xs font-bold uppercase text-zinc-600 mb-3 tracking-wider">Versões anteriores</p>
+              <p className="text-xs font-bold uppercase text-slate-600 mb-3 tracking-wider">Versões anteriores</p>
               <div className="space-y-2">
                 {anteriores.map(nota => (
                   <ReleaseCard key={nota.versao} nota={nota} />
@@ -135,7 +135,7 @@ export function WhatsNewModal({ forceOpen = false, onClose }: WhatsNewModalProps
             </div>
           )}
         <div className="flex items-center justify-between border-t border-white/10 pt-4">
-          <p className="text-xs text-zinc-600">LabGest v{VERSAO_ATUAL}</p>
+          <p className="text-xs text-slate-600">LabGest v{VERSAO_ATUAL}</p>
           <button
             onClick={handleClose}
             className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all active:scale-[0.97] shadow-lg shadow-indigo-600/20"

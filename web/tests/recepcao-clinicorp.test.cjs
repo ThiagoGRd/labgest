@@ -441,6 +441,7 @@ test('RecepcaoView integrada ao Clinicorp funciona no Chromium real', async (t) 
     ws.close()
     proc.kill('SIGKILL')
     server.close()
-    fs.rmSync(userDataDir, { recursive: true, force: true })
+    await new Promise((r) => setTimeout(r, 150))
+    fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
