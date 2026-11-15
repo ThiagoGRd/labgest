@@ -7,7 +7,7 @@ import type { OrdemPrioridade } from '@/components/prioridades/relatorio-priorid
 
 export const dynamic = 'force-dynamic'
 
-const STATUS_FORA_DA_FILA = ['Finalizado', 'Entregue', 'Cancelado', 'Pausado']
+import { STATUS_FORA_DA_FILA, ordensAtrasadas, entregasDoDia } from '@/lib/dashboard-attention'
 const FUSO_LABORATORIO = 'America/Maceio'
 
 function datasDoLaboratorio(referencia = new Date()) {
@@ -90,18 +90,12 @@ export default async function PrioridadesPage() {
       include: relacionamentos,
     }),
     prisma.ordem.findMany({
-      where: {
-        ...ativa,
-        dataEntrega: { lt: datas.hoje },
-      },
+      where: ordensAtrasadas(datas.hoje),
       orderBy: [{ dataEntrega: 'asc' }, { prioridade: 'desc' }],
       include: relacionamentos,
     }),
     prisma.ordem.findMany({
-      where: {
-        ...ativa,
-        dataEntrega: { gte: datas.hoje, lt: datas.amanha },
-      },
+      where: entregasDoDia(datas.hoje, datas.amanha),
       orderBy: { prioridade: 'desc' },
       include: relacionamentos,
     }),
@@ -157,6 +151,7 @@ export default async function PrioridadesPage() {
       respostasDentista={respostasDentista}
       fornecedorAtrasado={fornecedorAtrasado}
       atrasados={atrasados}
+      prazoVencido={ordensComPrazoVencido.map((ordem) => serializarOrdem(ordem))}
       provasPendentesClinicorp={provasPendentesClinicorp}
       hoje={entregasHoje.map((ordem) => serializarOrdem(ordem))}
       urgentes={ordensUrgentes.map((ordem) => serializarOrdem(ordem))}

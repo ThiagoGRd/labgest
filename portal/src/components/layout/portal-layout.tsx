@@ -53,7 +53,7 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
   }, [])
 
   return (
-    <div className="min-h-screen mesh-bg pb-16 selection:bg-emerald-500/30 selection:text-emerald-400 md:pb-0">
+    <div className="min-h-screen mesh-bg pb-28 selection:bg-emerald-500/30 selection:text-emerald-400 md:pb-0">
       {/* Header */}
       <header className="fixed left-0 right-0 top-0 z-50 mx-auto max-w-7xl rounded-none glass md:left-4 md:right-4 md:top-4 md:rounded-2xl">
         <div className="px-4 sm:px-6 lg:px-8">
@@ -70,15 +70,16 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
             </Link>
 
             {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/10 backdrop-blur-sm">
+            <nav className="hidden min-w-0 overflow-x-auto md:flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/10 backdrop-blur-sm">
               {navigation.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300",
+                      "flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300",
                       isActive
                         ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
                         : "text-zinc-400 hover:bg-white/5 hover:text-white"
@@ -92,7 +93,7 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
             </nav>
 
             {/* User Menu */}
-            <div className="flex items-center gap-4">
+            <div className="flex shrink-0 items-center gap-2">
               <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/30 transition-colors">
                 <Avatar name={user.nome} size="sm" />
                 <div className="text-right">
@@ -112,10 +113,12 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
               </button>
               <button
                 onClick={() => logout()}
-                className="hidden rounded-xl p-2.5 text-zinc-400 transition-all hover:bg-red-500/10 hover:text-red-400 sm:block"
+                type="button"
+                aria-label="Sair"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-zinc-400 transition-all hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 title="Sair"
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut aria-hidden="true" className="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -143,17 +146,18 @@ export function PortalLayout({ children, user }: PortalLayoutProps) {
         onClose={() => setWhatsNewOpen(false)}
       />
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-5 border-t border-white/10 bg-zinc-950/95 px-1 backdrop-blur-xl md:hidden" aria-label="Atalhos principais">
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid h-28 grid-cols-3 border-t border-white/10 bg-zinc-950/95 px-1 backdrop-blur-xl md:hidden" aria-label="Atalhos principais">
         {[
           { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
           { name: 'Pedidos', href: '/pedidos', icon: ClipboardList },
           { name: 'Novo', href: '/novo-pedido', icon: PlusCircle },
+          { name: 'Histórico', href: '/historico', icon: History },
           { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
           { name: 'Perfil', href: '/perfil', icon: User },
         ].map((item) => {
           const isActive = pathname === item.href
           return (
-            <Link key={item.href} href={item.href} className={cn(
+            <Link key={item.href} href={item.href} aria-current={isActive ? 'page' : undefined} className={cn(
               'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold transition-colors',
               isActive ? 'text-emerald-400' : 'text-zinc-500 hover:text-white'
             )}>

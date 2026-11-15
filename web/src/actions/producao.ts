@@ -80,6 +80,7 @@ export async function moverOrdem(id: number, novaEtapa: string) {
   try {
     const novoStatus = statusParaEtapa(novaEtapa)
     const resultado = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM public.ordens WHERE id = ${id} FOR UPDATE`
       const ordemAtual = await tx.ordem.findUnique({
         where: { id },
       })
@@ -134,10 +135,10 @@ export async function moverOrdem(id: number, novaEtapa: string) {
             situacaoLogistica: 'aguardando_recepcao',
             finalidadeClinica: 'prova',
             dentistaResponsavel: null,
-            agendamentoClinico: null,
+            agendamentoConfirmado: false,
             movimentacaoLogisticaEm: agora,
             historicoEtapas: [...proximoHistorico, {
-              acao: 'enviou_recepcao', finalidade: 'prova', data: agora.toISOString(),
+              acao: 'enviou_recepcao', finalidade: 'prova', agendamentoEncerrado: ordemAtual.agendamentoConfirmado, data: agora.toISOString(),
             }],
           },
         })

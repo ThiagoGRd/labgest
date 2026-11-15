@@ -94,6 +94,7 @@ function primeiraMensagem(error: z.ZodError, padrao: string) {
 
 function revalidarLabs() {
   revalidatePath('/labs-externos')
+  revalidatePath('/recepcao')
 }
 
 async function buscarPedido(id: number) {

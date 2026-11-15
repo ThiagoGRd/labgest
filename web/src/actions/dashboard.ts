@@ -3,8 +3,8 @@
 import { prisma } from '@labgest/database'
 import { requireUser } from '@/lib/auth-utils'
 
-const STATUS_ENCERRADOS = ['Finalizado', 'Cancelado', 'Entregue']
-const STATUS_FORA_DA_FILA = [...STATUS_ENCERRADOS, 'Pausado']
+import { STATUS_FORA_DA_FILA, ordensAtrasadas as filtroAtrasadas, entregasDoDia, retornosRespondidos, ordensSemEtapa as filtroSemEtapa } from '@/lib/dashboard-attention'
+
 const FUSO_LABORATORIO = 'America/Maceio'
 
 function calendarioDoLaboratorio(referencia = new Date()) {
@@ -72,29 +72,16 @@ export async function getDashboardData() {
       where: { status: { notIn: STATUS_FORA_DA_FILA } },
     }),
     prisma.ordem.count({
-      where: {
-        status: { notIn: STATUS_FORA_DA_FILA },
-        dataEntrega: { lt: datas.hoje },
-      },
+      where: filtroAtrasadas(datas.hoje),
     }),
     prisma.ordem.count({
-      where: {
-        status: { notIn: STATUS_FORA_DA_FILA },
-        dataEntrega: { gte: datas.hoje, lt: datas.amanha },
-      },
+      where: entregasDoDia(datas.hoje, datas.amanha),
     }),
     prisma.cicloProducao.count({
-      where: {
-        status: 'em_prova',
-        decisao: { not: null },
-        ordem: { status: { notIn: STATUS_ENCERRADOS } },
-      },
+      where: retornosRespondidos,
     }),
     prisma.ordem.count({
-      where: {
-        status: { notIn: STATUS_FORA_DA_FILA },
-        passoFluxoAtual: null,
-      },
+      where: filtroSemEtapa,
     }),
     prisma.ordem.count({ where: { status: 'Finalizado' } }),
     prisma.contaReceber.aggregate({

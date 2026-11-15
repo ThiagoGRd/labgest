@@ -1,0 +1,8 @@
+# Ações diárias mobile
+
+Base exata b62b8cc0e62c5822d00bc67cdf002c4c90888fc2, branch ui/mobile-daily-actions, worktree /workspace/labgest-mobile-daily. Preservar todos os candidatos anteriores. Nenhum AGENTS.md/skill local adicional encontrado; aplicar TDD e verificação antes da conclusão.
+
+1. Reproduzir no browser com componentes/CSS reais: Cancelar lançamento visível no desktop, ausente no cartão mobile; Histórico existente no desktop mas ausente nos atalhos mobile. Fixtures sintéticas e interceptação de todas as actions, SDKs proibidos no bundle, servidor estático loopback; nenhuma leitura de env ou conexão de banco/auth.
+2. Se confirmado, adicionar somente Cancelar ao cartão usando guarda, callback, modal e payload existentes; sem link OS. Para portal, manter os seis destinos e Sair, acrescentando Histórico à barra mobile. Usar duas linhas de três atalhos se necessário para nomes completos e alvos adequados a 320 px; ajustar reserva inferior correspondente. aria-current na rota ativa, sem mudança de roteamento/dados.
+3. Testes idênticos base/candidato: 320/390/768/1280, elegibilidade literal (Pendente/Vencido sem liquidação; Parcial/Recebido/Pago com liquidação e Cancelado sem botão), receber/pagar, teclado, fechar/desistir sem gravação, confirmação apenas spy com ID/tipo/motivo corretos. Portal Histórico por teclado e clique, href/rota ativa, todos destinos anteriores/Sair presentes, sem logout e sem overflow.
+4. Inspecionar capturas locais; rodar suítes pertinentes, typechecks web/portal, lint web/portal. Relatar problemas preexistentes do modal separadamente sem corrigir regras. Criar commit, patch somente desde a base, relatório/manifesto/logs em nova Library; sem capturas nos uploads. Não alegar Next/auth/DB real.

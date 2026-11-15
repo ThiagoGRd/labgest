@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useState, useSyncExternalStore } from 'react'
 
 interface SidebarContextType {
+    isMobile: boolean
     collapsed: boolean
     setCollapsed: (collapsed: boolean) => void
     toggleCollapsed: () => void
@@ -14,6 +15,8 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
 const SIDEBAR_STORAGE_KEY = 'sidebar-collapsed'
 const SIDEBAR_CHANGE_EVENT = 'labgest-sidebar-change'
+const MOBILE_QUERY = '(max-width: 767px)'
+const getMobileSnapshot = () => window.matchMedia(MOBILE_QUERY).matches
 
 function subscribeCollapsed(callback: () => void) {
     window.addEventListener('storage', callback)
@@ -30,7 +33,18 @@ function getCollapsedSnapshot() {
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
     const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, () => false)
-    const [isOpenMobile, setIsOpenMobile] = useState(false)
+    const [mobileOpen, setIsOpenMobile] = useState(false)
+    const subscribeMobile = useCallback((callback: () => void) => {
+        const media = window.matchMedia(MOBILE_QUERY)
+        const onChange = () => {
+            setIsOpenMobile(false)
+            callback()
+        }
+        media.addEventListener('change', onChange)
+        return () => media.removeEventListener('change', onChange)
+    }, [])
+    const isMobile = useSyncExternalStore(subscribeMobile, getMobileSnapshot, () => false)
+    const isOpenMobile = isMobile && mobileOpen
 
     const setCollapsed = useCallback((value: boolean) => {
         localStorage.setItem(SIDEBAR_STORAGE_KEY, String(value))
@@ -44,6 +58,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <SidebarContext.Provider value={{ 
+            isMobile,
             collapsed, 
             setCollapsed, 
             toggleCollapsed,

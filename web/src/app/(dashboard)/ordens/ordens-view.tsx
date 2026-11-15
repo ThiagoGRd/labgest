@@ -404,64 +404,6 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
       />
       
       <div className="space-y-5 px-1 pt-5 sm:px-0">
-        <Card className="border-indigo-200/70 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold text-slate-900 dark:text-white">Demonstrativo mensal para a clínica</p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Gere a conferência das ordens cobradas e do valor a pagar.
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <label className="relative">
-                <span className="sr-only">Mês do relatório</span>
-                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  type="month"
-                  value={mesRelatorio}
-                  onChange={(event) => setMesRelatorio(event.target.value)}
-                  className="w-full bg-white pl-9 sm:w-44 dark:bg-slate-900"
-                />
-              </label>
-              <select
-                aria-label="Clínica do demonstrativo"
-                value={clienteRelatorio}
-                onChange={(event) => setClienteRelatorio(event.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-64 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              >
-                <option value="">Todas as clínicas</option>
-                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
-              </select>
-              <Button
-                type="button"
-                disabled={!mesRelatorio}
-                onClick={() => {
-                  const params = new URLSearchParams({ mes: mesRelatorio, imprimir: '1' })
-                  if (clienteRelatorio) params.set('cliente', clienteRelatorio)
-                  router.push(`/relatorios?${params.toString()}`)
-                }}
-              >
-                <Printer className="h-4 w-4" />
-                Imprimir mês
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {[
-            { label: 'Ordens ativas', value: resultado.contadores.ativas },
-            { label: 'Em prova', value: resultado.contadores.emProva },
-            { label: 'Prontas para entrega', value: resultado.contadores.finalizadas },
-            { label: 'Pausadas', value: resultado.contadores.pausadas },
-          ].map((item) => (
-            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{item.value}</p>
-            </div>
-          ))}
-        </div>
-
         <Card>
           <CardContent className="p-4">
             <form
@@ -544,6 +486,67 @@ export function OrdensView({ resultado, clientes, servicos, filtros, user }: Ord
             </div>
           </CardContent>
         </Card>
+
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {[
+            { label: 'Ordens ativas', value: resultado.contadores.ativas },
+            { label: 'Em prova', value: resultado.contadores.emProva },
+            { label: 'Prontas para entrega', value: resultado.contadores.finalizadas },
+            { label: 'Pausadas', value: resultado.contadores.pausadas },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <details className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+          <summary className="cursor-pointer font-semibold">Relatórios e impressão</summary>
+          <Card className="border-indigo-200/70 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Demonstrativo mensal para a clínica</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Gere a conferência das ordens cobradas e do valor a pagar.
+                </p>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <label className="relative">
+                  <span className="sr-only">Mês do relatório</span>
+                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    type="month"
+                    value={mesRelatorio}
+                    onChange={(event) => setMesRelatorio(event.target.value)}
+                    className="w-full bg-white pl-9 sm:w-44 dark:bg-slate-900"
+                  />
+                </label>
+                <select
+                  aria-label="Clínica do demonstrativo"
+                  value={clienteRelatorio}
+                  onChange={(event) => setClienteRelatorio(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-64 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <option value="">Todas as clínicas</option>
+                  {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                </select>
+                <Button
+                  type="button"
+                  disabled={!mesRelatorio}
+                  onClick={() => {
+                    const params = new URLSearchParams({ mes: mesRelatorio, imprimir: '1' })
+                    if (clienteRelatorio) params.set('cliente', clienteRelatorio)
+                    router.push(`/relatorios?${params.toString()}`)
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  Imprimir mês
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </details>
 
         {/* Orders Table */}
         <Card>
