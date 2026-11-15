@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
-import { CalendarDays, Check, ChevronDown, Link2, Stethoscope, UserX } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, ChevronDown, ExternalLink, Link2, Stethoscope, UserX } from 'lucide-react'
 import { diasEntre } from '@labgest/shared'
 import type { ConsultaAnalisada, NivelAlerta, Responsavel, SituacaoConsulta } from '@labgest/shared'
 import type { TratamentoPainel } from '@/lib/controle-tratamentos'
@@ -137,37 +138,69 @@ function Vinculo({ tratamento }: { tratamento: TratamentoPainel }) {
 
 export function TratamentoCard({ tratamento, sincronizado, hoje }: { tratamento: TratamentoPainel; sincronizado: boolean; hoje: string }) {
   const [aberto, setAberto] = useState(false)
+  const [cienteAberto, setCienteAberto] = useState(false)
+  const [notaCiencia, setNotaCiencia] = useState('')
   const [pendente, iniciar] = useTransition()
   const t = tratamento
   const nivel = NIVEL[t.avaliacao.geral]
   const semCiencia = t.alertas.filter((a) => !a.cienteEm)
-  const ciente = t.alertas.find((a) => a.cienteEm)
+  const ciente = [...t.alertas]
+    .filter((a) => a.cienteEm)
+    .sort((a, b) => (b.cienteEm ?? '').localeCompare(a.cienteEm ?? ''))[0]
   const diasParado = diasEntre(t.tempo.desde, hoje)
   const contam = t.consultas.lista.filter((c) => c.situacao === 'realizada' || c.situacao === 'sem_confirmacao').map((c) => c.id)
 
-  function darCiencia() {
-    const nota = window.prompt('Registrar providência (opcional): o que foi combinado com o dentista ou o laboratório?') ?? undefined
+  function confirmarCiencia() {
     iniciar(async () => {
-      const resultado = await darCienciaAlertas(t.ordemId, nota)
-      if (!resultado.success) toast.error(resultado.error)
+      const resultado = await darCienciaAlertas(t.ordemId, notaCiencia)
+      if (resultado.success) {
+        toast.success('Ciência registrada.')
+        setCienteAberto(false)
+        setNotaCiencia('')
+      } else {
+        toast.error(resultado.error)
+      }
     })
   }
 
+  const nivelVisual = t.riscos.some((r) => r.nivel === 'critico')
+    ? NIVEL.critico
+    : t.avaliacao.geral === 'ok' && t.riscos.length > 0
+      ? NIVEL.atencao
+      : nivel
+
   return (
-    <article className={cn('rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900', t.encerrado ? 'border-l-slate-300 dark:border-l-white/20' : nivel.borda)}>
+    <article className={cn('rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900', (t.encerrado || t.pausado) ? 'border-l-slate-300 dark:border-l-white/20' : nivelVisual.borda)}>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
             <h3 className="truncate text-base font-bold text-slate-900 dark:text-white">{t.paciente}</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {t.tipoNome} · OS #{t.ordemId} · {t.clinica}
+            <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-slate-500 dark:text-slate-400">
+              <span>{t.tipoNome}</span>
+              <span>·</span>
+              <Link
+                href={`/ordens?busca=${t.ordemId}&status=todos`}
+                className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                title="Abrir ordem de serviço"
+              >
+                OS #{t.ordemId}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <span>·</span>
+              <span>{t.clinica}</span>
+              {t.dentistas.length === 0 && t.dentistaOrdem && (
+                <>
+                  <span>·</span>
+                  <span>{t.dentistaOrdem}</span>
+                </>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {t.pausado && <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Pausado</span>}
             {t.encerrado
               ? <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Encerrado em {t.dataFim ? formatDate(t.dataFim) : '—'}</span>
-              : <span className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', nivel.selo)}>{nivel.rotulo}</span>}
+              : !t.pausado && <span className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', nivel.selo)}>{nivel.rotulo}</span>}
           </div>
         </div>
 
@@ -177,6 +210,27 @@ export function TratamentoCard({ tratamento, sincronizado, hoje }: { tratamento:
             {t.tempo.temRegistro && <> há <strong className="font-semibold">{dias(diasParado)}</strong></>}
             <span className="text-slate-500 dark:text-slate-400"> · etapa: {t.etapa}</span>
           </p>
+        )}
+
+        {t.riscos.length > 0 && (
+          <ul className="mt-3 space-y-1.5" aria-label="Riscos operacionais">
+            {t.riscos.map((risco) => (
+              <li
+                key={risco.tipo}
+                className={cn(
+                  'flex items-start gap-2 rounded-xl px-3 py-2 text-xs',
+                  risco.nivel === 'critico'
+                    ? 'bg-red-50 text-red-900 dark:bg-red-500/10 dark:text-red-200'
+                    : 'bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200',
+                )}
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <div>
+                  <span className="font-semibold">{risco.titulo}:</span> {risco.detalhe}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -205,21 +259,56 @@ export function TratamentoCard({ tratamento, sincronizado, hoje }: { tratamento:
         </div>
 
         {(t.provas > 0 || t.ajustes > 0) && (
-          <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
-            {t.provas} prova(s) enviada(s){t.ajustes > 0 && <> · <strong className="font-semibold text-amber-700 dark:text-amber-300">{t.ajustes} voltaram com pedido de ajuste</strong></>}
-          </p>
+          <div className="mt-3 space-y-1.5">
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {t.provas} prova(s) enviada(s){t.ajustes > 0 && <> · <strong className="font-semibold text-amber-700 dark:text-amber-300">{t.ajustes} voltaram com pedido de ajuste</strong></>}
+            </p>
+            {t.motivosAjuste.length > 0 && (
+              <ul className="space-y-1 rounded-xl bg-amber-50/70 px-3 py-2 text-xs text-amber-950 dark:bg-amber-500/10 dark:text-amber-100">
+                {t.motivosAjuste.slice(0, 3).map((item) => (
+                  <li key={`${item.ciclo}-${item.motivo}`}>
+                    <span className="font-semibold">Ciclo #{item.ciclo}{item.etapa ? ` (${item.etapa})` : ''}:</span> “{item.motivo}”
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
 
         {semCiencia.length > 0 && (
-          <div className="mt-4 flex flex-col gap-2 rounded-xl bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:bg-red-500/10">
-            <ul className="space-y-0.5 text-sm text-red-800 dark:text-red-200">
-              {semCiencia
-                .filter((alerta) => !semCiencia.some((outro) => outro.tipo === alerta.tipo.replace('_atencao', '_critico') && outro.id !== alerta.id))
-                .map((alerta) => <li key={alerta.id}>{alerta.mensagem}</li>)}
-            </ul>
-            <button type="button" onClick={darCiencia} disabled={pendente} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-50 dark:bg-white/10 dark:text-red-200">
-              <Check className="h-4 w-4" /> Dar ciência
-            </button>
+          <div className="mt-4 space-y-2 rounded-xl bg-red-50 p-3 dark:bg-red-500/10">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <ul className="space-y-0.5 text-sm text-red-800 dark:text-red-200">
+                {semCiencia
+                  .filter((alerta) => !semCiencia.some((outro) => outro.tipo === alerta.tipo.replace('_atencao', '_critico') && outro.id !== alerta.id))
+                  .map((alerta) => <li key={alerta.id}>{alerta.mensagem}</li>)}
+              </ul>
+              {!cienteAberto && (
+                <button type="button" onClick={() => setCienteAberto(true)} disabled={pendente} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-50 dark:bg-white/10 dark:text-red-200">
+                  <Check className="h-4 w-4" /> Dar ciência
+                </button>
+              )}
+            </div>
+            {cienteAberto && (
+              <form className="flex flex-col gap-2 pt-1 sm:flex-row" onSubmit={(e) => { e.preventDefault(); confirmarCiencia() }}>
+                <input
+                  value={notaCiencia}
+                  onChange={(e) => setNotaCiencia(e.target.value)}
+                  placeholder="Providência combinada com o dentista ou laboratório (opcional)"
+                  aria-label="Providência para ciência"
+                  maxLength={1000}
+                  className={cn(campoClasse, 'flex-1 bg-white py-2 dark:bg-zinc-900')}
+                />
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => { setCienteAberto(false); setNotaCiencia('') }} disabled={pendente} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:bg-white/5 dark:text-slate-200">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={pendente} className="inline-flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50">
+                    <Check className="h-3.5 w-3.5" /> {pendente ? 'Salvando…' : 'Confirmar'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
         {semCiencia.length === 0 && ciente && (

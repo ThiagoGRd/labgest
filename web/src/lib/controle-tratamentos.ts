@@ -10,6 +10,7 @@ import {
   analisarConsultas,
   avaliarTratamento,
   consultasPrevistas,
+  detectarRiscosOperacionais,
   diasEntre,
   dividirTempo,
   getFluxoProtese,
@@ -27,11 +28,12 @@ import {
   type EventoHistorico,
   type LimiteTratamento,
   type Responsavel,
+  type RiscoOperacional,
   type StatusConsulta,
   type TipoAlertaTratamento,
   type TipoProteseId,
 } from '@labgest/shared'
-import { clinicorpConfigurado, listarConsultas } from '@/lib/clinicorp'
+import { buscarAgendaCompleta, clinicorpConfigurado } from '@/lib/clinicorp'
 import { hojeIso } from '@/lib/labs-externos-utils'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 
@@ -52,6 +54,13 @@ export interface AlertaPainel {
   cienteNota: string | null
 }
 
+export interface MotivoAjustePainel {
+  ciclo: number
+  etapa: string | null
+  data: string | null
+  motivo: string
+}
+
 export interface TratamentoPainel {
   ordemId: number
   paciente: string
@@ -70,10 +79,13 @@ export interface TratamentoPainel {
   consultasPrevistas: number
   consultas: { realizadas: number; semConfirmacao: number; faltas: number; futuras: number; lista: ConsultaAnalisada[] }
   dentistas: string[]
+  dentistaOrdem: string | null
   tempo: DivisaoTempo
   provas: number
   ajustes: number
+  motivosAjuste: MotivoAjustePainel[]
   avaliacao: AvaliacaoTratamento
+  riscos: RiscoOperacional[]
   alertas: AlertaPainel[]
   vinculo: string | null
   sugestoes: string[]
@@ -91,6 +103,7 @@ const SELECAO_ORDEM = {
   id: true, nomePaciente: true, clienteNome: true, servicoNome: true, tipoWorkflow: true,
   passoFluxoAtual: true, subetapaAtual: true, status: true, dataPedido: true, createdAt: true,
   dataFinalizacao: true, dataEntregaReal: true, historicoEtapas: true, localizacaoAtual: true,
+  dentistaResponsavel: true,
 } satisfies Prisma.OrdemSelect
 
 type OrdemControlada = Prisma.OrdemGetPayload<{ select: typeof SELECAO_ORDEM }> & { tipo: TipoProteseId }
@@ -122,13 +135,15 @@ async function carregarOrdens(hoje: string): Promise<OrdemControlada[]> {
 const encerrada = (ordem: { status: string | null }) => STATUS_ENCERRADO.includes(ordem.status || '')
 
 function inicioDaOrdem(ordem: OrdemControlada) {
-  return ordem.dataPedido ? isoDia(ordem.dataPedido) : isoDia(ordem.createdAt ?? new Date())
+  if (ordem.dataPedido) return isoDia(ordem.dataPedido)
+  return ordem.createdAt ? hojeIso(ordem.createdAt) : hojeIso()
 }
 
 function fimDaOrdem(ordem: OrdemControlada) {
   if (!encerrada(ordem)) return null
-  const fim = ordem.dataEntregaReal ?? ordem.dataFinalizacao
-  return fim ? isoDia(fim) : inicioDaOrdem(ordem)
+  if (ordem.dataEntregaReal) return hojeIso(ordem.dataEntregaReal)
+  if (ordem.dataFinalizacao) return isoDia(ordem.dataFinalizacao)
+  return inicioDaOrdem(ordem)
 }
 
 async function carregarLimites() {
@@ -161,7 +176,20 @@ export async function montarPainel(): Promise<PainelTratamentos> {
     prisma.tratamentoVinculo.findMany({ where: { ordemId: { in: ids } } }),
     carregarLimites(),
     prisma.alertaTratamento.findMany({ where: { ordemId: { in: ids }, resolvidoEm: null }, orderBy: { criadoEm: 'asc' } }),
-    prisma.cicloProducao.findMany({ where: { ordemId: { in: ids } }, select: { ordemId: true, decisao: true, dataSaida: true } }),
+    prisma.cicloProducao.findMany({
+      where: { ordemId: { in: ids } },
+      select: {
+        ordemId: true,
+        numeroCiclo: true,
+        etapa: true,
+        decisao: true,
+        dataSaida: true,
+        dataRetorno: true,
+        status: true,
+        observacoesDentista: true,
+      },
+      orderBy: { numeroCiclo: 'desc' },
+    }),
     prisma.clinicorpSincronizacao.findFirst({ where: { concluidaEm: { not: null } }, orderBy: { id: 'desc' } }),
   ])
 
@@ -201,7 +229,7 @@ export async function montarPainel(): Promise<PainelTratamentos> {
     )
     const diasAberto = diasEntre(inicio, fim ?? hoje)
     const historico = (Array.isArray(ordem.historicoEtapas) ? ordem.historicoEtapas : []) as EventoHistorico[]
-    const inicioTempo = (ordem.createdAt ?? ordem.dataPedido ?? new Date()).toISOString()
+    const inicioTempo = (ordem.dataPedido ?? ordem.createdAt ?? new Date()).toISOString()
     const fimTempo = fim ? (ordem.dataEntregaReal ?? ordem.dataFinalizacao ?? new Date()).toISOString() : new Date().toISOString()
     const tempo = dividirTempo(historico, inicioTempo, fimTempo)
     const passo = ordem.passoFluxoAtual ? getPassoProtese(ordem.tipo, ordem.passoFluxoAtual) : null
@@ -210,7 +238,17 @@ export async function montarPainel(): Promise<PainelTratamentos> {
       tempo.comQuem = passo?.responsavel ?? (ordem.localizacaoAtual === 'laboratorio' ? 'laboratorio' : 'clinica')
     }
     const ciclosDaOrdem = ciclos.filter((c) => c.ordemId === ordem.id)
+    const motivosAjuste = ciclosDaOrdem
+      .filter((c) => c.decisao === 'ajustes' && Boolean(c.observacoesDentista?.trim()))
+      .map((c) => ({
+        ciclo: c.numeroCiclo,
+        etapa: c.etapa?.trim() || null,
+        data: c.dataRetorno ? isoDia(c.dataRetorno) : null,
+        motivo: c.observacoesDentista!.trim(),
+      }))
     const sugestao = sugestoes[String(ordem.id)]
+    const encerrado = Boolean(fim)
+    const pausado = ordem.status === 'Pausado'
 
     return {
       ordemId: ordem.id,
@@ -221,8 +259,8 @@ export async function montarPainel(): Promise<PainelTratamentos> {
       tipoNome: getFluxoProtese(ordem.tipo).nomeCurto,
       status: ordem.status || 'Aguardando',
       etapa: passo?.nome ?? ordem.subetapaAtual ?? '—',
-      encerrado: Boolean(fim),
-      pausado: ordem.status === 'Pausado',
+      encerrado,
+      pausado,
       dataPedido: inicio,
       dataFim: fim,
       diasAberto,
@@ -230,10 +268,13 @@ export async function montarPainel(): Promise<PainelTratamentos> {
       consultasPrevistas: consultasPrevistas(ordem.tipo),
       consultas: resumo,
       dentistas: [...new Set(resumo.lista.filter((c) => c.situacao !== 'fora' && c.dentista).map((c) => c.dentista as string))],
+      dentistaOrdem: ordem.dentistaResponsavel?.trim() || null,
       tempo,
-      provas: ciclosDaOrdem.filter((c) => c.dataSaida).length,
+      provas: ciclosDaOrdem.filter((c) => Boolean(c.dataSaida) && (c.status === 'em_prova' || Boolean(c.decisao))).length,
       ajustes: ciclosDaOrdem.filter((c) => c.decisao === 'ajustes').length,
+      motivosAjuste,
       avaliacao: avaliarTratamento(resumo.realizadas, diasAberto, limite),
+      riscos: detectarRiscosOperacionais({ encerrado, pausado, hoje, tempo, consultas: resumo }),
       alertas: alertas.filter((a) => a.ordemId === ordem.id).map((a) => ({
         id: a.id,
         tipo: a.tipo as TipoAlertaTratamento,
@@ -304,10 +345,14 @@ export async function atualizarAlertas() {
     const linhas = relevantes.slice(0, 15).map(({ tratamento, tipo }) =>
       `${tipo.endsWith('critico') ? '🔴' : '🟡'} ${MENSAGENS[tipo](tratamento)} Está com ${NOMES_RESPONSAVEL[tratamento.tempo.comQuem]} (OS #${tratamento.ordemId}).`)
     const resto = relevantes.length > 15 ? `\n… e mais ${relevantes.length - 15}.` : ''
-    await sendWhatsAppMessage(telefone, `*LabGest — controle de tratamentos*\n\n${linhas.join('\n\n')}${resto}`)
+    try {
+      await sendWhatsAppMessage(telefone, `*LabGest — controle de tratamentos*\n\n${linhas.join('\n\n')}${resto}`)
+    } catch (falhaWhatsapp) {
+      console.error('Falha ao enviar alerta WhatsApp de tratamentos:', falhaWhatsapp)
+    }
   }
 
-  return { novos: criados.count, resolvidos: resolver.length }
+  return { novos: criados.count, resolvidos: resolver.length, painel }
 }
 
 export interface ResultadoSincronizacao {
@@ -338,7 +383,7 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
     const de = [somarDias(maisAntiga, -MARGEM_INICIO_DIAS), piso].sort()[1]
     const ate = somarDias(hoje, DIAS_FUTUROS)
 
-    const agenda = await listarConsultas(de, ate)
+    const { consultas: agenda, profissionais } = await buscarAgendaCompleta(de, ate)
     const relevantes = agenda.filter((c) => chaves.has(normalizarNome(c.pacienteNome)))
     const agora = new Date()
 
@@ -362,6 +407,28 @@ export async function sincronizarClinicorp(origem: 'manual' | 'cron'): Promise<R
       }))
     }
     consultasGravadas = relevantes.length
+
+    // Preenche nomes de profissionais em consultas antigas já gravadas sem dentistaNome.
+    if (profissionais.size > 0) {
+      const semNome = await prisma.clinicorpConsulta.findMany({
+        where: { dentistaId: { not: null }, dentistaNome: null },
+        select: { dentistaId: true },
+        distinct: ['dentistaId'],
+      })
+      const atualizacoes = semNome
+        .map((linha) => ({ id: linha.dentistaId, nome: linha.dentistaId ? profissionais.get(linha.dentistaId) : undefined }))
+        .filter((item): item is { id: string; nome: string } => Boolean(item.id && item.nome))
+      if (atualizacoes.length > 0) {
+        await prisma.$transaction(
+          atualizacoes.map(({ id, nome }) =>
+            prisma.clinicorpConsulta.updateMany({
+              where: { dentistaId: id, dentistaNome: null },
+              data: { dentistaNome: nome },
+            }),
+          ),
+        )
+      }
+    }
 
     // Consulta remarcada ou cancelada some da agenda: remove a cópia ainda "agendada".
     // Comparecimentos e faltas são fatos e permanecem.

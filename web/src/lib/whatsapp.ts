@@ -32,6 +32,7 @@ export async function sendWhatsAppMessage(phone: string, message: string) {
           text: message,
         },
       }),
+      signal: AbortSignal.timeout(8_000),
     })
 
     const data = await response.json()

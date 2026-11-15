@@ -2,7 +2,7 @@ import { ShieldAlert } from 'lucide-react'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { requireAdmin } from '@/lib/auth-utils'
-import { atualizarAlertas, montarPainel } from '@/lib/controle-tratamentos'
+import { atualizarAlertas } from '@/lib/controle-tratamentos'
 import { TratamentosView } from './tratamentos-view'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +26,6 @@ export default async function TratamentosPage() {
   }
 
   // Os alertas de tempo vencem com o passar dos dias: reavalia a cada abertura da página.
-  await atualizarAlertas()
-  const painel = await montarPainel()
+  const { painel } = await atualizarAlertas()
   return <TratamentosView painel={painel} />
 }

@@ -6,6 +6,7 @@ import {
   avaliarTratamento,
   categoriaContaParaProtese,
   consultasPrevistas,
+  detectarRiscosOperacionais,
   dividirTempo,
   limitePadrao,
   limiteValido,
@@ -142,4 +143,53 @@ test('trabalho parado na clínica aparece como estando com a clínica', () => {
   assert.equal(divisao.comQuem, 'clinica')
   assert.equal(divisao.desde, '2026-03-05')
   assert.equal(divisao.clinica, 60)
+})
+
+test('retorno_ciclo e registrou_no_laboratorio devolvem a custódia ao laboratório', () => {
+  const divisao = dividirTempo([
+    { acao: 'enviou_recepcao', data: '2026-03-05T12:00:00Z' },
+    { acao: 'retorno_ciclo', data: '2026-03-10T12:00:00Z' },
+    { acao: 'enviou_recepcao', data: '2026-03-12T12:00:00Z' },
+    { acao: 'registrou_no_laboratorio', data: '2026-03-14T12:00:00Z' },
+  ], '2026-03-01T12:00:00Z', '2026-03-20T12:00:00Z')
+  assert.equal(divisao.comQuem, 'laboratorio')
+  assert.equal(divisao.desde, '2026-03-14')
+  assert.equal(divisao.clinica, 7)
+  assert.equal(divisao.laboratorio, 12)
+})
+
+test('detectarRiscosOperacionais identifica consulta próxima sem peça, peça sem agenda e faltas repetidas', () => {
+  const consultaSemPeca = detectarRiscosOperacionais({
+    encerrado: false,
+    pausado: false,
+    hoje: '2026-11-15',
+    tempo: { comQuem: 'laboratorio', desde: '2026-11-10' },
+    consultas: {
+      futuras: 1,
+      faltas: 0,
+      lista: [{ id: 'f1', data: '2026-11-16', hora: '10:00', status: 'agendado', situacao: 'futura' }],
+    },
+  })
+  assert.deepEqual(consultaSemPeca.map((r) => r.tipo), ['consulta_sem_peca'])
+  assert.equal(consultaSemPeca[0].nivel, 'critico')
+
+  const pecaSemAgenda = detectarRiscosOperacionais({
+    encerrado: false,
+    pausado: false,
+    hoje: '2026-11-15',
+    tempo: { comQuem: 'clinica', desde: '2026-11-01' },
+    consultas: { futuras: 0, faltas: 2, lista: [] },
+  })
+  assert.deepEqual(pecaSemAgenda.map((r) => r.tipo), ['peca_sem_agenda', 'faltas_recorrentes'])
+
+  assert.deepEqual(
+    detectarRiscosOperacionais({
+      encerrado: false,
+      pausado: true,
+      hoje: '2026-11-15',
+      tempo: { comQuem: 'clinica', desde: '2026-10-01' },
+      consultas: { futuras: 0, faltas: 3, lista: [] },
+    }),
+    [],
+  )
 })

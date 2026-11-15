@@ -80,6 +80,7 @@ export async function vincularPaciente(ordemId: number, nomeNoClinicorp: string)
     const nome = nomeNoClinicorp.trim().slice(0, 255)
     if (!nome) {
       await prisma.tratamentoVinculo.deleteMany({ where: { ordemId } })
+      await atualizarAlertas()
       revalidatePath('/tratamentos')
       return { success: true, mensagem: 'Vínculo removido. Sincronize para atualizar as consultas.' }
     }
@@ -92,6 +93,7 @@ export async function vincularPaciente(ordemId: number, nomeNoClinicorp: string)
       create: { ordemId, pacienteChave: chave, pacienteNome: nome, criadoPor: usuario.email },
       update: { pacienteChave: chave, pacienteNome: nome, criadoPor: usuario.email, criadoEm: new Date() },
     })
+    await atualizarAlertas()
     revalidatePath('/tratamentos')
     return { success: true, mensagem: 'Paciente vinculado. Sincronize para buscar as consultas.' }
   })

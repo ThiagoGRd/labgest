@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, ClipboardList, RefreshCw, Search, Settings2 } from 'lucide-react'
-import type { LimiteTratamento, TipoProteseId } from '@labgest/shared'
+import { AlertTriangle, ClipboardList, RefreshCw, Search, Settings2, X } from 'lucide-react'
+import { getFluxoProtese, type LimiteTratamento, type Responsavel, type TipoProteseId, type TipoRiscoOperacional } from '@labgest/shared'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -33,6 +33,13 @@ function Indicador({ rotulo, valor, tom, ajuda }: { rotulo: string; valor: numbe
 function LimitesModal({ painel, aberto, fechar }: { painel: PainelTratamentos; aberto: boolean; fechar: () => void }) {
   const [valores, setValores] = useState<Record<string, LimiteTratamento>>(() => Object.fromEntries(painel.limites.map((l) => [l.tipo, l.limite])))
   const [pendente, iniciar] = useTransition()
+
+  useEffect(() => {
+    if (aberto) {
+      setValores(Object.fromEntries(painel.limites.map((l) => [l.tipo, l.limite])))
+    }
+  }, [aberto, painel.limites])
+
   const campos: Array<{ chave: keyof LimiteTratamento; rotulo: string }> = [
     { chave: 'consultasAtencao', rotulo: 'Consultas: atenção' },
     { chave: 'consultasMax', rotulo: 'Consultas: máximo' },
@@ -74,46 +81,101 @@ function LimitesModal({ painel, aberto, fechar }: { painel: PainelTratamentos; a
 }
 
 function resumoPorDentista(tratamentos: TratamentoPainel[]) {
-  const mapa = new Map<string, { consultas: number; tratamentos: Set<number>; acima: Set<number> }>()
+  const mapa = new Map<string, { consultas: number; tratamentos: Set<number>; acima: Set<number>; ajustes: Map<number, number> }>()
   for (const t of tratamentos) {
     for (const consulta of t.consultas.lista) {
       if (!consulta.dentista || (consulta.situacao !== 'realizada' && consulta.situacao !== 'sem_confirmacao')) continue
-      const linha = mapa.get(consulta.dentista) ?? { consultas: 0, tratamentos: new Set(), acima: new Set() }
+      const linha = mapa.get(consulta.dentista) ?? { consultas: 0, tratamentos: new Set(), acima: new Set(), ajustes: new Map() }
       linha.consultas += 1
       linha.tratamentos.add(t.ordemId)
+      linha.ajustes.set(t.ordemId, t.ajustes)
       if (t.avaliacao.consultas !== 'ok') linha.acima.add(t.ordemId)
       mapa.set(consulta.dentista, linha)
     }
   }
   return [...mapa.entries()]
-    .map(([nome, l]) => ({ nome, consultas: l.consultas, tratamentos: l.tratamentos.size, acima: l.acima.size, media: l.consultas / l.tratamentos.size }))
-    .sort((a, b) => b.acima - a.acima || b.media - a.media)
+    .map(([nome, l]) => ({
+      nome,
+      consultas: l.consultas,
+      tratamentos: l.tratamentos.size,
+      acima: l.acima.size,
+      ajustes: [...l.ajustes.values()].reduce((s, v) => s + v, 0),
+      media: l.consultas / l.tratamentos.size,
+    }))
+    .sort((a, b) => b.acima - a.acima || b.ajustes - a.ajustes || b.media - a.media)
+}
+
+function resumoEficiencia(encerrados: TratamentoPainel[], limites: PainelTratamentos['limites']) {
+  return limites.map((item) => {
+    const grupo = encerrados.filter((t) => t.tipo === item.tipo)
+    const qtd = grupo.length
+    if (qtd === 0) {
+      return { tipo: item.tipo, nome: item.nome, previstas: item.previstas, qtd: 0, mediaConsultas: null, mediaDias: null, pctAjuste: null }
+    }
+    const mediaConsultas = grupo.reduce((s, t) => s + t.consultas.realizadas, 0) / qtd
+    const mediaDias = grupo.reduce((s, t) => s + t.diasAberto, 0) / qtd
+    const comAjuste = grupo.filter((t) => t.ajustes > 0).length
+    return {
+      tipo: item.tipo,
+      nome: item.nome,
+      previstas: item.previstas,
+      qtd,
+      mediaConsultas,
+      mediaDias,
+      pctAjuste: Math.round((comAjuste / qtd) * 100),
+    }
+  })
+}
+
+function pesoOrdenacao(t: TratamentoPainel) {
+  if (t.avaliacao.geral === 'critico' || t.riscos.some((r) => r.nivel === 'critico')) return 0
+  if (t.avaliacao.geral === 'atencao' || t.riscos.length > 0) return 1
+  return 2
 }
 
 export function TratamentosView({ painel }: { painel: PainelTratamentos }) {
   const [aba, setAba] = useState<Aba>('acao')
   const [busca, setBusca] = useState('')
   const [tipo, setTipo] = useState('')
+  const [clinicaFiltro, setClinicaFiltro] = useState('')
+  const [responsavelFiltro, setResponsavelFiltro] = useState<'' | Responsavel>('')
+  const [dentistaFiltro, setDentistaFiltro] = useState('')
+  const [riscoFiltro, setRiscoFiltro] = useState<'' | TipoRiscoOperacional>('')
   const [limite, setLimite] = useState(POR_PAGINA)
   const [limitesAbertos, setLimitesAbertos] = useState(false)
   const [sincronizando, iniciarSincronizacao] = useTransition()
 
   const ativos = useMemo(() => painel.tratamentos.filter((t) => !t.encerrado), [painel.tratamentos])
   const encerrados = useMemo(() => painel.tratamentos.filter((t) => t.encerrado), [painel.tratamentos])
-  const comAcao = useMemo(() => ativos.filter((t) => t.avaliacao.geral !== 'ok'), [ativos])
-  const criticos = ativos.filter((t) => t.avaliacao.geral === 'critico').length
-  const atencao = ativos.filter((t) => t.avaliacao.geral === 'atencao').length
+  const comAcao = useMemo(() => ativos.filter((t) => !t.pausado && (t.avaliacao.geral !== 'ok' || t.riscos.length > 0)), [ativos])
+  const criticos = ativos.filter((t) => !t.pausado && (t.avaliacao.geral === 'critico' || t.riscos.some((r) => r.nivel === 'critico'))).length
+  const atencao = ativos.filter((t) => !t.pausado && t.avaliacao.geral !== 'critico' && !t.riscos.some((r) => r.nivel === 'critico') && (t.avaliacao.geral === 'atencao' || t.riscos.length > 0)).length
   const semCiencia = ativos.filter((t) => t.alertas.some((a) => !a.cienteEm)).length
   const sincronizado = Boolean(painel.ultimaSincronizacao?.sucesso)
+
+  const clinicas = useMemo(() => [...new Set(painel.tratamentos.map((t) => t.clinica).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [painel.tratamentos])
+
+  const contagemRiscos = useMemo(() => {
+    const baseRiscos = ativos.filter((t) => !t.pausado)
+    return {
+      consulta_sem_peca: baseRiscos.filter((t) => t.riscos.some((r) => r.tipo === 'consulta_sem_peca')).length,
+      peca_sem_agenda: baseRiscos.filter((t) => t.riscos.some((r) => r.tipo === 'peca_sem_agenda')).length,
+      faltas_recorrentes: baseRiscos.filter((t) => t.riscos.some((r) => r.tipo === 'faltas_recorrentes')).length,
+    }
+  }, [ativos])
 
   const lista = useMemo(() => {
     const base = aba === 'acao' ? comAcao : aba === 'andamento' ? ativos : encerrados
     const termo = busca.trim().toLowerCase()
     return base
       .filter((t) => !tipo || t.tipo === tipo)
-      .filter((t) => !termo || t.paciente.toLowerCase().includes(termo) || String(t.ordemId) === termo.replace('#', '') || t.dentistas.some((d) => d.toLowerCase().includes(termo)))
-      .sort((a, b) => PESO[a.avaliacao.geral] - PESO[b.avaliacao.geral] || b.diasAberto - a.diasAberto)
-  }, [aba, comAcao, ativos, encerrados, busca, tipo])
+      .filter((t) => !clinicaFiltro || t.clinica === clinicaFiltro)
+      .filter((t) => !responsavelFiltro || t.tempo.comQuem === responsavelFiltro)
+      .filter((t) => !dentistaFiltro || t.dentistas.includes(dentistaFiltro) || t.dentistaOrdem === dentistaFiltro)
+      .filter((t) => !riscoFiltro || t.riscos.some((r) => r.tipo === riscoFiltro))
+      .filter((t) => !termo || t.paciente.toLowerCase().includes(termo) || t.clinica.toLowerCase().includes(termo) || String(t.ordemId) === termo.replace('#', '') || t.dentistas.some((d) => d.toLowerCase().includes(termo)) || (t.dentistaOrdem ?? '').toLowerCase().includes(termo))
+      .sort((a, b) => pesoOrdenacao(a) - pesoOrdenacao(b) || PESO[a.avaliacao.geral] - PESO[b.avaliacao.geral] || b.diasAberto - a.diasAberto)
+  }, [aba, comAcao, ativos, encerrados, busca, tipo, clinicaFiltro, responsavelFiltro, dentistaFiltro, riscoFiltro])
 
   const tempoTotal = useMemo(() => {
     const comRegistro = painel.tratamentos.filter((t) => t.tempo.temRegistro)
@@ -125,6 +187,7 @@ export function TratamentosView({ painel }: { painel: PainelTratamentos }) {
     }
   }, [painel.tratamentos])
   const dentistas = useMemo(() => resumoPorDentista(painel.tratamentos), [painel.tratamentos])
+  const eficiencia = useMemo(() => resumoEficiencia(encerrados, painel.limites), [encerrados, painel.limites])
   const ajustes = painel.tratamentos.reduce((s, t) => s + t.ajustes, 0)
   const provas = painel.tratamentos.reduce((s, t) => s + t.provas, 0)
 
@@ -182,22 +245,75 @@ export function TratamentosView({ painel }: { painel: PainelTratamentos }) {
                   </button>
                 ))}
               </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <div className="relative flex-1">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="relative sm:col-span-2">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_PAGINA) }} placeholder="Buscar por paciente, dentista ou nº da ordem" aria-label="Buscar tratamentos" className={cn(campoClasse, 'pl-10')} />
+                  <input value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_PAGINA) }} placeholder="Buscar por paciente, clínica, dentista ou nº da ordem" aria-label="Buscar tratamentos" className={cn(campoClasse, 'pl-10')} />
                 </div>
-                <select aria-label="Filtrar por tipo de prótese" value={tipo} onChange={(e) => { setTipo(e.target.value); setLimite(POR_PAGINA) }} className={cn(campoClasse, 'sm:w-60')}>
+                <select aria-label="Filtrar por tipo de prótese" value={tipo} onChange={(e) => { setTipo(e.target.value); setLimite(POR_PAGINA) }} className={campoClasse}>
                   <option value="">Todos os tipos</option>
                   {painel.limites.map((l) => <option key={l.tipo} value={l.tipo}>{l.nome}</option>)}
                 </select>
+                <select aria-label="Filtrar por responsável atual" value={responsavelFiltro} onChange={(e) => { setResponsavelFiltro(e.target.value as '' | Responsavel); setLimite(POR_PAGINA) }} className={campoClasse}>
+                  <option value="">Com qualquer setor</option>
+                  <option value="clinica">Com a clínica</option>
+                  <option value="laboratorio">No laboratório</option>
+                  <option value="fornecedor">No fornecedor</option>
+                </select>
               </div>
+              {(clinicas.length > 1 || contagemRiscos.consulta_sem_peca > 0 || contagemRiscos.peca_sem_agenda > 0 || contagemRiscos.faltas_recorrentes > 0 || dentistaFiltro || riscoFiltro) && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  {clinicas.length > 1 && (
+                    <select aria-label="Filtrar por clínica" value={clinicaFiltro} onChange={(e) => { setClinicaFiltro(e.target.value); setLimite(POR_PAGINA) }} className={cn(campoClasse, 'w-auto py-1.5 text-xs')}>
+                      <option value="">Todas as clínicas</option>
+                      {clinicas.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  )}
+                  {([
+                    { id: 'consulta_sem_peca', rotulo: 'Consulta ≤48h sem peça', total: contagemRiscos.consulta_sem_peca, tom: 'critico' },
+                    { id: 'peca_sem_agenda', rotulo: 'Na clínica sem agenda', total: contagemRiscos.peca_sem_agenda, tom: 'atencao' },
+                    { id: 'faltas_recorrentes', rotulo: '2+ faltas', total: contagemRiscos.faltas_recorrentes, tom: 'atencao' },
+                  ] as const)
+                    .filter((chip) => chip.total > 0 || riscoFiltro === chip.id)
+                    .map((chip) => {
+                      const ativo = riscoFiltro === chip.id
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => { setRiscoFiltro(ativo ? '' : chip.id); setLimite(POR_PAGINA) }}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                            ativo
+                              ? 'border-indigo-600 bg-indigo-600 text-white'
+                              : chip.tom === 'critico'
+                                ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
+                                : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+                          )}
+                        >
+                          <span>{chip.rotulo}</span>
+                          <span className="opacity-80">{chip.total}</span>
+                        </button>
+                      )
+                    })}
+                  {dentistaFiltro && (
+                    <button
+                      type="button"
+                      onClick={() => { setDentistaFiltro(''); setLimite(POR_PAGINA) }}
+                      className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-200"
+                    >
+                      <span>Dentista: {dentistaFiltro}</span>
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {lista.length === 0 ? (
               <EmptyState variant="card" icon={ClipboardList}
-                title={aba === 'acao' && !busca && !tipo ? 'Nenhum tratamento fora do previsto' : 'Nenhum tratamento encontrado'}
-                description={aba === 'acao' && !busca && !tipo ? 'Quando uma prótese passar do número de consultas ou do prazo, ela aparece aqui.' : 'Tente outro nome ou limpe os filtros.'} />
+                title={aba === 'acao' && !busca && !tipo && !clinicaFiltro && !responsavelFiltro && !dentistaFiltro && !riscoFiltro ? 'Nenhum tratamento fora do previsto' : 'Nenhum tratamento encontrado'}
+                description={aba === 'acao' && !busca && !tipo && !clinicaFiltro && !responsavelFiltro && !dentistaFiltro && !riscoFiltro ? 'Quando uma prótese passar do número de consultas ou do prazo, ela aparece aqui.' : 'Tente outro filtro ou limpe a seleção atual.'} />
             ) : (
               <>
                 <div className="space-y-3">
@@ -250,7 +366,7 @@ export function TratamentosView({ painel }: { painel: PainelTratamentos }) {
 
             <section className={cartao} aria-label="Consultas por dentista">
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Por dentista</h2>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Consultas de prótese atendidas, segundo o Clinicorp</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Clique no profissional para filtrar os casos</p>
               {dentistas.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Sem consultas sincronizadas com profissional identificado.</p>
               ) : (
@@ -259,15 +375,72 @@ export function TratamentosView({ painel }: { painel: PainelTratamentos }) {
                     <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
                       <th className="pb-1.5 font-medium">Profissional</th>
                       <th className="pb-1.5 text-right font-medium" title="Média de consultas por tratamento">Média</th>
+                      <th className="pb-1.5 text-right font-medium" title="Total de ciclos devolvidos para ajuste">Ajust.</th>
                       <th className="pb-1.5 text-right font-medium" title="Tratamentos acima do previsto / tratamentos atendidos">Acima</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                    {dentistas.map((d) => (
-                      <tr key={d.nome}>
-                        <td className="max-w-0 truncate py-1.5 pr-2 text-slate-900 dark:text-white" title={d.nome}>{d.nome}</td>
-                        <td className="py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">{d.media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                        <td className={cn('py-1.5 text-right tabular-nums font-semibold', d.acima > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400')}>{d.acima}/{d.tratamentos}</td>
+                    {dentistas.map((d) => {
+                      const selecionado = dentistaFiltro === d.nome
+                      return (
+                        <tr key={d.nome}>
+                          <td className="max-w-0 py-1.5 pr-2">
+                            <button
+                              type="button"
+                              onClick={() => { setDentistaFiltro(selecionado ? '' : d.nome); setLimite(POR_PAGINA) }}
+                              className={cn(
+                                'w-full truncate text-left font-medium hover:underline',
+                                selecionado ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-900 dark:text-white',
+                              )}
+                              title={d.nome}
+                            >
+                              {d.nome}
+                            </button>
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">{d.media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                          <td className={cn('py-1.5 text-right tabular-nums', d.ajustes > 0 ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-slate-400')}>{d.ajustes}</td>
+                          <td className={cn('py-1.5 text-right tabular-nums font-semibold', d.acima > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400')}>{d.acima}/{d.tratamentos}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section className={cartao} aria-label="Eficiência nos últimos 180 dias">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Eficiência (180 dias)</h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Média real dos casos encerrados vs. fluxo previsto</p>
+              {encerrados.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Sem tratamentos encerrados nos últimos 180 dias.</p>
+              ) : (
+                <table className="mt-3 w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 dark:text-slate-400">
+                      <th className="pb-1.5 font-medium">Prótese</th>
+                      <th className="pb-1.5 text-right font-medium" title="Previsto / Média real de consultas">Cons.</th>
+                      <th className="pb-1.5 text-right font-medium" title="Duração média em dias">Dias</th>
+                      <th className="pb-1.5 text-right font-medium" title="Percentual que teve pedido de ajuste">Ajuste</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {eficiencia.map((e) => (
+                      <tr key={e.tipo}>
+                        <td className="max-w-0 truncate py-1.5 pr-2 font-medium text-slate-900 dark:text-white" title={`${e.nome} (${e.qtd})`}>
+                          {getFluxoProtese(e.tipo).nomeCurto}
+                        </td>
+                        <td className={cn(
+                          'py-1.5 text-right tabular-nums',
+                          e.mediaConsultas !== null && e.mediaConsultas > e.previstas ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-200',
+                        )}>
+                          {e.mediaConsultas === null ? '—' : `${e.mediaConsultas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} / ${e.previstas}`}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                          {e.mediaDias === null ? '—' : `${Math.round(e.mediaDias)}d`}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                          {e.pctAjuste === null ? '—' : `${e.pctAjuste}%`}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

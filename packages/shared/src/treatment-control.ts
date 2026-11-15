@@ -58,7 +58,7 @@ export function limiteValido(limite: LimiteTratamento) {
 export function normalizarNome(nome: string | null | undefined) {
   return (nome ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -170,6 +170,8 @@ export interface EventoHistorico {
 const TROCA_DE_MAOS: Record<string, Responsavel> = {
   enviou_recepcao: 'clinica',
   recebeu_laboratorio: 'laboratorio',
+  registrou_no_laboratorio: 'laboratorio',
+  retorno_ciclo: 'laboratorio',
   enviado_fornecedor: 'fornecedor',
   recebeu_fornecedor: 'laboratorio',
 }
@@ -253,4 +255,71 @@ export function alertasDevidos(avaliacao: AvaliacaoTratamento): TipoAlertaTratam
   if (avaliacao.tempo !== 'ok') tipos.push('tempo_atencao')
   if (avaliacao.tempo === 'critico') tipos.push('tempo_critico')
   return tipos
+}
+
+export type TipoRiscoOperacional = 'consulta_sem_peca' | 'peca_sem_agenda' | 'faltas_recorrentes'
+
+export interface RiscoOperacional {
+  tipo: TipoRiscoOperacional
+  nivel: 'critico' | 'atencao'
+  titulo: string
+  detalhe: string
+}
+
+const ROTULO_LOCAL_RISCO: Record<Responsavel, string> = {
+  laboratorio: 'no laboratório',
+  clinica: 'na clínica',
+  fornecedor: 'no fornecedor',
+}
+
+/**
+ * Sinais operacionais do dia a dia que escapam dos contadores puros de teto:
+ * - consulta próxima com a peça ainda fora da clínica;
+ * - peça parada na clínica há 7+ dias sem retorno agendado;
+ * - paciente faltando repetidamente (problema de confirmação/recepção).
+ */
+export function detectarRiscosOperacionais(entrada: {
+  encerrado: boolean
+  pausado: boolean
+  hoje: string
+  tempo: Pick<DivisaoTempo, 'comQuem' | 'desde'>
+  consultas: Pick<ResumoConsultas, 'futuras' | 'faltas' | 'lista'>
+}): RiscoOperacional[] {
+  if (entrada.encerrado || entrada.pausado) return []
+  const riscos: RiscoOperacional[] = []
+
+  const proxima = entrada.consultas.lista.find((c) => c.situacao === 'futura')
+  if (entrada.tempo.comQuem !== 'clinica' && proxima && proxima.data >= entrada.hoje) {
+    const emDias = diasEntre(entrada.hoje, proxima.data)
+    if (emDias <= 2) {
+      const quando = emDias === 0 ? 'hoje' : emDias === 1 ? 'amanhã' : 'em 2 dias'
+      riscos.push({
+        tipo: 'consulta_sem_peca',
+        nivel: 'critico',
+        titulo: 'Consulta próxima sem peça na clínica',
+        detalhe: `Paciente agendado ${quando}${proxima.hora ? ` às ${proxima.hora}` : ''}, mas a peça consta ${ROTULO_LOCAL_RISCO[entrada.tempo.comQuem]}.`,
+      })
+    }
+  }
+
+  const diasParado = diasEntre(entrada.tempo.desde, entrada.hoje)
+  if (entrada.tempo.comQuem === 'clinica' && entrada.consultas.futuras === 0 && diasParado >= 7) {
+    riscos.push({
+      tipo: 'peca_sem_agenda',
+      nivel: 'atencao',
+      titulo: 'Na clínica sem consulta futura',
+      detalhe: `Está com a clínica há ${diasParado} dias e não há retorno agendado no Clinicorp.`,
+    })
+  }
+
+  if (entrada.consultas.faltas >= 2) {
+    riscos.push({
+      tipo: 'faltas_recorrentes',
+      nivel: 'atencao',
+      titulo: `${entrada.consultas.faltas} faltas do paciente`,
+      detalhe: 'Excesso de faltas elevando o prazo sem avanço clínico — alinhar confirmação com a recepção.',
+    })
+  }
+
+  return riscos
 }
