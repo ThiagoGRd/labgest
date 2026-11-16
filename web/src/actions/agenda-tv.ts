@@ -39,6 +39,57 @@ import {
 } from '@/lib/agenda-ia-gemini'
 
 const TIPO_AGENDA_IA_LOG = 'agenda_ia_log'
+const PREFIXO_TITULO_TV = '[TV] '
+const PREFIXO_TITULO_IA = '[IA] '
+
+let cacheTiposPermitidos: { bloco: string; briefing: string } | null = null
+
+function extrairTiposPermitidosDeConstraint(def?: string | null): string[] {
+  if (!def || !/ARRAY|IN\s*\(|=\s*'/i.test(def)) return []
+  return [...def.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter(Boolean)
+}
+
+async function resolverTiposNotificacaoAgenda(): Promise<{ bloco: string; briefing: string }> {
+  if (cacheTiposPermitidos) return cacheTiposPermitidos
+
+  if (typeof prisma.$queryRawUnsafe !== 'function') {
+    return { bloco: TIPO_AGENDA_BANCADA, briefing: TIPO_AGENDA_IA_LOG }
+  }
+
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      `SELECT pg_get_constraintdef(c.oid) AS def
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+       WHERE t.relname = 'notificacoes'
+         AND c.contype = 'c'
+         AND pg_get_constraintdef(c.oid) ILIKE '%tipo%'
+       ORDER BY CASE WHEN c.conname = 'notificacoes_tipo_check' THEN 0 ELSE 1 END
+       LIMIT 1`,
+    )) as Array<{ def?: string | null }>
+
+    const permitidos = extrairTiposPermitidosDeConstraint(rows?.[0]?.def ?? null)
+    if (permitidos.length === 0) {
+      cacheTiposPermitidos = { bloco: TIPO_AGENDA_BANCADA, briefing: TIPO_AGENDA_IA_LOG }
+      return cacheTiposPermitidos
+    }
+
+    const preferidosBloco = [TIPO_AGENDA_BANCADA, 'sistema', 'info', 'alerta', 'sucesso', 'producao', 'lembrete', 'aviso']
+    const preferidosBriefing = [TIPO_AGENDA_IA_LOG, 'info', 'sistema', 'sucesso', 'alerta', 'producao', 'lembrete', 'aviso']
+
+    const bloco = preferidosBloco.find((p) => permitidos.includes(p)) ?? permitidos[0]
+    const briefing = preferidosBriefing.find((p) => permitidos.includes(p)) ?? permitidos[0]
+
+    cacheTiposPermitidos = { bloco, briefing }
+    return cacheTiposPermitidos
+  } catch {
+    return { bloco: TIPO_AGENDA_BANCADA, briefing: TIPO_AGENDA_IA_LOG }
+  }
+}
+
+function registroEhBlocoTv(reg: { tipo?: string | null; titulo?: string | null }): boolean {
+  return reg.tipo === TIPO_AGENDA_BANCADA || Boolean(reg.titulo?.startsWith(PREFIXO_TITULO_TV))
+}
 
 export interface PainelTvSnapshot {
   dataReferencia: string
@@ -60,7 +111,7 @@ function revalidarPainelTv() {
 function construirTituloBloco(payload: Pick<PayloadBlocoAgendaTv, 'protetico' | 'data' | 'horaInicio' | 'horaFim' | 'ordemId' | 'paciente'>) {
   const nome = payload.protetico === 'otavio' ? 'Tavá' : 'Napoleão'
   const ref = payload.ordemId ? `OS #${payload.ordemId}` : payload.paciente
-  return `${nome} | ${payload.data} | ${payload.horaInicio}-${payload.horaFim} | ${ref}`.slice(0, 255)
+  return `${PREFIXO_TITULO_TV}${nome} | ${payload.data} | ${payload.horaInicio}-${payload.horaFim} | ${ref}`.slice(0, 255)
 }
 
 function arcadaLabelDaOrdem(ordem: OrdemProducao): string | null {
@@ -89,8 +140,8 @@ export async function carregarBlocosAgendaPorData(dataIso: string): Promise<Bloc
 
   const registros = await prisma.notificacao.findMany({
     where: {
-      tipo: TIPO_AGENDA_BANCADA,
       data: { gte: inicio, lt: fim },
+      OR: [{ tipo: TIPO_AGENDA_BANCADA }, { titulo: { startsWith: PREFIXO_TITULO_TV } }],
     },
     orderBy: [{ data: 'asc' }, { id: 'asc' }],
     take: 200,
@@ -114,8 +165,8 @@ export async function carregarHistoricoConcluidosTv(dias = 60): Promise<BlocoAge
 
   const registros = await prisma.notificacao.findMany({
     where: {
-      tipo: TIPO_AGENDA_BANCADA,
       data: { gte: inicio },
+      OR: [{ tipo: TIPO_AGENDA_BANCADA }, { titulo: { startsWith: PREFIXO_TITULO_TV } }],
     },
     orderBy: [{ data: 'asc' }, { id: 'asc' }],
     take: 400,
@@ -135,8 +186,10 @@ async function carregarUltimoBriefingIa(dataIso: string): Promise<string | null>
   if (typeof prisma.notificacao?.findFirst !== 'function') return null
   const registro = await prisma.notificacao.findFirst({
     where: {
-      tipo: TIPO_AGENDA_IA_LOG,
-      titulo: { startsWith: dataIso },
+      OR: [
+        { tipo: TIPO_AGENDA_IA_LOG, titulo: { startsWith: dataIso } },
+        { titulo: { startsWith: `${PREFIXO_TITULO_IA}${dataIso}` } },
+      ],
     },
     orderBy: { id: 'desc' },
     select: { mensagem: true },
@@ -145,12 +198,17 @@ async function carregarUltimoBriefingIa(dataIso: string): Promise<string | null>
   return parsed?.briefingTurno ?? null
 }
 
-async function salvarBriefingIa(dataIso: string, estrategia: EstrategiaIaResultado) {
+async function salvarBriefingIa(
+  dataIso: string,
+  estrategia: EstrategiaIaResultado,
+  tipoBriefing?: string,
+) {
   if (typeof prisma.notificacao?.create !== 'function') return
+  const tipo = tipoBriefing ?? (await resolverTiposNotificacaoAgenda()).briefing
   await prisma.notificacao.create({
     data: {
-      tipo: TIPO_AGENDA_IA_LOG,
-      titulo: `${dataIso} | Briefing IA (${estrategia.motor})`.slice(0, 255),
+      tipo,
+      titulo: `${PREFIXO_TITULO_IA}${dataIso} | Briefing IA (${estrategia.motor})`.slice(0, 255),
       mensagem: JSON.stringify({
         motor: estrategia.motor,
         briefingTurno: estrategia.briefingTurno,
@@ -315,6 +373,7 @@ export async function criarBlocosBancadaTv(input: {
 
   const agoraIso = new Date().toISOString()
   const dataRegistro = new Date(`${input.data}T12:00:00Z`)
+  const { bloco: tipoBloco } = await resolverTiposNotificacaoAgenda()
   const criados: number[] = []
 
   for (const item of input.blocos) {
@@ -357,7 +416,7 @@ export async function criarBlocosBancadaTv(input: {
 
     const criado = await prisma.notificacao.create({
       data: {
-        tipo: TIPO_AGENDA_BANCADA,
+        tipo: tipoBloco,
         titulo: construirTituloBloco(payload),
         mensagem: JSON.stringify(payload),
         data: dataRegistro,
@@ -450,7 +509,7 @@ export async function atualizarStatusBlocoTv(
   await requireUser()
 
   const reg = await prisma.notificacao.findUnique({ where: { id: blocoId } })
-  if (!reg || reg.tipo !== TIPO_AGENDA_BANCADA) {
+  if (!reg || !registroEhBlocoTv(reg)) {
     return { success: false, error: 'Bloco da agenda não encontrado.' }
   }
 
@@ -570,7 +629,7 @@ export async function moverOuReagendarBlocoTv(
   await requireUser()
 
   const reg = await prisma.notificacao.findUnique({ where: { id: blocoId } })
-  if (!reg || reg.tipo !== TIPO_AGENDA_BANCADA) {
+  if (!reg || !registroEhBlocoTv(reg)) {
     return { success: false, error: 'Bloco da agenda não encontrado.' }
   }
 
@@ -661,7 +720,7 @@ export async function excluirBlocoTv(blocoId: number) {
   await requireUser()
 
   const reg = await prisma.notificacao.findUnique({ where: { id: blocoId } })
-  if (!reg || reg.tipo !== TIPO_AGENDA_BANCADA) {
+  if (!reg || !registroEhBlocoTv(reg)) {
     return { success: false, error: 'Bloco da agenda não encontrado.' }
   }
 
@@ -773,6 +832,8 @@ export async function executarAgendaAutomaticaIa(input: {
     const blocosCriadosIds: number[] = []
 
     if (aplicar) {
+      const tipos = await resolverTiposNotificacaoAgenda()
+
       if (modoReotimizacao === 'reorganizar_pendentes') {
         const idsParaSubstituir = blocosExistentes
           .filter((b) => b.status === 'agendado' && b.origemAgendamento === 'motor_ia')
@@ -831,7 +892,7 @@ export async function executarAgendaAutomaticaIa(input: {
         }
 
         registrosCriar.push({
-          tipo: TIPO_AGENDA_BANCADA,
+          tipo: tipos.bloco,
           titulo: construirTituloBloco(payload),
           mensagem: JSON.stringify(payload),
           data: dataRegistro,
@@ -857,7 +918,7 @@ export async function executarAgendaAutomaticaIa(input: {
         }
       }
 
-      await Promise.all([gravarBlocos(), salvarBriefingIa(dataAlvo, estrategia)])
+      await Promise.all([gravarBlocos(), salvarBriefingIa(dataAlvo, estrategia, tipos.briefing)])
       revalidarPainelTv()
     }
 

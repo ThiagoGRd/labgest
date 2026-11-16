@@ -369,3 +369,192 @@ test('executarAgendaAutomaticaIa grava em lote (createManyAndReturn), enxuga res
   delete globalThis.__AGENDA_TV_PRISMA_MOCK__
 })
 
+test('respeita notificacoes_tipo_check via pg_constraint em agenda IA, criação manual e ações do bloco', async () => {
+  const tiposPermitidos = new Set(['info', 'alerta', 'sistema'])
+  const banco = new Map()
+  let nextId = 100
+  let queryConstraintChamadas = 0
+
+  const validarTipo = (tipo) => {
+    if (!tiposPermitidos.has(tipo)) {
+      throw new Error(`new row for relation "notificacoes" violates check constraint "notificacoes_tipo_check" (tipo=${tipo})`)
+    }
+  }
+
+  const prismaMock = {
+    $queryRawUnsafe: async (sql) => {
+      queryConstraintChamadas += 1
+      assert.match(sql, /notificacoes_tipo_check/)
+      return [
+        {
+          def: "CHECK (((tipo)::text = ANY (ARRAY[('alerta'::character varying)::text, ('info'::character varying)::text, ('sistema'::character varying)::text])))",
+        },
+      ]
+    },
+    notificacao: {
+      findMany: async () => [...banco.values()],
+      findFirst: async () => [...banco.values()].reverse()[0] ?? null,
+      findUnique: async ({ where }) => banco.get(where.id) ?? null,
+      deleteMany: async () => ({ count: 0 }),
+      createManyAndReturn: async ({ data }) => {
+        const criados = []
+        for (const item of data) {
+          validarTipo(item.tipo)
+          const id = ++nextId
+          banco.set(id, { id, ...item })
+          criados.push({ id })
+        }
+        return criados
+      },
+      create: async ({ data }) => {
+        validarTipo(data.tipo)
+        const id = ++nextId
+        const row = { id, ...data }
+        banco.set(id, row)
+        return row
+      },
+      update: async ({ where, data }) => {
+        const atual = banco.get(where.id)
+        const atualizado = { ...atual, ...data }
+        banco.set(where.id, atualizado)
+        return atualizado
+      },
+      delete: async ({ where }) => {
+        const atual = banco.get(where.id)
+        banco.delete(where.id)
+        return atual
+      },
+    },
+    clinicorpSincronizacao: {
+      findFirst: async () => null,
+    },
+  }
+
+  const build = await esbuild.build({
+    entryPoints: [path.join(webRoot, 'src/actions/agenda-tv.ts')],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'cjs',
+    plugins: [
+      {
+        name: 'agenda-action-constraint-mocks',
+        setup(b) {
+          b.onResolve({ filter: /^@labgest\/database$/ }, () => ({ path: 'db', namespace: 'db' }))
+          b.onLoad({ filter: /.*/, namespace: 'db' }, () => ({
+            contents: 'module.exports = { prisma: globalThis.__AGENDA_TV_PRISMA_CONSTRAINT_MOCK__ }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^next\/cache$/ }, () => ({ path: 'nc', namespace: 'nc' }))
+          b.onLoad({ filter: /.*/, namespace: 'nc' }, () => ({
+            contents: 'module.exports = { revalidatePath: () => {} }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/lib\/auth-utils$/ }, () => ({ path: 'au', namespace: 'au' }))
+          b.onLoad({ filter: /.*/, namespace: 'au' }, () => ({
+            contents: 'module.exports = { requireUser: async () => ({ id: 1 }) }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/actions\/producao$/ }, () => ({ path: 'pr', namespace: 'pr' }))
+          b.onLoad({ filter: /.*/, namespace: 'pr' }, () => ({
+            contents: `
+              module.exports = {
+                getProducao: async () => [
+                  {
+                    id: 801,
+                    paciente: 'Maria Souza',
+                    dentista: 'Dr. João',
+                    servico: 'Prótese total',
+                    status: 'Em Produção',
+                    updatedAt: '2026-11-15T10:00:00Z',
+                    etapa: 'confeccao',
+                    subetapa: 'Montagem de dentes',
+                    prioridade: 'Urgente',
+                    entrega: '2026-11-16T18:00:00Z',
+                    arcadas: 1,
+                  },
+                ],
+              }
+            `,
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/actions\/workflow-protese$/ }, () => ({ path: 'wf', namespace: 'wf' }))
+          b.onLoad({ filter: /.*/, namespace: 'wf' }, () => ({
+            contents: 'module.exports = { concluirEtapaLaboratorial: async () => ({ success: true }) }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/lib\/clinicorp-etapas$/ }, () => ({ path: 'ce', namespace: 'ce' }))
+          b.onLoad({ filter: /.*/, namespace: 'ce' }, () => ({
+            contents: 'module.exports = { carregarInferenciasClinicorpParaOrdens: async () => new Map() }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\// }, (args) => {
+            const base = path.join(webRoot, 'src', args.path.slice(2))
+            const found = ['.ts', '.tsx', '/index.ts'].map((ext) => base + ext).find((p) => fs.existsSync(p))
+            return { path: found || base }
+          })
+          b.onResolve({ filter: /^@labgest\/shared$/ }, () => ({
+            path: path.resolve(webRoot, '../packages/shared/src/index.ts'),
+          }))
+        },
+      },
+    ],
+  })
+
+  globalThis.__AGENDA_TV_PRISMA_CONSTRAINT_MOCK__ = prismaMock
+  try {
+    const mod = { exports: {} }
+    const fn = new Function('require', 'module', 'exports', build.outputFiles[0].text)
+    fn(require, mod, mod.exports)
+
+    const iaRes = await mod.exports.executarAgendaAutomaticaIa({
+      data: '2026-12-20',
+      aplicar: true,
+      usarGemini: false,
+    })
+    assert.equal(iaRes.success, true)
+    assert.equal(queryConstraintChamadas, 1)
+    assert.ok(iaRes.blocosCriadosIds.length >= 1)
+
+    const linhas = [...banco.values()]
+    const blocoIa = linhas.find((l) => l.titulo.startsWith('[TV] '))
+    const briefingIa = linhas.find((l) => l.titulo.startsWith('[IA] 2026-12-20'))
+    assert.ok(blocoIa, 'Deve criar bloco com prefixo [TV]')
+    assert.equal(blocoIa.tipo, 'sistema')
+    assert.ok(briefingIa, 'Deve criar briefing com prefixo [IA]')
+    assert.equal(briefingIa.tipo, 'info')
+
+    const manualRes = await mod.exports.criarBlocosBancadaTv({
+      ordemId: null,
+      protetico: 'Tavá',
+      data: '2026-12-20',
+      pacienteAvulso: 'Teste Avulso',
+      blocos: [
+        {
+          horaInicio: '14:00',
+          horaFim: '15:00',
+          etapaNome: 'Montagem',
+          modo: 'bancada',
+        },
+      ],
+    })
+    assert.equal(manualRes.success, true)
+    assert.equal(queryConstraintChamadas, 1, 'Deve reutilizar cache de tipos permitidos')
+    const idManual = manualRes.ids[0]
+    assert.equal(banco.get(idManual).tipo, 'sistema')
+    assert.ok(banco.get(idManual).titulo.startsWith('[TV] '))
+
+    const statusRes = await mod.exports.atualizarStatusBlocoTv(idManual, 'em_andamento')
+    assert.equal(statusRes.success, true)
+
+    const moverRes = await mod.exports.moverOuReagendarBlocoTv(idManual, { adiarMinutos: 15 })
+    assert.equal(moverRes.success, true)
+
+    const delRes = await mod.exports.excluirBlocoTv(idManual)
+    assert.equal(delRes.success, true)
+    assert.equal(banco.has(idManual), false)
+  } finally {
+    delete globalThis.__AGENDA_TV_PRISMA_CONSTRAINT_MOCK__
+  }
+})
+
