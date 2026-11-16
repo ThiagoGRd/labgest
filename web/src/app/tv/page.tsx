@@ -3,6 +3,7 @@ import { normalizarProteticoId } from '@/lib/agenda-tv'
 import { PainelTvView } from '@/components/tv/painel-tv-view'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export const metadata = {
   title: 'Painel TV Bancada — Tavá & Napoleão | LabGest',

@@ -738,7 +738,7 @@ export function gerarPlanoAgendaAutomatico(params: {
     const slot = { inicio: paraMinutos(b.horaInicio), fim: paraMinutos(b.horaFim) }
     if (b.modo === 'maquina') {
       ocupadosMaquina.push(slot)
-    } else {
+    } else if (b.protetico in ocupadosBancada) {
       ocupadosBancada[b.protetico].push(slot)
     }
   }
@@ -749,8 +749,9 @@ export function gerarPlanoAgendaAutomatico(params: {
   }
 
   const ehHoje = params.dataAlvo === params.dataHoje
+  const horaMinSegura = Number.isFinite(params.horaMinAtual) ? params.horaMinAtual : EXPEDIENTE_INICIO_MIN
   const inicioMinimoHoje = ehHoje
-    ? Math.max(EXPEDIENTE_INICIO_MIN, Math.ceil(params.horaMinAtual / 5) * 5 + 5)
+    ? Math.max(EXPEDIENTE_INICIO_MIN, Math.ceil(horaMinSegura / 5) * 5 + 5)
     : EXPEDIENTE_INICIO_MIN
 
   const blocosGerados: BlocoPlanejadoIa[] = []
@@ -768,8 +769,8 @@ export function gerarPlanoAgendaAutomatico(params: {
       : escolherProteticoParaOrdem(ordem, cargaMin)
 
     const prot = escolha.protetico
-    const etapaAtualTexto = ordem.subetapa || ordem.etapa || ordem.servico
-    const arcadas = Math.max(1, Math.min(2, ordem.arcadas ?? 1))
+    const etapaAtualTexto = (ordem.subetapa || ordem.etapa || ordem.servico || 'Execução em bancada').trim()
+    const arcadas = Math.max(1, Math.min(2, Number(ordem.arcadas) || 1))
     const ehAcrilizacao = normalizarCategoriaProcedimento(etapaAtualTexto, ordem.servico, 'bancada') === 'acrilizacao_completa'
 
     if (ehAcrilizacao && dividirAcrilizacao) {
@@ -964,7 +965,7 @@ export function gerarPlanoAgendaAutomatico(params: {
         data: params.dataAlvo,
         horaInicio: formatarMinutos(slotOutro.inicio),
         horaFim: formatarMinutos(slotOutro.fim),
-        etapaNome: ordem.subetapa || ordem.servico,
+        etapaNome: (ordem.subetapa || ordem.servico || 'Execução em bancada').trim() || 'Execução em bancada',
         modo: 'bancada',
         equipamento: null,
         duracaoPlanejadaMin: durOutro.duracaoMin,
@@ -991,7 +992,7 @@ export function gerarPlanoAgendaAutomatico(params: {
       data: params.dataAlvo,
       horaInicio: formatarMinutos(slot.inicio),
       horaFim: formatarMinutos(slot.fim),
-      etapaNome: ordem.subetapa || ordem.servico,
+      etapaNome: (ordem.subetapa || ordem.servico || 'Execução em bancada').trim() || 'Execução em bancada',
       modo: 'bancada',
       equipamento: null,
       duracaoPlanejadaMin: durInfo.duracaoMin,

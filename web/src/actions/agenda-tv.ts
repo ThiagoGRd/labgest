@@ -680,6 +680,40 @@ export interface ResultadoMotorAgendaIa {
   blocosCriadosIds: number[]
 }
 
+function planoVazioFallback(dataAlvo: string): PlanoAgendaAutomaticoResultado {
+  return {
+    dataAlvo,
+    blocos: [],
+    ordensAvaliadas: [],
+    ordensNaoAlocadas: [],
+    perfisUsados: [],
+    resumo: {
+      totalBlocos: 0,
+      blocosOtavio: 0,
+      blocosNapoleao: 0,
+      urgentesAtendidas: 0,
+      normaisPuxadas: 0,
+      procedimentosAjustadosParaMenos: 0,
+      procedimentosAjustadosParaMais: 0,
+    },
+  }
+}
+
+function enxugarPlanoParaResposta(plano: PlanoAgendaAutomaticoResultado): PlanoAgendaAutomaticoResultado {
+  return {
+    ...plano,
+    ordensAvaliadas: plano.ordensAvaliadas.map((item) => ({
+      ...item,
+      ordem: {
+        ...item.ordem,
+        cicloFotos: [],
+        cicloObs: null,
+        itensCaso: [],
+      },
+    })),
+  }
+}
+
 export async function executarAgendaAutomaticaIa(input: {
   data?: string
   modoReotimizacao?: 'preencher_livres' | 'reorganizar_pendentes'
@@ -687,128 +721,170 @@ export async function executarAgendaAutomaticaIa(input: {
   usarGemini?: boolean
   aplicar?: boolean
 }): Promise<ResultadoMotorAgendaIa> {
-  await requireUser()
-
   const maceio = agoraMaceioInfo()
   const dataAlvo = input.data && /^\d{4}-\d{2}-\d{2}$/.test(input.data) ? input.data : maceio.dataIso
   const modoReotimizacao = input.modoReotimizacao ?? 'preencher_livres'
   const dividirAcrilizacao = input.dividirAcrilizacao ?? true
   const aplicar = input.aplicar ?? true
 
-  const [contexto, blocosExistentes, historicoConcluidos] = await Promise.all([
-    carregarContextoOrdensNoLab(maceio.dataIso),
-    carregarBlocosAgendaPorData(dataAlvo),
-    carregarHistoricoConcluidosTv(60),
-  ])
+  try {
+    await requireUser()
 
-  const planoBase = gerarPlanoAgendaAutomatico({
-    dataAlvo,
-    dataHoje: maceio.dataIso,
-    horaMinAtual: maceio.horaMin,
-    ordensNoLab: contexto.ordensNoLab,
-    blocosExistentesNoDia: blocosExistentes,
-    historicoConcluidos,
-    dividirAcrilizacao,
-    ignorarBlocosAgendadosIa: modoReotimizacao === 'reorganizar_pendentes',
-  })
+    const [contexto, blocosExistentes, historicoConcluidos] = await Promise.all([
+      carregarContextoOrdensNoLab(maceio.dataIso),
+      carregarBlocosAgendaPorData(dataAlvo),
+      carregarHistoricoConcluidosTv(60),
+    ])
 
-  const estrategia = await refinarEstrategiaComGemini({
-    dataAlvo,
-    ordensAvaliadas: planoBase.ordensAvaliadas,
-    perfis: planoBase.perfisUsados,
-    planoBase,
-    usarGemini: input.usarGemini ?? true,
-  })
+    const planoBase = gerarPlanoAgendaAutomatico({
+      dataAlvo,
+      dataHoje: maceio.dataIso,
+      horaMinAtual: maceio.horaMin,
+      ordensNoLab: contexto.ordensNoLab,
+      blocosExistentesNoDia: blocosExistentes,
+      historicoConcluidos,
+      dividirAcrilizacao,
+      ignorarBlocosAgendadosIa: modoReotimizacao === 'reorganizar_pendentes',
+    })
 
-  const planoFinal =
-    estrategia.overrides.length > 0
-      ? gerarPlanoAgendaAutomatico({
-          dataAlvo,
-          dataHoje: maceio.dataIso,
-          horaMinAtual: maceio.horaMin,
-          ordensNoLab: contexto.ordensNoLab,
-          blocosExistentesNoDia: blocosExistentes,
-          historicoConcluidos,
-          dividirAcrilizacao,
-          overridesGemini: estrategia.overrides,
-          ignorarBlocosAgendadosIa: modoReotimizacao === 'reorganizar_pendentes',
-        })
-      : planoBase
+    const estrategia = await refinarEstrategiaComGemini({
+      dataAlvo,
+      ordensAvaliadas: planoBase.ordensAvaliadas,
+      perfis: planoBase.perfisUsados,
+      planoBase,
+      usarGemini: input.usarGemini ?? true,
+    })
 
-  const blocosCriadosIds: number[] = []
+    const planoFinal =
+      estrategia.overrides.length > 0
+        ? gerarPlanoAgendaAutomatico({
+            dataAlvo,
+            dataHoje: maceio.dataIso,
+            horaMinAtual: maceio.horaMin,
+            ordensNoLab: contexto.ordensNoLab,
+            blocosExistentesNoDia: blocosExistentes,
+            historicoConcluidos,
+            dividirAcrilizacao,
+            overridesGemini: estrategia.overrides,
+            ignorarBlocosAgendadosIa: modoReotimizacao === 'reorganizar_pendentes',
+          })
+        : planoBase
 
-  if (aplicar) {
-    if (modoReotimizacao === 'reorganizar_pendentes') {
-      const idsParaSubstituir = blocosExistentes
-        .filter((b) => b.status === 'agendado' && b.origemAgendamento === 'motor_ia')
-        .map((b) => b.id)
+    const blocosCriadosIds: number[] = []
 
-      if (idsParaSubstituir.length > 0) {
-        await prisma.notificacao.deleteMany({
-          where: { id: { in: idsParaSubstituir } },
-        })
-      }
-    }
+    if (aplicar) {
+      if (modoReotimizacao === 'reorganizar_pendentes') {
+        const idsParaSubstituir = blocosExistentes
+          .filter((b) => b.status === 'agendado' && b.origemAgendamento === 'motor_ia')
+          .map((b) => b.id)
 
-    const mapaOrdens = new Map(contexto.ordensNoLab.map((o) => [o.id, o]))
-    const agoraIso = new Date().toISOString()
-    const dataRegistro = new Date(`${dataAlvo}T12:00:00Z`)
-
-    for (const bloco of planoFinal.blocos) {
-      const ordem = mapaOrdens.get(bloco.ordemId)
-      if (!ordem) continue
-
-      const payload: PayloadBlocoAgendaTv = {
-        ordemId: ordem.id,
-        protetico: bloco.protetico,
-        data: bloco.data,
-        horaInicio: bloco.horaInicio,
-        horaFim: bloco.horaFim,
-        etapaNome: bloco.etapaNome,
-        modo: bloco.modo,
-        status: 'agendado',
-        paciente: ordem.paciente,
-        servico: ordem.servico,
-        arcada: arcadaLabelDaOrdem(ordem),
-        arcadasQtd: bloco.arcadasQtd,
-        corDentes: ordem.cor ?? null,
-        dentista: ordem.dentista ?? null,
-        observacao: null,
-        equipamento: bloco.equipamento,
-        iniciadoEm: null,
-        concluidoEm: null,
-        duracaoPlanejadaMin: bloco.duracaoPlanejadaMin,
-        duracaoRealMin: null,
-        medicaoTempo: null,
-        origemAgendamento: 'motor_ia',
-        motivoIa: bloco.motivoIa,
-        ajusteTempoNota: bloco.ajusteTempoNota,
-        grupoSequenciaId: bloco.grupoSequenciaId,
-        atualizadoEm: agoraIso,
+        if (idsParaSubstituir.length > 0) {
+          await prisma.notificacao.deleteMany({
+            where: { id: { in: idsParaSubstituir } },
+          })
+        }
       }
 
-      const criado = await prisma.notificacao.create({
-        data: {
+      const mapaOrdens = new Map(contexto.ordensNoLab.map((o) => [o.id, o]))
+      const agoraIso = new Date().toISOString()
+      const dataRegistro = new Date(`${dataAlvo}T12:00:00Z`)
+
+      const registrosCriar: Array<{
+        tipo: string
+        titulo: string
+        mensagem: string
+        data: Date
+        lida: boolean
+      }> = []
+
+      for (const bloco of planoFinal.blocos) {
+        const ordem = mapaOrdens.get(bloco.ordemId)
+        if (!ordem) continue
+
+        const payload: PayloadBlocoAgendaTv = {
+          ordemId: ordem.id,
+          protetico: bloco.protetico,
+          data: bloco.data,
+          horaInicio: bloco.horaInicio,
+          horaFim: bloco.horaFim,
+          etapaNome: bloco.etapaNome,
+          modo: bloco.modo,
+          status: 'agendado',
+          paciente: ordem.paciente,
+          servico: ordem.servico,
+          arcada: arcadaLabelDaOrdem(ordem),
+          arcadasQtd: bloco.arcadasQtd,
+          corDentes: ordem.cor ?? null,
+          dentista: ordem.dentista ?? null,
+          observacao: null,
+          equipamento: bloco.equipamento,
+          iniciadoEm: null,
+          concluidoEm: null,
+          duracaoPlanejadaMin: bloco.duracaoPlanejadaMin,
+          duracaoRealMin: null,
+          medicaoTempo: null,
+          origemAgendamento: 'motor_ia',
+          motivoIa: bloco.motivoIa,
+          ajusteTempoNota: bloco.ajusteTempoNota,
+          grupoSequenciaId: bloco.grupoSequenciaId,
+          atualizadoEm: agoraIso,
+        }
+
+        registrosCriar.push({
           tipo: TIPO_AGENDA_BANCADA,
           titulo: construirTituloBloco(payload),
           mensagem: JSON.stringify(payload),
           data: dataRegistro,
           lida: false,
-        },
-      })
-      blocosCriadosIds.push(criado.id)
+        })
+      }
+
+      const gravarBlocos = async () => {
+        if (registrosCriar.length === 0) return
+        if (typeof prisma.notificacao.createManyAndReturn === 'function') {
+          const criados = await prisma.notificacao.createManyAndReturn({
+            data: registrosCriar,
+            select: { id: true },
+          })
+          blocosCriadosIds.push(...criados.map((c) => c.id))
+        } else if (typeof prisma.notificacao.createMany === 'function') {
+          await prisma.notificacao.createMany({ data: registrosCriar })
+        } else {
+          for (const reg of registrosCriar) {
+            const criado = await prisma.notificacao.create({ data: reg })
+            blocosCriadosIds.push(criado.id)
+          }
+        }
+      }
+
+      await Promise.all([gravarBlocos(), salvarBriefingIa(dataAlvo, estrategia)])
+      revalidarPainelTv()
     }
 
-    await salvarBriefingIa(dataAlvo, estrategia)
-    revalidarPainelTv()
-  }
-
-  return {
-    success: true,
-    aplicado: aplicar,
-    dataAlvo,
-    plano: planoFinal,
-    estrategia,
-    blocosCriadosIds,
+    return {
+      success: true,
+      aplicado: aplicar,
+      dataAlvo,
+      plano: enxugarPlanoParaResposta(planoFinal),
+      estrategia,
+      blocosCriadosIds,
+    }
+  } catch (error) {
+    console.error('[executarAgendaAutomaticaIa] Erro ao gerar agenda:', error)
+    const msg = error instanceof Error ? error.message : 'Erro inesperado ao gerar a agenda automática.'
+    return {
+      success: false,
+      error: msg,
+      aplicado: false,
+      dataAlvo,
+      plano: planoVazioFallback(dataAlvo),
+      estrategia: {
+        motor: 'algoritmico',
+        briefingTurno: 'Não foi possível concluir a geração automática.',
+        alertasIa: [msg],
+        overrides: [],
+      },
+      blocosCriadosIds: [],
+    }
   }
 }

@@ -37,22 +37,34 @@ export function MotorAgendaIaModal({
   const [modoReotimizacao, setModoReotimizacao] = useState<'preencher_livres' | 'reorganizar_pendentes'>('preencher_livres')
   const [dividirAcrilizacao, setDividirAcrilizacao] = useState<boolean>(true)
   const [simulacao, setSimulacao] = useState<ResultadoMotorAgendaIa | null>(null)
+  const [erroSimulacao, setErroSimulacao] = useState<string | null>(null)
   const [carregandoSimulacao, setCarregandoSimulacao] = useState<boolean>(false)
   const [isPending, startTransition] = useTransition()
 
   const rodarSimulacao = useCallback(async (alvo: string, modo: 'preencher_livres' | 'reorganizar_pendentes', dividir: boolean) => {
     setCarregandoSimulacao(true)
+    setErroSimulacao(null)
     try {
       const res = await executarAgendaAutomaticaIa({
         data: alvo,
         modoReotimizacao: modo,
         dividirAcrilizacao: dividir,
-        usarGemini: false, // Prévia instantânea; Gemini refina ao confirmar ou ao clicar em Recalcular IA
+        usarGemini: false, // Prévia instantânea; Gemini refina ao confirmar
         aplicar: false,
       })
+      if (!res.success) {
+        const msg = res.error || 'Não foi possível simular a agenda automática.'
+        setErroSimulacao(msg)
+        setSimulacao(null)
+        toast.error(msg)
+        return
+      }
       setSimulacao(res)
-    } catch {
-      toast.error('Não foi possível simular a agenda automática.')
+    } catch (err) {
+      const detalhe = err instanceof Error && !err.message.includes('Server Components render') ? err.message : ''
+      const msg = detalhe || 'Não foi possível simular a agenda automática.'
+      setErroSimulacao(msg)
+      toast.error(msg)
     } finally {
       setCarregandoSimulacao(false)
     }
@@ -80,10 +92,13 @@ export function MotorAgendaIaModal({
           onApplied?.()
           onClose()
         } else {
-          toast.error(res.error || 'Falha ao aplicar agenda automática.')
+          const msg = res.error || 'Falha ao aplicar agenda automática.'
+          setErroSimulacao(msg)
+          toast.error(msg)
         }
-      } catch {
-        toast.error('Erro ao gerar a agenda automática.')
+      } catch (err) {
+        const detalhe = err instanceof Error && !err.message.includes('Server Components render') ? err.message : ''
+        toast.error(detalhe ? `Erro ao gerar a agenda automática: ${detalhe}` : 'Erro ao gerar a agenda automática. Tente novamente.')
       }
     })
   }
@@ -174,7 +189,15 @@ export function MotorAgendaIaModal({
             <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
             Analisando urgências, fila anti-pendência e histórico real de execução...
           </div>
-        ) : simulacao ? (
+        ) : (
+          <>
+            {erroSimulacao && (
+              <div className="rounded-xl border border-red-200 bg-red-50/80 p-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                <p className="font-bold">Não foi possível gerar a agenda automática:</p>
+                <p className="mt-0.5 opacity-90">{erroSimulacao}</p>
+              </div>
+            )}
+            {simulacao ? (
           <>
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-xs text-indigo-950 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-100">
               <div className="flex items-start gap-2.5">
@@ -334,6 +357,8 @@ export function MotorAgendaIaModal({
             )}
           </>
         ) : null}
+          </>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
           <Button

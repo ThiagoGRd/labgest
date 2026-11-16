@@ -2,6 +2,7 @@ import { getLabInterno } from '@/actions/lab-interno'
 import { LabInternoView } from './lab-interno-view'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export default async function LabInternoPage() {
   const {

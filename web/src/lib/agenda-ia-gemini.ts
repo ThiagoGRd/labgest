@@ -74,10 +74,11 @@ export async function refinarEstrategiaComGemini(params: {
     return deterministico
   }
 
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-2.5-flash',
       generationConfig: { responseMimeType: 'application/json' },
     })
 
@@ -106,8 +107,8 @@ export async function refinarEstrategiaComGemini(params: {
 
     const prompt = `
 Você é o Coordenador de Produção de um Laboratório de Prótese Dentária com 2 protéticos:
-- "otavio": especialista em Montagem Estética, Protocolo e Caracterização.
-- "napoleao": especialista em PPR, Plano de Orientação, Moldeira, Placas, Consertos e Acabamento/Acrilização.
+- "otavio" (Tavá): especialista em Montagem Estética, Protocolo e Caracterização.
+- "napoleao" (Napoleão): especialista em PPR, Plano de Orientação, Moldeira, Placas, Consertos e Acabamento/Acrilização.
 
 Data da agenda: ${params.dataAlvo}.
 Regras obrigatórias:
@@ -135,9 +136,9 @@ Retorne APENAS JSON válido:
 Obs: "ajustes" só deve incluir ordens da lista acima se você recomendar alterar ordem ou protético. Caso o plano base já esteja ótimo, retorne "ajustes": [].
 `
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout Gemini Agenda')), 6000),
-    )
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Timeout Gemini Agenda')), 2500)
+    })
     const result = await Promise.race([model.generateContent(prompt), timeout])
     const raw = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim()
     const parsed = JSON.parse(raw) as {
@@ -154,10 +155,11 @@ Obs: "ajustes" só deve incluir ordens da lista acima se você recomendar altera
         const oid = typeof aj.ordemId === 'number' ? aj.ordemId : Number(aj.ordemId)
         if (!Number.isInteger(oid) || !idsValidos.has(oid)) continue
         const prot = typeof aj.protetico === 'string' ? normalizarProteticoId(aj.protetico) : null
+        const ordemListaNum = typeof aj.ordemLista === 'number' ? aj.ordemLista : Number(aj.ordemLista)
         overrides.push({
           ordemId: oid,
           protetico: prot ?? undefined,
-          ordemLista: typeof aj.ordemLista === 'number' ? aj.ordemLista : undefined,
+          ordemLista: Number.isFinite(ordemListaNum) ? ordemListaNum : undefined,
           motivoExtra: typeof aj.motivoExtra === 'string' ? aj.motivoExtra.slice(0, 120) : undefined,
         })
       }
@@ -176,5 +178,7 @@ Obs: "ajustes" só deve incluir ordens da lista acima se você recomendar altera
     }
   } catch {
     return deterministico
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }

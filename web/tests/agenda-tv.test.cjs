@@ -232,3 +232,140 @@ test('parseBlocoNotificacao trata JSON válido e ignora registros corrompidos', 
   assert.equal(ok.modo, 'maquina')
   assert.equal(tv.parseBlocoNotificacao({ id: 43, mensagem: '{invalido' }), null)
 })
+
+test('executarAgendaAutomaticaIa grava em lote (createManyAndReturn), enxuga resposta e captura erros do banco', async () => {
+  let batchChamadas = 0
+  let erroForcado = null
+
+  const prismaMock = {
+    notificacao: {
+      findMany: async () => [],
+      findFirst: async () => null,
+      deleteMany: async () => ({ count: 0 }),
+      createManyAndReturn: async ({ data }) => {
+        if (erroForcado) throw erroForcado
+        batchChamadas += 1
+        return data.map((_, idx) => ({ id: 500 + idx }))
+      },
+      create: async () => ({ id: 999 }),
+    },
+    clinicorpSincronizacao: {
+      findFirst: async () => null,
+    },
+  }
+
+  const build = await esbuild.build({
+    entryPoints: [path.join(webRoot, 'src/actions/agenda-tv.ts')],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'cjs',
+    plugins: [
+      {
+        name: 'agenda-action-mocks',
+        setup(b) {
+          b.onResolve({ filter: /^@labgest\/database$/ }, () => ({ path: 'db', namespace: 'db' }))
+          b.onLoad({ filter: /.*/, namespace: 'db' }, () => ({
+            contents: 'module.exports = { prisma: globalThis.__AGENDA_TV_PRISMA_MOCK__ }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^next\/cache$/ }, () => ({ path: 'nc', namespace: 'nc' }))
+          b.onLoad({ filter: /.*/, namespace: 'nc' }, () => ({
+            contents: 'module.exports = { revalidatePath: () => {} }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/lib\/auth-utils$/ }, () => ({ path: 'au', namespace: 'au' }))
+          b.onLoad({ filter: /.*/, namespace: 'au' }, () => ({
+            contents: 'module.exports = { requireUser: async () => ({ id: 1 }) }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/actions\/producao$/ }, () => ({ path: 'pr', namespace: 'pr' }))
+          b.onLoad({ filter: /.*/, namespace: 'pr' }, () => ({
+            contents: `
+              module.exports = {
+                getProducao: async () => [
+                  {
+                    id: 701,
+                    paciente: 'Rita de Cássia',
+                    dentista: 'Dr. Marcos',
+                    servico: 'Prótese total',
+                    status: 'Em Produção',
+                    updatedAt: '2026-11-15T10:00:00Z',
+                    etapa: 'confeccao',
+                    subetapa: 'Montagem de dentes',
+                    prioridade: 'Urgente',
+                    entrega: '2026-11-16T18:00:00Z',
+                    arcadas: 1,
+                    cicloObs: 'Observação pesada',
+                    cicloFotos: ['data:image/png;base64,AAAA'],
+                    itensCaso: [{ servicoNome: 'PT' }],
+                  },
+                  {
+                    id: 702,
+                    paciente: 'Carlos Silva',
+                    dentista: 'Dra. Ana',
+                    servico: 'PPR Inferior',
+                    status: 'Em Produção',
+                    updatedAt: '2026-11-15T10:00:00Z',
+                    etapa: 'confeccao',
+                    subetapa: 'Acrilização',
+                    prioridade: 'Alta',
+                    entrega: '2026-11-16T18:00:00Z',
+                    arcadas: 1,
+                  },
+                ],
+              }
+            `,
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/actions\/workflow-protese$/ }, () => ({ path: 'wf', namespace: 'wf' }))
+          b.onLoad({ filter: /.*/, namespace: 'wf' }, () => ({
+            contents: 'module.exports = { concluirEtapaLaboratorial: async () => ({ success: true }) }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\/lib\/clinicorp-etapas$/ }, () => ({ path: 'ce', namespace: 'ce' }))
+          b.onLoad({ filter: /.*/, namespace: 'ce' }, () => ({
+            contents: 'module.exports = { carregarInferenciasClinicorpParaOrdens: async () => new Map() }',
+            loader: 'js',
+          }))
+          b.onResolve({ filter: /^@\// }, (args) => {
+            const base = path.join(webRoot, 'src', args.path.slice(2))
+            const found = ['.ts', '.tsx', '/index.ts'].map((ext) => base + ext).find((p) => fs.existsSync(p))
+            return { path: found || base }
+          })
+          b.onResolve({ filter: /^@labgest\/shared$/ }, () => ({
+            path: path.resolve(webRoot, '../packages/shared/src/index.ts'),
+          }))
+        },
+      },
+    ],
+  })
+
+  globalThis.__AGENDA_TV_PRISMA_MOCK__ = prismaMock
+  const mod = { exports: {} }
+  const fn = new Function('require', 'module', 'exports', build.outputFiles[0].text)
+  fn(require, mod, mod.exports)
+
+  const okRes = await mod.exports.executarAgendaAutomaticaIa({
+    data: '2026-12-20',
+    aplicar: true,
+    usarGemini: false,
+  })
+  assert.equal(okRes.success, true)
+  assert.equal(okRes.aplicado, true)
+  assert.equal(batchChamadas, 1, 'Deve inserir todos os blocos em 1 único lote')
+  assert.ok(okRes.blocosCriadosIds.length >= 2)
+  assert.deepEqual(okRes.plano.ordensAvaliadas[0].ordem.cicloFotos, [])
+  assert.equal(okRes.plano.ordensAvaliadas[0].ordem.cicloObs, null)
+
+  erroForcado = new Error('Falha simulada de conexão Postgres')
+  const errRes = await mod.exports.executarAgendaAutomaticaIa({
+    data: '2026-12-20',
+    aplicar: true,
+    usarGemini: false,
+  })
+  assert.equal(errRes.success, false)
+  assert.match(errRes.error, /Falha simulada/)
+  delete globalThis.__AGENDA_TV_PRISMA_MOCK__
+})
+
