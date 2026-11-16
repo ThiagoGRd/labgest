@@ -198,6 +198,12 @@ test('browser Chromium valida abas e acoes reais de Financeiro, Lab Interno, Con
             export const getMensagensNaoLidasLab = async () => 0
             export const aplicarEtapaClinicorpNaOrdem = ok
             export const sincronizarEtapasClinicorpLab = async () => ({ sincronizadas: 0, consultas: 0 })
+            export const criarBlocosBancadaTv = async () => ({ success: true, ids: [1] })
+            export const executarAgendaAutomaticaIa = async () => ({
+              success: true, aplicado: false, dataAlvo: '2026-11-16', blocosCriadosIds: [],
+              estrategia: { motor: 'algoritmico', briefingTurno: 'Motor pronto', alertasIa: [], overrides: [] },
+              plano: { dataAlvo: '2026-11-16', blocos: [], ordensAvaliadas: [], ordensNaoAlocadas: [], perfisUsados: [], resumo: { totalBlocos: 0, blocosOtavio: 0, blocosNapoleao: 0, urgentesAtendidas: 0, normaisPuxadas: 0, procedimentosAjustadosParaMenos: 0, procedimentosAjustadosParaMais: 0 } },
+            })
             export const getOrdemById = async () => null
             export const enviarMensagemLab = ok
             export const definirEtapaFluxoProtese = ok

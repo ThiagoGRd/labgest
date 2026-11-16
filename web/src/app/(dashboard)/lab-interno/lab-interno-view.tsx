@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, ClipboardList, Info, Loader2, RefreshCw, Search, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Brain, ClipboardList, ExternalLink, Info, Loader2, RefreshCw, Search, Sparkles, Tv, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Header } from '@/components/layout/header'
@@ -16,6 +16,8 @@ import { OrdemCard, ordemAtrasada } from '@/components/lab-interno/ordem-card'
 import { PainelGestao } from '@/components/lab-interno/painel-gestao'
 import { PipelineFila, type FiltroOrdens } from '@/components/lab-interno/pipeline-fila'
 import { FilaTriagemWhatsapp } from '@/components/lab-interno/fila-triagem-whatsapp'
+import { AgendarBancadaModal } from '@/components/lab-interno/agendar-bancada-modal'
+import { MotorAgendaIaModal } from '@/components/lab-interno/motor-agenda-ia-modal'
 import { AtencaoProducao } from '@/app/(dashboard)/producao/atencao-producao'
 import { ConfirmarRetornoModal } from '@/components/producao/confirmar-retorno-modal'
 import { DefinirEtapaFluxoModal } from '@/components/producao/definir-etapa-fluxo-modal'
@@ -51,6 +53,10 @@ interface Props {
     erro: string | null
     consultas: number
   } | null
+  agendaTvResumo?: {
+    otavio: number
+    napoleao: number
+  }
 }
 
 type OrdemDetalhada = NonNullable<Awaited<ReturnType<typeof getOrdemById>>>
@@ -83,6 +89,7 @@ export function LabInternoView({
   retornosDashboard = [],
   clinicorpConfigurado = false,
   ultimaSincronizacao = null,
+  agendaTvResumo = { otavio: 0, napoleao: 0 },
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -96,6 +103,8 @@ export function LabInternoView({
   const [sincronizandoClinicorp, setSincronizandoClinicorp] = useState(false)
   const [ordemRetornoModal, setOrdemRetornoModal] = useState<OrdemProducao | null>(null)
   const [ordemEtapaModal, setOrdemEtapaModal] = useState<OrdemProducao | null>(null)
+  const [ordemAgendarTvModal, setOrdemAgendarTvModal] = useState<OrdemProducao | null>(null)
+  const [motorIaAberto, setMotorIaAberto] = useState<boolean>(false)
   const [ordemVisualizar, setOrdemVisualizar] = useState<OrdemDetalhada | null>(null)
   const [ordemProblemaModal, setOrdemProblemaModal] = useState<OrdemProducao | null>(null)
   const [motivoProblema, setMotivoProblema] = useState('')
@@ -279,6 +288,27 @@ export function LabInternoView({
         />
       )}
 
+      {ordemAgendarTvModal && (
+        <AgendarBancadaModal
+          key={ordemAgendarTvModal.id}
+          isOpen
+          ordem={ordemAgendarTvModal}
+          onClose={() => setOrdemAgendarTvModal(null)}
+          onSuccess={() => {
+            setOrdemAgendarTvModal(null)
+            router.refresh()
+          }}
+        />
+      )}
+
+      {motorIaAberto && (
+        <MotorAgendaIaModal
+          isOpen
+          onClose={() => setMotorIaAberto(false)}
+          onApplied={() => router.refresh()}
+        />
+      )}
+
       <ConfirmarRetornoModal
         isOpen={ordemRetornoModal !== null}
         onClose={() => {
@@ -385,6 +415,54 @@ export function LabInternoView({
           </div>
         </section>
 
+        {/* Barra de Acesso Rápido ao Painel de Televisão (Tavá & Napoleão) */}
+        <section aria-label="Painel de TV da Bancada" className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+              <Tv className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                Painéis de TV das Bancadas (Agenda ao Vivo)
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Tavá: <strong>{agendaTvResumo.otavio}</strong> bloco(s) pendente(s) hoje · Napoleão: <strong>{agendaTvResumo.napoleao}</strong> bloco(s) pendente(s) hoje
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMotorIaAberto(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-500"
+            >
+              <Brain className="h-3.5 w-3.5" /> Gerar Agenda Automática (IA)
+            </button>
+            <Link
+              href="/tv?protetico=tava&kiosk=1"
+              target="_blank"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+            >
+              <Tv className="h-3.5 w-3.5" /> TV Tavá <ExternalLink className="h-3 w-3 opacity-70" />
+            </Link>
+            <Link
+              href="/tv?protetico=napoleao&kiosk=1"
+              target="_blank"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+            >
+              <Tv className="h-3.5 w-3.5" /> TV Napoleão <ExternalLink className="h-3 w-3 opacity-70" />
+            </Link>
+            <Link
+              href="/tv"
+              target="_blank"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 text-xs font-bold text-white hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
+            >
+              <Tv className="h-3.5 w-3.5" /> Painel Dual <ExternalLink className="h-3 w-3 opacity-80" />
+            </Link>
+          </div>
+        </section>
+
         {contexto && (
           <AtencaoProducao
             contexto={contexto}
@@ -466,6 +544,7 @@ export function LabInternoView({
                       onConfirmarRetorno={(o) => setOrdemRetornoModal(o)}
                       onReceberFornecedor={handleReceberFornecedor}
                       onDefinirEtapa={(o) => setOrdemEtapaModal(o)}
+                      onAgendarTv={(o) => setOrdemAgendarTvModal(o)}
                       onAplicarClinicorp={handleAplicarClinicorp}
                       onAbrirOs={abrirOrdemDetalhes}
                       onReportarProblema={(o) => {

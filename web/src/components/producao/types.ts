@@ -53,6 +53,16 @@ export interface OrdemProducao {
   cicloFotos?: string[]
   itensCaso?: ItemCasoOrdem[]
   clinicorpEtapa?: ResultadoInferenciaClinicorp | null
+  agendaTvBlocos?: Array<{
+    id: number
+    protetico: 'otavio' | 'napoleao'
+    data: string
+    horaInicio: string
+    horaFim: string
+    etapaNome: string
+    modo: 'bancada' | 'maquina'
+    status: string
+  }>
 }
 
 export type FilaProducao = 'laboratorio' | 'clinica' | 'fornecedor' | 'sem_etapa'

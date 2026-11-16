@@ -14,6 +14,7 @@ import {
   Sparkles,
   Stethoscope,
   Truck,
+  Tv,
 } from 'lucide-react'
 import { formatDate } from '@/lib/date-utils'
 import { descreverPrazo, hojeIso, paraIso, type TomPrazo } from '@/lib/labs-externos-utils'
@@ -95,6 +96,7 @@ export interface OrdemCardProps {
   onReportarProblema?: (ordem: OrdemProducao) => void
   onDefinirEtapa?: (ordem: OrdemProducao) => void
   onAplicarClinicorp?: (ordem: OrdemProducao) => void
+  onAgendarTv?: (ordem: OrdemProducao) => void
   onAbrirOs?: (ordemId: number) => void
 }
 
@@ -108,6 +110,7 @@ export function OrdemCard({
   onReportarProblema,
   onDefinirEtapa,
   onAplicarClinicorp,
+  onAgendarTv,
   onAbrirOs,
 }: OrdemCardProps) {
   const hoje = hojeIso()
@@ -174,6 +177,24 @@ export function OrdemCard({
               </span>
             )}
           </p>
+
+          {ordem.agendaTvBlocos && ordem.agendaTvBlocos.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {ordem.agendaTvBlocos.map((bloco) => (
+                <span
+                  key={bloco.id}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${
+                    bloco.status === 'concluido'
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+                      : 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-300'
+                  }`}
+                >
+                  <Tv className="h-3 w-3" />
+                  {bloco.protetico === 'otavio' ? 'Tavá' : 'Napoleão'} · {bloco.horaInicio}–{bloco.horaFim} ({bloco.etapaNome})
+                </span>
+              ))}
+            </div>
+          )}
 
           {temSinalClinicorp && clinicorp && (
             <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
@@ -260,6 +281,17 @@ export function OrdemCard({
                 className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-amber-600 px-3 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-amber-500 disabled:opacity-50"
               >
                 <Truck className="h-3.5 w-3.5" /> Receber do fornecedor
+              </button>
+            )}
+
+            {onAgendarTv && !pausada && (
+              <button
+                type="button"
+                disabled={processando}
+                onClick={() => onAgendarTv(ordem)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-2.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+              >
+                <Tv className="h-3.5 w-3.5" /> Agendar na TV
               </button>
             )}
 

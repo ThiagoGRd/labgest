@@ -22,6 +22,7 @@ test('exact selections include proof/vendor/response overlaps, paused cycles and
   '@/lib/dashboard-attention':h,
   '@/lib/labs-externos-utils':{hojeIso:()=>'2026-11-04',somarDias:()=>'2026-10-05'},
   '@/lib/lab-interno-utils':{JANELA_DESEMPENHO_DIAS:30},
+  '@/actions/agenda-tv':{carregarBlocosAgendaPorData:async()=>[]},
  })
  const labInternoPage=load('app/(dashboard)/lab-interno/page.tsx',{
   '@/actions/lab-interno':{getLabInterno:labInternoAction.getLabInterno},

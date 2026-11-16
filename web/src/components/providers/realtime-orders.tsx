@@ -3,13 +3,16 @@
 import { useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 export function RealtimeOrders() {
   const router = useRouter()
+  const pathname = usePathname()
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const emTelaTv = pathname?.startsWith('/tv') ?? false
 
   useEffect(() => {
+    if (emTelaTv) return
     // Initialize audio
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3') // Pleasant notification sound
     audioRef.current.volume = 0.5
@@ -50,7 +53,7 @@ export function RealtimeOrders() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [router])
+  }, [router, emTelaTv])
 
   return null
 }

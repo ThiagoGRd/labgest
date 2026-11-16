@@ -12,6 +12,7 @@ export default async function LabInternoPage() {
     retornosDashboard,
     clinicorpConfigurado,
     ultimaSincronizacao,
+    agendaTvResumo,
   } = await getLabInterno()
 
   return (
@@ -23,6 +24,7 @@ export default async function LabInternoPage() {
       retornosDashboard={retornosDashboard}
       clinicorpConfigurado={clinicorpConfigurado}
       ultimaSincronizacao={ultimaSincronizacao}
+      agendaTvResumo={agendaTvResumo}
     />
   )
 }

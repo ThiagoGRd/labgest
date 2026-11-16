@@ -14,16 +14,18 @@ import { sincronizarClinicorp } from '@/lib/controle-tratamentos'
 import { ordensSemEtapa, retornosRespondidos } from '@/lib/dashboard-attention'
 import { hojeIso, somarDias } from '@/lib/labs-externos-utils'
 import { JANELA_DESEMPENHO_DIAS, type OrdemFinalizada } from '@/lib/lab-interno-utils'
+import { carregarBlocosAgendaPorData } from '@/actions/agenda-tv'
 
 // Painel unificado do laboratório interno (substitui a antiga aba Produção):
 // junta fila da bancada, retornos, etapas a definir, triagem WhatsApp e inferência Clinicorp.
 export async function getLabInterno() {
   await requireUser()
 
-  const inicio = new Date(`${somarDias(hojeIso(), -JANELA_DESEMPENHO_DIAS)}T00:00:00Z`)
+  const hoje = hojeIso()
+  const inicio = new Date(`${somarDias(hoje, -JANELA_DESEMPENHO_DIAS)}T00:00:00Z`)
 
   try {
-    const [ordensBase, finalizadas, triagem, retornos, semEtapa, ultimaSync] = await Promise.all([
+    const [ordensBase, finalizadas, triagem, retornos, semEtapa, ultimaSync, blocosHoje] = await Promise.all([
       getProducao(),
       prisma.ordem.findMany({
         where: { status: { in: ['Finalizado', 'Entregue'] }, dataFinalizacao: { gte: inicio } },
@@ -49,6 +51,7 @@ export async function getLabInterno() {
       }),
       prisma.ordem.findMany({ where: ordensSemEtapa, select: { id: true } }),
       prisma.clinicorpSincronizacao.findFirst({ where: { concluidaEm: { not: null } }, orderBy: { id: 'desc' } }),
+      carregarBlocosAgendaPorData(hoje),
     ])
 
     const inferencias = await carregarInferenciasClinicorpParaOrdens(
@@ -63,9 +66,27 @@ export async function getLabInterno() {
       })),
     )
 
+    const blocosPorOrdem = new Map<number, typeof blocosHoje>()
+    for (const b of blocosHoje) {
+      if (!b.ordemId) continue
+      const lista = blocosPorOrdem.get(b.ordemId) ?? []
+      lista.push(b)
+      blocosPorOrdem.set(b.ordemId, lista)
+    }
+
     const ordens = ordensBase.map((ordem) => ({
       ...ordem,
       clinicorpEtapa: inferencias.get(ordem.id) ?? null,
+      agendaTvBlocos: (blocosPorOrdem.get(ordem.id) ?? []).map((b) => ({
+        id: b.id,
+        protetico: b.protetico,
+        data: b.data,
+        horaInicio: b.horaInicio,
+        horaFim: b.horaFim,
+        etapaNome: b.etapaNome,
+        modo: b.modo,
+        status: b.status,
+      })),
     }))
 
     const historico: OrdemFinalizada[] = finalizadas.map((ordem) => ({
@@ -98,6 +119,10 @@ export async function getLabInterno() {
             consultas: ultimaSync.consultas,
           }
         : null,
+      agendaTvResumo: {
+        otavio: blocosHoje.filter((b) => b.protetico === 'otavio' && b.status !== 'concluido').length,
+        napoleao: blocosHoje.filter((b) => b.protetico === 'napoleao' && b.status !== 'concluido').length,
+      },
     }
   } catch (error) {
     console.error('Erro ao carregar o laboratório interno:', error)
