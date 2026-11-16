@@ -38,7 +38,7 @@ import {
   type EstrategiaIaResultado,
 } from '@/lib/agenda-ia-gemini'
 
-export const TIPO_AGENDA_IA_LOG = 'agenda_ia_log'
+const TIPO_AGENDA_IA_LOG = 'agenda_ia_log'
 
 export interface PainelTvSnapshot {
   dataReferencia: string
