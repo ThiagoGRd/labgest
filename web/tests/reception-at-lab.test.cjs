@@ -43,7 +43,14 @@ const base = { id: 7, status: 'Finalizado', situacaoLogistica: 'aguardando_distr
 function actionsFixture(record = base, count = 1, tipo = 'recepcao') {
   const writes = [], invalidations = []
   const actions = loader({
-    '@labgest/database': { prisma: { cicloProducao: { findFirst: async () => ({ decisao: 'aprovado' }) }, ordem: { findFirst: async () => record, updateMany: async query => { writes.push(query); return { count } }, update: async query => { writes.push(query); return {} } } } },
+    '@labgest/database': { prisma: {
+      cicloProducao: { findFirst: async () => ({ decisao: 'aprovado' }) },
+      ordem: { findFirst: async () => record, updateMany: async query => { writes.push(query); return { count } }, update: async query => { writes.push(query); return {} } },
+      $transaction: async fn => fn({
+        $queryRaw: async () => record && !['Entregue', 'Cancelado'].includes(record.status) ? [{ revisao: count === 0 ? '456' : '123' }] : [],
+        ordem: { findUnique: async () => record, update: async query => { writes.push(query); return {} } },
+      }),
+    } },
     '@/lib/auth-utils': { requireRecepcao: async () => ({ nome: 'Recepção teste', email: 'test@example.invalid', tipo, permissoes: [] }) },
     '@/lib/recepcao-externa-db': {},
     'next/cache': { revalidatePath: p => invalidations.push(p) },
@@ -93,13 +100,20 @@ test('reception role sees clear lab location button for both origins', () => {
 test('explicit lab state survives legacy Em Prova normalization and stays in lab queue', async () => {
   let query
   const actions = loader({
-    '@labgest/database': { prisma: { ordem: { findMany: async q => { query = q; return [{ ...base, status: 'Em Prova', situacaoLogistica: 'no_laboratorio', localizacaoAtual: 'laboratorio', ciclos: [], dataEntrega: new Date('2026-11-15') }] } }, cliente: { findMany: async () => [] } } },
+    '@labgest/database': { prisma: {
+      $transaction: async fn => fn({
+        ordem: { findMany: async q => { query = q; return [{ ...base, status: 'Em Prova', situacaoLogistica: 'no_laboratorio', localizacaoAtual: 'laboratorio', ciclos: [], dataEntrega: new Date('2026-11-15') }] } },
+        $queryRaw: async () => [{ id: 7, revisao: '123' }],
+      }),
+      cliente: { findMany: async () => [] },
+    } },
     '@/lib/auth-utils': { requireRecepcao: async () => ({ nome: 'Teste', tipo: 'recepcao' }) },
     '@/lib/recepcao-externa-db': { consultarCustodiaExterna: async () => ({ disponivel: true, itens: [] }) },
     'next/cache': { revalidatePath: deny },
   })('@/actions/recepcao')
   const result = await actions.getPainelRecepcao()
   assert.equal(result.itens[0].situacao, 'no_laboratorio')
+  assert.equal(result.itens[0].interno.revisao, '123')
   assert.ok(query.where.OR.some(c => c.situacaoLogistica === 'no_laboratorio' && c.historicoEtapas?.array_contains?.[0]?.acao === 'registrou_no_laboratorio'))
 })
 test('receipt refuses concurrent location change instead of overwriting history', async () => {
@@ -220,10 +234,10 @@ test('internal scheduling explicitly sets, edits and cancels without physical or
   const record = { ...base, updatedAt: timestamp, agendamentoConfirmado: false, agendamentoClinico: new Date('2020-01-01'), agendamentoDentista: null }
   for (const [active, input] of [[false, { agendado: true }], [true, { agendado: true, dentista: 'Dra Teste', agendamento: '2026-11-15T12:00:00Z' }], [true, { agendado: false }]]) {
     const f = actionsFixture({ ...record, agendamentoConfirmado: active })
-    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), ...input })
+    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: '123', ...input })
     assert.equal(result.success, true)
     const { where, data } = f.writes[0]
-    assert.equal(where.updatedAt, timestamp)
+    assert.equal(where.id, 7)
     assert.equal(data.agendamentoConfirmado, input.agendado)
     assert.equal(data.historicoEtapas[0].acao, 'recebeu_recepcao')
     assert.equal(data.historicoEtapas[1].acao, input.agendado ? 'agendou_recepcao' : 'cancelou_agendamento_recepcao')
@@ -235,11 +249,11 @@ test('internal scheduling rejects stale, repeated cancel and concurrent modifica
   const timestamp = new Date('2026-11-13T10:00:00Z')
   const record = { ...base, updatedAt: timestamp, agendamentoConfirmado: false }
   let f = actionsFixture(record)
-  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: null, agendado: true })).success, false)
-  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), agendado: false })).success, false)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: null, agendado: true })).success, false)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: '123', agendado: false })).success, false)
   assert.equal(f.writes.length, 0)
   f = actionsFixture(record, 0)
-  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: timestamp.toISOString(), agendado: true })).success, false)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: '123', agendado: true })).success, false)
   assert.equal(f.invalidations.length, 0)
 })
 test('legacy historical date is not an active appointment; legacy custody remains visible', () => {
@@ -251,22 +265,22 @@ test('legacy historical date is not an active appointment; legacy custody remain
 test('direct scheduled return from reception changes custody only, closes schedule and checks revision', async () => {
   const updatedAt = new Date('2026-11-13T10:00:00Z')
   const f = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: true })
-  const result = await f.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedUpdatedAt: updatedAt.toISOString() })
+  const result = await f.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedRevision: '123' })
   assert.equal(result.success, true)
   const { where, data } = f.writes[0]
-  assert.equal(where.updatedAt, updatedAt)
+  assert.equal(where.id, 7)
   assert.equal(data.agendamentoConfirmado, false)
   assert.equal(data.situacaoLogistica, 'em_transito_laboratorio')
   assert.equal(data.historicoEtapas[1].agendamentoEncerrado, 'sim')
   assert.ok(!('status' in data) && !('finalidadeClinica' in data))
   const stale = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: true })
-  assert.equal((await stale.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedUpdatedAt: null })).success, false)
+  assert.equal((await stale.actions.retornarAgendadoDaRecepcao({ ordemId: 7, expectedRevision: null })).success, false)
   assert.equal(stale.writes.length, 0)
 })
 test('scheduling audit retains previous flag, historical date and scheduling dentist', async () => {
   const updatedAt = new Date('2026-11-13T10:00:00Z')
   const f = actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false, agendamentoClinico: new Date('2020-01-01T12:00:00Z'), agendamentoDentista: 'Anterior' })
-  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: updatedAt.toISOString(), agendado: true })).success, true)
+  assert.equal((await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: '123', agendado: true })).success, true)
   const event = f.writes[0].data.historicoEtapas[1]
   assert.equal(event.agendamentoAnterior, '2020-01-01T12:00:00.000Z')
   assert.equal(event.dentistaAgendamentoAnterior, 'Anterior')
@@ -312,8 +326,8 @@ test('cancel confirmation aborts without action, confirms once when accepted, an
 })
 test('stale scheduling returns structured conflict before or during conditional update', async () => {
   const updatedAt = new Date('2026-11-13T10:00:00Z')
-  for (const [f, expected] of [[actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }), null], [actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }, 0), updatedAt.toISOString()]]) {
-    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedUpdatedAt: expected, agendado: true })
+  for (const [f, expected] of [[actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }), null], [actionsFixture({ ...base, updatedAt, agendamentoConfirmado: false }, 0), '123']]) {
+    const result = await f.actions.registrarAgendamentoInternoRecepcao({ ordemId: 7, expectedRevision: expected, agendado: true })
     assert.equal(result.code, 'CONFLICT')
   }
 })
@@ -322,20 +336,20 @@ test('real view closes stale scheduling modal on conflict, refreshes, and reopen
   const fakeReact={...React,useState:init=>{const i=index++; if (!(i in hooks)) hooks[i]=init; return [hooks[i],v=>{hooks[i]=v}]}, useRef:init=>{const i=index++;if(!(i in hooks))hooks[i]={current:init};return hooks[i]}, useTransition:()=>[false,fn=>{pending=fn()}]}
   let result={success:false,code:'CONFLICT',error:'Atualize'}
   const mod=loader({react:fakeReact,'next/navigation':{useRouter:()=>({refresh:()=>refreshes++})},'sonner':{toast:{error:()=>{},success:()=>{}}},'@/actions/recepcao':{registrarAgendamentoInternoRecepcao:async x=>{calls.push(x);return result}},'@/actions/recepcao-externa':{}})('@/app/(dashboard)/recepcao/recepcao-view')
-  const old={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'old'}}
+  const old={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'same',revisao:'old'}}
   function render(item){index=0;return mod.RecepcaoView({itens:[item],dentistas:[],emitidoEm:'2026-11-13T12:00:00Z',externosDisponiveis:true,usuario:{nome:'T',email:'t',tipo:'recepcao'}})}
   function find(el,name){if(!el||typeof el!=='object')return; if(typeof el.type==='function'&&el.type.name===name)return el; const c=el.props?.children;for(const v of Array.isArray(c)?c:[c]){const x=find(v,name);if(x)return x}}
   find(render(old),'TrabalhoCard').props.onAgendar(); let modal=find(render(old),'AgendamentoModal'); assert.ok(modal)
-  modal.props.onConfirm(true,'',''); await pending; assert.equal(calls[0].expectedUpdatedAt,'old'); assert.equal(refreshes,1)
-  const fresh={...old,interno:{atualizadoEm:'new'}}; assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
+  modal.props.onConfirm(true,'',''); await pending; assert.equal(calls[0].expectedRevision,'old'); assert.equal(refreshes,1)
+  const fresh={...old,interno:{atualizadoEm:'same',revisao:'new'}}; assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
   find(render(fresh),'TrabalhoCard').props.onAgendar(); modal=find(render(fresh),'AgendamentoModal'); result={success:true}; modal.props.onConfirm(true,'',''); await pending
-  assert.equal(calls[1].expectedUpdatedAt,'new'); assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
+  assert.equal(calls[1].expectedRevision,'new'); assert.equal(find(render(fresh),'AgendamentoModal'),undefined)
 })
 test('rapid repeated scheduling submits dispatch only one request before rerender', async () => {
   let hooks=[], index=0, pending, release, calls=0; const wait=new Promise(r=>release=r)
   const fakeReact={...React,useState:init=>{const i=index++;if(!(i in hooks))hooks[i]=init;return [hooks[i],v=>{hooks[i]=v}]},useRef:init=>{const i=index++;if(!(i in hooks))hooks[i]={current:init};return hooks[i]},useTransition:()=>[false,fn=>{pending=fn()}]}
   const mod=loader({react:fakeReact,'next/navigation':{useRouter:()=>({refresh:()=>{}})},'sonner':{toast:{error:()=>{},success:()=>{}}},'@/actions/recepcao':{registrarAgendamentoInternoRecepcao:async()=>{calls++;await wait;return {success:true}}},'@/actions/recepcao-externa':{}})('@/app/(dashboard)/recepcao/recepcao-view')
-  const item={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'old'}}
+  const item={...row,origem:'interno',situacao:'aguardando_distribuicao',agendamentoConfirmado:false,interno:{atualizadoEm:'same',revisao:'old'}}
   function render(){index=0;return mod.RecepcaoView({itens:[item],dentistas:[],emitidoEm:'2026-11-13T12:00:00Z',externosDisponiveis:true,usuario:{nome:'T',email:'t',tipo:'recepcao'}})}
   function find(el,name){if(!el||typeof el!=='object')return;if(typeof el.type==='function'&&el.type.name===name)return el;const c=el.props?.children;for(const v of Array.isArray(c)?c:[c]){const x=find(v,name);if(x)return x}}
   find(render(),'TrabalhoCard').props.onAgendar(); const modal=find(render(),'AgendamentoModal'); modal.props.onConfirm(true,'',''); const first=pending; modal.props.onConfirm(true,'',''); assert.equal(calls,1);release();await first

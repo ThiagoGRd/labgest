@@ -352,7 +352,7 @@ export function RecepcaoView({
           try {
             const resultado = agendando.origem === 'externo' && agendando.externo
               ? await registrarAgendamentoExternoRecepcao({ origem: 'externo', id: agendando.id, expectedRevision: agendando.externo.revisao, expectedVersion: agendando.externo.version, agendado, dentista, agendamento })
-              : await registrarAgendamentoInternoRecepcao({ ordemId: agendando.id, expectedUpdatedAt: agendando.interno?.atualizadoEm ?? null, agendado, dentista, agendamento })
+              : await registrarAgendamentoInternoRecepcao({ ordemId: agendando.id, expectedRevision: agendando.interno?.revisao ?? null, agendado, dentista, agendamento })
             if (resultado.success || ('code' in resultado && resultado.code === 'CONFLICT')) setAgendando(null)
             return resultado
           } finally {
@@ -420,7 +420,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
     onExecutar(async () => (
       item.origem === 'externo' && item.externo
         ? registrarAgendamentoExternoRecepcao({ origem: 'externo', id: item.id, expectedRevision: item.externo.revisao, expectedVersion: item.externo.version, agendado: true, dentista, agendamento })
-        : registrarAgendamentoInternoRecepcao({ ordemId: item.id, expectedUpdatedAt: item.interno?.atualizadoEm ?? null, agendado: true, dentista, agendamento })
+        : registrarAgendamentoInternoRecepcao({ ordemId: item.id, expectedRevision: item.interno?.revisao ?? null, agendado: true, dentista, agendamento })
     ), 'Agendamento importado do Clinicorp.')
   }
 
@@ -489,7 +489,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
         }}><PackageCheck className="h-4 w-4" />Registrar entrega ao paciente</Button> : null}
         {situacaoVisual === 'no_laboratorio' && !recepcaoSomente ? <Button size="sm" onClick={() => onExecutar(() => enviarParaRecepcao(item.id), 'Envio para a recepção registrado.')} disabled={disabled}><Send className="h-4 w-4" />Enviar à recepção</Button> : null}
         {['aguardando_recepcao', 'no_laboratorio'].includes(situacaoVisual) ? <Button size="sm" onClick={() => onExecutar(() => confirmarRecebimentoRecepcao(item.id), 'Recebimento confirmado.')} disabled={disabled}><PackageCheck className="h-4 w-4" />Confirmar recebimento</Button> : null}
-        {situacaoVisual === 'aguardando_distribuicao' && item.agendamentoConfirmado ? <Button size="sm" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Enviar fisicamente ao laboratório sem registrar decisão clínica? O agendamento será encerrado.')) onExecutar(() => retornarAgendadoDaRecepcao({ ordemId: item.id, expectedUpdatedAt: item.interno?.atualizadoEm ?? null }), 'Retorno físico registrado.') }}>Retornar ao laboratório</Button> : null}
+        {situacaoVisual === 'aguardando_distribuicao' && item.agendamentoConfirmado ? <Button size="sm" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Enviar fisicamente ao laboratório sem registrar decisão clínica? O agendamento será encerrado.')) onExecutar(() => retornarAgendadoDaRecepcao({ ordemId: item.id, expectedRevision: item.interno?.revisao ?? null }), 'Retorno físico registrado.') }}>Retornar ao laboratório</Button> : null}
         {situacaoVisual === 'aguardando_distribuicao' ? <Button size="sm" onClick={onDistribuir} disabled={disabled}><UserRoundCheck className="h-4 w-4" />Entregar ao dentista</Button> : null}
         {situacaoVisual === 'com_dentista' ? <><Button size="sm" variant="outline" onClick={onDistribuir} disabled={disabled}><RefreshCw className="h-4 w-4" />Corrigir</Button><Button size="sm" onClick={() => onExecutar(() => receberDoDentista(item.id), 'Devolução do dentista registrada.')} disabled={disabled}><Undo2 className="h-4 w-4" />Receber do dentista</Button></> : null}
         {situacaoVisual === 'aguardando_resultado_dentista' ? <Button size="sm" variant="outline" onClick={() => onExecutar(() => enviarRetornoLaboratorio(item.id), 'Retorno enviado ao laboratório.')} disabled={disabled}><RefreshCw className="h-4 w-4" />Verificar resposta</Button> : null}

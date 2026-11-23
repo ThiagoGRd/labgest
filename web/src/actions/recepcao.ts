@@ -35,7 +35,7 @@ export type FinalidadeClinica = 'prova' | 'instalacao' | 'entrega'
 export interface OrdemRecepcao {
   origem: 'interno' | 'externo'
   externo?: { revisao: string; version: number }
-  interno?: { atualizadoEm: string | null }
+  interno?: { atualizadoEm: string | null; revisao: string | null }
   id: number
   paciente: string
   clinica: string
@@ -89,46 +89,54 @@ export async function getPainelRecepcao() {
   const hoje = hojeIso()
   const inicioFinalizadosRecentes = new Date()
   inicioFinalizadosRecentes.setDate(inicioFinalizadosRecentes.getDate() - 60)
-  const [ordens, clientes] = await Promise.all([
-    prisma.ordem.findMany({
-      where: {
-        status: { notIn: ['Entregue', 'Cancelado'] },
-        OR: [
-          { situacaoLogistica: { in: SITUACOES_ATIVAS } },
-          { status: 'Em Prova' },
-          // Keep only explicit corrections in this additional queue branch; do not revive legacy completed work.
-          { situacaoLogistica: 'no_laboratorio', historicoEtapas: { array_contains: [{ acao: 'registrou_no_laboratorio' }] } },
-          { status: 'Finalizado', dataFinalizacao: { gte: inicioFinalizadosRecentes } },
-        ],
-      },
-      select: {
-        id: true,
-        updatedAt: true,
-        nomePaciente: true,
-        clienteNome: true,
-        servicoNome: true,
-        etapaAtual: true,
-        subetapaAtual: true,
-        status: true,
-        localizacaoAtual: true,
-        situacaoLogistica: true,
-        dentistaResponsavel: true,
-        finalidadeClinica: true,
-        agendamentoClinico: true,
-        agendamentoConfirmado: true,
-        agendamentoDentista: true,
-        movimentacaoLogisticaEm: true,
-        dataEntrega: true,
-        historicoEtapas: true,
-        ciclos: {
-          where: { status: 'em_prova' },
-          select: { decisao: true, observacoesDentista: true },
-          orderBy: { numeroCiclo: 'desc' },
-          take: 1,
+  const [{ ordens, revisoes }, clientes] = await Promise.all([
+    prisma.$transaction(async (tx) => {
+      const ordens = await tx.ordem.findMany({
+        where: {
+          status: { notIn: ['Entregue', 'Cancelado'] },
+          OR: [
+            { situacaoLogistica: { in: SITUACOES_ATIVAS } },
+            { status: 'Em Prova' },
+            // Keep only explicit corrections in this additional queue branch; do not revive legacy completed work.
+            { situacaoLogistica: 'no_laboratorio', historicoEtapas: { array_contains: [{ acao: 'registrou_no_laboratorio' }] } },
+            { status: 'Finalizado', dataFinalizacao: { gte: inicioFinalizadosRecentes } },
+          ],
         },
-      },
-      orderBy: [{ movimentacaoLogisticaEm: 'asc' }, { dataEntrega: 'asc' }],
-    }),
+        select: {
+          id: true,
+          updatedAt: true,
+          nomePaciente: true,
+          clienteNome: true,
+          servicoNome: true,
+          etapaAtual: true,
+          subetapaAtual: true,
+          status: true,
+          localizacaoAtual: true,
+          situacaoLogistica: true,
+          dentistaResponsavel: true,
+          finalidadeClinica: true,
+          agendamentoClinico: true,
+          agendamentoConfirmado: true,
+          agendamentoDentista: true,
+          movimentacaoLogisticaEm: true,
+          dataEntrega: true,
+          historicoEtapas: true,
+          ciclos: {
+            where: { status: 'em_prova' },
+            select: { decisao: true, observacoesDentista: true },
+            orderBy: { numeroCiclo: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: [{ movimentacaoLogisticaEm: 'asc' }, { dataEntrega: 'asc' }],
+      })
+      // Read PostgreSQL row versions from the same snapshot as the card data.
+      const ids = ordens.map(({ id }) => id)
+      const revisoes = ids.length ? await tx.$queryRaw<Array<{ id: number; revisao: string }>>`
+        SELECT id, xmin::text AS revisao FROM public.ordens WHERE id IN (${Prisma.join(ids)})
+      ` : []
+      return { ordens, revisoes: new Map(revisoes.map(({ id, revisao }) => [id, revisao])) }
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }),
     prisma.cliente.findMany({
       where: { ativo: true },
       select: { nome: true, dentista: true },
@@ -154,7 +162,7 @@ export async function getPainelRecepcao() {
     const ciclo = ordem.ciclos[0]
     return {
       origem: 'interno',
-      interno: { atualizadoEm: ordem.updatedAt?.toISOString() || null },
+      interno: { atualizadoEm: ordem.updatedAt?.toISOString() || null, revisao: revisoes.get(ordem.id) ?? null },
       id: ordem.id,
       paciente: ordem.nomePaciente,
       clinica: ordem.clienteNome,
@@ -561,35 +569,61 @@ export async function registrarEntregaInternaRecepcao(input: EntregaInternaInput
   }
 }
 
+type RevisaoRecepcaoInput = { ordemId: number; expectedRevision: string | null }
+
+async function carregarOrdemComRevisao(tx: Prisma.TransactionClient, ordemId: number) {
+  if (!Number.isSafeInteger(ordemId) || ordemId <= 0 || ordemId > 2147483647) return null
+  // A waiter in READ COMMITTED gets the latest row version after the writer commits.
+  const [versao] = await tx.$queryRaw<Array<{ revisao: string }>>`
+    SELECT xmin::text AS revisao FROM public.ordens
+    WHERE id = ${ordemId} AND status NOT IN ('Entregue', 'Cancelado') FOR UPDATE
+  `
+  if (!versao) return null
+  const ordem = await tx.ordem.findUnique({ where: { id: ordemId } })
+  return ordem ? { ordem, revisao: versao.revisao } : null
+}
+
 // Scheduling is independent from the physical custody and clinical workflow.
-export async function registrarAgendamentoInternoRecepcao(input: { ordemId: number; expectedUpdatedAt: string | null; agendado: boolean; dentista?: string; agendamento?: string }) {
+export async function registrarAgendamentoInternoRecepcao(input: RevisaoRecepcaoInput & { agendado: boolean; dentista?: string; agendamento?: string }) {
   const usuario = await requireRecepcao()
   let dados: ReturnType<typeof prepararAgendamento>
   try { dados = prepararAgendamento(input.agendado, input.dentista, input.agendamento) } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Dados inválidos.' } }
-  const ordem = await carregarOrdem(input.ordemId)
-  if (!ordem) return { success: false, error: 'Ordem não encontrada.' }
-  if ((ordem.updatedAt?.toISOString() || null) !== input.expectedUpdatedAt) return { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página e reabra o agendamento.' }
-  if (dados.confirmado && !['aguardando_distribuicao', 'com_dentista'].includes(situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm))) return { success: false, error: 'O trabalho precisa estar na recepção ou com o dentista.' }
-  if (!dados.confirmado && !ordem.agendamentoConfirmado) return { success: false, error: 'Não há agendamento ativo para cancelar.' }
-  const resultado = await prisma.ordem.updateMany({
-    where: { id: ordem.id, updatedAt: ordem.updatedAt, status: ordem.status, historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull } },
-    data: { agendamentoConfirmado: dados.confirmado, ...(dados.confirmado ? { agendamentoClinico: dados.data, agendamentoDentista: dados.dentista } : {}),
-      historicoEtapas: eventoHistorico(ordem.historicoEtapas, dados.confirmado ? 'agendou_recepcao' : 'cancelou_agendamento_recepcao', usuario, { dentista: dados.dentista || '', agendamento: dados.data?.toISOString() || '', agendamentoConfirmadoAnterior: ordem.agendamentoConfirmado ? 'sim' : 'não', agendamentoAnterior: ordem.agendamentoClinico?.toISOString() || '', dentistaAgendamentoAnterior: ordem.agendamentoDentista || '' }) },
-  })
-  if (resultado.count !== 1) return { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página e reabra o agendamento.' }
-  revalidarRecepcao()
-  return { success: true }
+  const conflito = { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página e reabra o agendamento.' }
+  const resultado = await prisma.$transaction(async (tx) => {
+    const atual = await carregarOrdemComRevisao(tx, input.ordemId)
+    if (!atual) return { success: false, error: 'Ordem não encontrada.' }
+    if (atual.revisao !== input.expectedRevision) return conflito
+    const { ordem } = atual
+    if (dados.confirmado && !['aguardando_distribuicao', 'com_dentista'].includes(situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm))) return { success: false, error: 'O trabalho precisa estar na recepção ou com o dentista.' }
+    if (!dados.confirmado && !ordem.agendamentoConfirmado) return { success: false, error: 'Não há agendamento ativo para cancelar.' }
+    await tx.ordem.update({
+      where: { id: ordem.id },
+      data: { agendamentoConfirmado: dados.confirmado, ...(dados.confirmado ? { agendamentoClinico: dados.data, agendamentoDentista: dados.dentista } : {}),
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, dados.confirmado ? 'agendou_recepcao' : 'cancelou_agendamento_recepcao', usuario, { dentista: dados.dentista || '', agendamento: dados.data?.toISOString() || '', agendamentoConfirmadoAnterior: ordem.agendamentoConfirmado ? 'sim' : 'não', agendamentoAnterior: ordem.agendamentoClinico?.toISOString() || '', dentistaAgendamentoAnterior: ordem.agendamentoDentista || '' }) },
+    })
+    return { success: true }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted })
+  if (resultado.success) revalidarRecepcao()
+  return resultado
 }
 
-export async function retornarAgendadoDaRecepcao(input: { ordemId: number; expectedUpdatedAt: string | null }) {
+export async function retornarAgendadoDaRecepcao(input: RevisaoRecepcaoInput) {
   const usuario = await requireRecepcao()
-  const ordem = await carregarOrdem(input.ordemId)
-  if (!ordem || !ordem.agendamentoConfirmado || situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'aguardando_distribuicao') return { success: false, error: 'Este retorno não está disponível.' }
-  if ((ordem.updatedAt?.toISOString() || null) !== input.expectedUpdatedAt) return { success: false, error: 'O trabalho foi alterado. Atualize a página.' }
-  const resultado = await prisma.ordem.updateMany({ where: { id: ordem.id, updatedAt: ordem.updatedAt, status: ordem.status, historicoEtapas: { equals: ordem.historicoEtapas ?? Prisma.AnyNull } }, data: { localizacaoAtual: 'em_transito_laboratorio', situacaoLogistica: 'em_transito_laboratorio', movimentacaoLogisticaEm: new Date(), agendamentoConfirmado: false, historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'retornou_agendado_recepcao', usuario, { agendamentoEncerrado: 'sim', observacao: 'Retorno físico sem decisão clínica.' }) } })
-  if (resultado.count !== 1) return { success: false, error: 'O trabalho foi alterado. Atualize a página.' }
-  revalidarRecepcao()
-  return { success: true }
+  const resultado = await prisma.$transaction(async (tx) => {
+    const atual = await carregarOrdemComRevisao(tx, input.ordemId)
+    if (!atual) return { success: false, error: 'Este retorno não está disponível.' }
+    if (atual.revisao !== input.expectedRevision) return { success: false, code: 'CONFLICT' as const, error: 'O trabalho foi alterado. Atualize a página.' }
+    const { ordem } = atual
+    if (!ordem.agendamentoConfirmado || situacaoEfetiva(ordem.situacaoLogistica, ordem.status, ordem.movimentacaoLogisticaEm) !== 'aguardando_distribuicao') return { success: false, error: 'Este retorno não está disponível.' }
+    await tx.ordem.update({
+      where: { id: ordem.id },
+      data: { localizacaoAtual: 'em_transito_laboratorio', situacaoLogistica: 'em_transito_laboratorio', movimentacaoLogisticaEm: new Date(), agendamentoConfirmado: false,
+        historicoEtapas: eventoHistorico(ordem.historicoEtapas, 'retornou_agendado_recepcao', usuario, { agendamentoEncerrado: 'sim', observacao: 'Retorno físico sem decisão clínica.' }) },
+    })
+    return { success: true }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted })
+  if (resultado.success) revalidarRecepcao()
+  return resultado
 }
 
 export async function sincronizarClinicorpRecepcao(): Promise<{
