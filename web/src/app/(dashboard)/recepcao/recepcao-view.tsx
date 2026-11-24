@@ -556,6 +556,13 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
           }
         }}><Building2 className="h-4 w-4" />Está no laboratório</Button></div>
       ) : null}
+      {(item.origem === 'externo' && item.status !== 'Pronto') || (item.origem === 'interno' && item.status !== 'Finalizado') ? (
+        <p className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-500 dark:bg-white/5 dark:text-slate-400">
+          {item.origem === 'externo'
+            ? `Entrega final libera após marcar como "Pronto" em Labs Externos (status atual: ${item.status}).`
+            : `Entrega final libera após o laboratório marcar a OS como "Finalizado" (status atual: ${item.status}).`}
+        </p>
+      ) : null}
       <p className="mt-2 text-right text-[11px] text-slate-400">{config.descricao}</p>
     </article>
   )
