@@ -67,6 +67,8 @@ const SITUACOES_ATIVAS: SituacaoLogistica[] = [
 
 function revalidarRecepcao() {
   revalidatePath('/recepcao')
+  revalidatePath('/lab-interno')
+  revalidatePath('/tv')
   revalidatePath('/producao')
   revalidatePath('/ordens')
   revalidatePath('/prioridades')
@@ -192,7 +194,7 @@ export async function getPainelRecepcao() {
       paciente: p.paciente, clinica: p.lab_nome, servico: p.servico || 'Serviço não informado',
       etapa: p.situacao_pedido, status: p.situacao_pedido,
       localizacao: p.situacao || 'Não confirmada', situacao: p.situacao || 'conferir_recebimento',
-      dentista: p.dentista || '', finalidade: p.finalidade || null,
+      dentista: p.dentista || p.dentista_pedido || '', finalidade: p.finalidade || null,
       agendamento: p.agendamento_em?.toISOString() || null, agendamentoConfirmado: p.agendamento_confirmado ?? false, agendamentoDentista: p.agendamento_dentista, movimentadoEm: p.movimentado_em?.toISOString() || null,
       entregaPrevista: p.prazo?.toISOString() || '', decisaoDentista: null, observacaoDentista: null,
     })))
@@ -632,20 +634,28 @@ export async function sincronizarClinicorpRecepcao(): Promise<{
   error?: string
 }> {
   await requireRecepcao()
-  const { sincronizarClinicorp } = await import('@/lib/controle-tratamentos')
-  const resultado = await sincronizarClinicorp('manual')
-  revalidarRecepcao()
-  revalidatePath('/tratamentos')
+  try {
+    const { sincronizarClinicorp } = await import('@/lib/controle-tratamentos')
+    const resultado = await sincronizarClinicorp('manual')
+    revalidarRecepcao()
+    revalidatePath('/tratamentos')
 
-  if (!resultado.sucesso) {
+    if (!resultado.sucesso) {
+      return {
+        success: false,
+        error: resultado.erro || 'Não foi possível sincronizar a agenda do Clinicorp.',
+      }
+    }
+
+    return {
+      success: true,
+      mensagem: `${resultado.consultas} consulta(s) sincronizada(s) com o Clinicorp.`,
+    }
+  } catch (error) {
+    console.error('[sincronizarClinicorpRecepcao] Erro:', error)
     return {
       success: false,
-      error: resultado.erro || 'Não foi possível sincronizar a agenda do Clinicorp.',
+      error: error instanceof Error ? error.message : 'Não foi possível sincronizar a agenda do Clinicorp.',
     }
-  }
-
-  return {
-    success: true,
-    mensagem: `${resultado.consultas} consulta(s) sincronizada(s) com o Clinicorp.`,
   }
 }

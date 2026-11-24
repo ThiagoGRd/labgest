@@ -10,11 +10,21 @@ const ts = require('typescript')
 require('./attention-typescript-register.cjs')
 
 const {
+  dataHoraInputClinicorp,
   historicoIndicaNoLabAtual,
+  instanteConsultaClinicorp,
   ordenarItensRecepcao,
   resumirAgendaClinicorpParaOrdem,
   situacaoVisualItem,
+  temCompromissoProximo,
 } = require('../src/lib/recepcao-clinicorp.ts')
+
+test('instanteConsultaClinicorp e dataHoraInputClinicorp aceitam H:MM e HH:MM:SS sem cair para 08:00', () => {
+  assert.equal(dataHoraInputClinicorp('2026-11-16', '14:30:00'), '2026-11-16T14:30')
+  assert.equal(dataHoraInputClinicorp('2026-11-16', '9:05'), '2026-11-16T09:05')
+  assert.equal(instanteConsultaClinicorp('2026-11-16', '14:30:00'), '2026-11-16T17:30:00.000Z')
+  assert.equal(temCompromissoProximo({ agendamento: 'data-invalida', agendamentoConfirmado: true, clinicorp: null }, '2026-11-16'), false)
+})
 
 test('situacaoVisualItem resolve contradicao quando dentista ja respondeu no portal', () => {
   assert.equal(situacaoVisualItem('aguardando_resultado_dentista', null), 'aguardando_resultado_dentista')
@@ -433,6 +443,42 @@ test('RecepcaoView integrada ao Clinicorp funciona no Chromium real', async (t) 
     await new Promise((r) => setTimeout(r, 100))
     await evalPage(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('Sincronizar Clinicorp')).click()`)
     await new Promise((r) => setTimeout(r, 150))
+
+    // Testa filtro por clínica interna + troca para origem "Labs externos" (deve limpar filtro incompatível)
+    await evalPage(`(() => {
+      const sel = document.querySelector('select[aria-label="Filtrar por clínica ou laboratório"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(sel, 'Clínica Sorriso Prime');
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`)
+    await new Promise((r) => setTimeout(r, 100))
+    await evalPage(`[...document.querySelectorAll('[role="group"] button')].find(b => b.textContent.includes('Labs externos')).click()`)
+    await new Promise((r) => setTimeout(r, 100))
+    assert.equal(await evalPage(`[...document.querySelectorAll('article h2')].map(h => h.textContent).join(',')`), 'Maria Clara Oliveira')
+
+    // Volta para Todos e testa busca sem acento ("joao" -> "João Pedro Silva")
+    await evalPage(`[...document.querySelectorAll('[role="group"] button')].find(b => b.textContent.includes('Todos')).click()`)
+    await new Promise((r) => setTimeout(r, 100))
+    await evalPage(`(() => {
+      const inp = document.querySelector('input[aria-label="Buscar trabalhos na recepção"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(inp, 'joao');
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`)
+    await new Promise((r) => setTimeout(r, 100))
+    assert.equal(await evalPage(`[...document.querySelectorAll('article h2')].map(h => h.textContent).join(',')`), 'João Pedro Silva')
+
+    // Busca sem resultados exibe botão "Limpar filtros" e restaura lista
+    await evalPage(`(() => {
+      const inp = document.querySelector('input[aria-label="Buscar trabalhos na recepção"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(inp, 'inexistente-xyz');
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`)
+    await new Promise((r) => setTimeout(r, 100))
+    await evalPage(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('Limpar filtros')).click()`)
+    await new Promise((r) => setTimeout(r, 100))
+    assert.equal(await evalPage(`document.querySelectorAll('article').length`), 4)
 
     const calls = await evalPage(`window.__calls`)
     assert.ok(calls.some((c) => c.action === 'registrarAgendamentoInternoRecepcao' && c.input.dentista === 'Dr. Rafael Costa'))

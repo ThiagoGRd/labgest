@@ -50,13 +50,23 @@ export function situacaoVisualItem(situacao: string, decisaoDentista: string | n
   return situacao
 }
 
+function normalizarHoraClinicorp(horaInicio: string | null): string {
+  if (!horaInicio) return '08:00'
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(horaInicio.trim())
+  if (!match) return '08:00'
+  const h = Number(match[1])
+  const m = Number(match[2])
+  if (h < 0 || h > 23 || m < 0 || m > 59) return '08:00'
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 export function instanteConsultaClinicorp(data: string, horaInicio: string | null): string {
-  const hora = horaInicio && /^\d{2}:\d{2}$/.test(horaInicio) ? horaInicio : '08:00'
+  const hora = normalizarHoraClinicorp(horaInicio)
   return instanteMaceio(`${data.slice(0, 10)}T${hora}`)
 }
 
 export function dataHoraInputClinicorp(data: string, horaInicio: string | null): string {
-  const hora = horaInicio && /^\d{2}:\d{2}$/.test(horaInicio) ? horaInicio : '08:00'
+  const hora = normalizarHoraClinicorp(horaInicio)
   return `${data.slice(0, 10)}T${hora}`
 }
 
@@ -104,7 +114,9 @@ export function temCompromissoProximo(
   const dataClinicorp = item.clinicorp?.proximaConsulta?.data
   if (dataClinicorp && (dataClinicorp === hoje || dataClinicorp === amanha)) return true
   if (item.agendamentoConfirmado && item.agendamento) {
-    const dataMaceio = new Date(new Date(item.agendamento).getTime() - 3 * 3_600_000).toISOString().slice(0, 10)
+    const ms = Date.parse(item.agendamento)
+    if (!Number.isFinite(ms)) return false
+    const dataMaceio = new Date(ms - 3 * 3_600_000).toISOString().slice(0, 10)
     return dataMaceio === hoje || dataMaceio === amanha
   }
   return false

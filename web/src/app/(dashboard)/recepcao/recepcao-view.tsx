@@ -110,7 +110,9 @@ function pertenceFiltro(item: OrdemRecepcao, filtro: Filtro, hoje = '') {
 
 function formatarData(valor: string | null, comHora = false) {
   if (!valor) return 'Não informado'
-  return new Date(valor).toLocaleString('pt-BR', comHora
+  const dt = new Date(valor)
+  if (Number.isNaN(dt.getTime())) return 'Não informado'
+  return dt.toLocaleString('pt-BR', comHora
     ? { timeZone: 'America/Maceio', dateStyle: 'short', timeStyle: 'short' }
     : { timeZone: 'UTC', dateStyle: 'short' })
 }
@@ -121,6 +123,7 @@ function formatarDataDiaClinicorp(dataIso: string, hoje: string) {
   if (!hoje) return base
   if (dataIso === hoje) return `Hoje (${base})`
   const dtHoje = new Date(`${hoje}T00:00:00Z`)
+  if (Number.isNaN(dtHoje.getTime())) return base
   dtHoje.setUTCDate(dtHoje.getUTCDate() + 1)
   if (dataIso === dtHoje.toISOString().slice(0, 10)) return `Amanhã (${base})`
   return base
@@ -128,7 +131,10 @@ function formatarDataDiaClinicorp(dataIso: string, hoje: string) {
 
 function horasParado(item: OrdemRecepcao, emitidoEm: string) {
   if (!item.movimentadoEm) return 0
-  return Math.max(0, (new Date(emitidoEm).getTime() - new Date(item.movimentadoEm).getTime()) / 3_600_000)
+  const fim = Date.parse(emitidoEm)
+  const ini = Date.parse(item.movimentadoEm)
+  if (!Number.isFinite(fim) || !Number.isFinite(ini)) return 0
+  return Math.max(0, (fim - ini) / 3_600_000)
 }
 
 export function RecepcaoView({
@@ -152,6 +158,7 @@ export function RecepcaoView({
   const [agendando, setAgendando] = useState<OrdemRecepcao | null>(null)
   const agendamentoEmCurso = useRef(false)
   const [distribuindo, setDistribuindo] = useState<OrdemRecepcao | null>(null)
+  const distribuicaoEmCurso = useRef(false)
   const [isPending, startTransition] = useTransition()
   const [sincronizando, startSyncTransition] = useTransition()
 
@@ -160,13 +167,42 @@ export function RecepcaoView({
   const termo = busca.trim().toLocaleLowerCase('pt-BR')
   const itensOrigem = filtrarOrigem(itens, origem)
 
-  const clinicasOpcoes = clinicas ?? [...new Set(itens.map((i) => i.clinica).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const clinicasOpcoes = [...new Set(
+    (origem === 'todos' && clinicas ? clinicas : itensOrigem.map((i) => i.clinica)).filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b, 'pt-BR'))
   const dentistasOpcoes = [...new Set([
     ...dentistas,
     ...itens.map((i) => i.dentista),
     ...itens.map((i) => i.agendamentoDentista),
     ...itens.map((i) => i.clinicorp?.proximaConsulta?.dentistaNome),
   ].filter((d): d is string => Boolean(d?.trim())).map((d) => d.trim()))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
+  function selecionarOrigem(proximaOrigem: FiltroOrigem) {
+    setOrigem(proximaOrigem)
+    const proximosItens = filtrarOrigem(itens, proximaOrigem)
+    if (filtroClinica !== 'todas' && !proximosItens.some((i) => i.clinica === filtroClinica)) {
+      setFiltroClinica('todas')
+    }
+    if (
+      filtroDentista !== 'todos'
+      && !proximosItens.some((i) =>
+        [i.dentista, i.agendamentoDentista, i.clinicorp?.proximaConsulta?.dentistaNome]
+          .some((nome) => nome?.trim() === filtroDentista),
+      )
+    ) {
+      setFiltroDentista('todos')
+    }
+  }
+
+  const temFiltroAtivo = origem !== 'todos' || filtro !== 'todos' || filtroClinica !== 'todas' || filtroDentista !== 'todos' || termo.length > 0
+
+  function limparFiltros() {
+    setOrigem('todos')
+    setFiltro('todos')
+    setFiltroClinica('todas')
+    setFiltroDentista('todos')
+    setBusca('')
+  }
 
   const origens: Array<{ id: FiltroOrigem; label: string; quantidade: number }> = [
     { id: 'todos', label: 'Todos', quantidade: itens.length },
@@ -275,7 +311,7 @@ export function RecepcaoView({
           <p className="mb-2 text-xs font-semibold text-slate-500">Origem dos trabalhos</p>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Filtrar por origem">
             {origens.map((item) => (
-              <button key={item.id} type="button" aria-pressed={origem === item.id} onClick={() => setOrigem(item.id)} className={`min-w-0 rounded-xl px-2 py-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:px-4 ${origem === item.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300'}`}>
+              <button key={item.id} type="button" aria-pressed={origem === item.id} onClick={() => selecionarOrigem(item.id)} className={`min-w-0 rounded-xl px-2 py-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:px-4 ${origem === item.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300'}`}>
                 <span className="block">{item.label}</span>
                 <span className="mt-1 block text-lg opacity-80">{item.id === 'externo' && !externosDisponiveis ? 'Indisponível' : item.quantidade}</span>
               </button>
@@ -303,16 +339,16 @@ export function RecepcaoView({
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar paciente, dentista, clínica, serviço ou OS" className="pl-9" aria-label="Buscar trabalhos na recepção" />
             </div>
-            <select aria-label="Filtrar por clínica ou laboratório" value={filtroClinica} onChange={(e) => setFiltroClinica(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+            <select aria-label="Filtrar por clínica ou laboratório" value={filtroClinica} onChange={(e) => setFiltroClinica(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100">
               <option value="todas">Todas as clínicas/labs</option>
               {clinicasOpcoes.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
             </select>
             <div className="grid grid-cols-2 gap-2">
-              <select aria-label="Filtrar por dentista" value={filtroDentista} onChange={(e) => setFiltroDentista(e.target.value)} className="h-10 rounded-md border border-input bg-background px-2 text-sm">
+              <select aria-label="Filtrar por dentista" value={filtroDentista} onChange={(e) => setFiltroDentista(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100">
                 <option value="todos">Todos dentistas</option>
                 {dentistasOpcoes.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
               </select>
-              <select aria-label="Ordenar fila" value={ordenacao} onChange={(e) => setOrdenacao(e.target.value as OrdenacaoRecepcao)} className="h-10 rounded-md border border-input bg-background px-2 text-sm">
+              <select aria-label="Ordenar fila" value={ordenacao} onChange={(e) => setOrdenacao(e.target.value as OrdenacaoRecepcao)} className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100">
                 <option value="urgencia">Urgência / Agenda</option>
                 <option value="parados">Mais tempo parado</option>
                 <option value="entrega">Entrega prevista</option>
@@ -325,6 +361,11 @@ export function RecepcaoView({
           <section className="rounded-2xl border border-dashed p-12 text-center text-slate-500 dark:border-white/10">
             <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
             <p className="font-semibold">{origem === 'externo' && !externosDisponiveis ? 'Não foi possível consultar os trabalhos externos.' : 'Nenhum trabalho nesta fila.'}</p>
+            {temFiltroAtivo && !(origem === 'externo' && !externosDisponiveis) ? (
+              <Button type="button" size="sm" variant="outline" className="mt-4" onClick={limparFiltros}>
+                Limpar filtros
+              </Button>
+            ) : null}
           </section>
         ) : (
           <section className="grid items-start gap-3 lg:grid-cols-2">
@@ -366,13 +407,21 @@ export function RecepcaoView({
           dentistas={dentistasOpcoes}
           disabled={isPending}
           onClose={() => setDistribuindo(null)}
-          onConfirm={(dados) => executar(async () => {
-            const resultado = distribuindo.origem === 'externo'
-              ? await executarExterno(distribuindo, { acao: 'distribuir', dentista: dados.dentista, finalidade: dados.finalidade, motivo: dados.observacao })
-              : await distribuirParaDentista({ ordemId: distribuindo.id, ...dados })
-            if (resultado.success || ('code' in resultado && resultado.code === 'CONFLICT')) setDistribuindo(null)
-            return resultado
-          }, 'Trabalho entregue ao dentista.')}
+          onConfirm={(dados) => {
+            if (distribuicaoEmCurso.current) return
+            distribuicaoEmCurso.current = true
+            executar(async () => {
+              try {
+                const resultado = distribuindo.origem === 'externo'
+                  ? await executarExterno(distribuindo, { acao: 'distribuir', dentista: dados.dentista, finalidade: dados.finalidade, motivo: dados.observacao })
+                  : await distribuirParaDentista({ ordemId: distribuindo.id, ...dados })
+                if (resultado.success || ('code' in resultado && resultado.code === 'CONFLICT')) setDistribuindo(null)
+                return resultado
+              } finally {
+                distribuicaoEmCurso.current = false
+              }
+            }, 'Trabalho entregue ao dentista.')
+          }}
         />
       ) : null}
     </DashboardLayout>
@@ -404,7 +453,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
   onExecutar: (acao: () => Promise<{ success: boolean; error?: string }>, sucesso: string) => void
 }) {
   const situacaoVisual = situacaoVisualItem(item.situacao, item.decisaoDentista) as SituacaoLogistica
-  const config = SITUACOES[situacaoVisual]
+  const config = SITUACOES[situacaoVisual] ?? SITUACOES.no_laboratorio
   const horas = horasParado(item, emitidoEm)
   const pausado = item.status === 'Pausado'
   const consultaClinicorp = item.clinicorp?.proximaConsulta ?? null
@@ -415,7 +464,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
 
   function confirmarComClinicorp() {
     if (!consultaClinicorp) return
-    const agendamento = instanteConsultaClinicorp(consultaClinicorp.data, consultaClinicorp.horaInicio)
+    const agendamento = instanteConsultaClinicorp(consultaClinicorp.data, consultaClinicorp.horaInicio) || undefined
     const dentista = consultaClinicorp.dentistaNome || item.dentista || ''
     onExecutar(async () => (
       item.origem === 'externo' && item.externo
@@ -454,7 +503,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
               {consultaClinicorp.categoria ? ` · ${consultaClinicorp.categoria}` : ''}
             </p>
             {!item.agendamentoConfirmado && ['aguardando_distribuicao', 'com_dentista'].includes(situacaoVisual) ? (
-              <Button size="sm" variant="outline" className="h-7 bg-white px-2 text-xs" disabled={disabled} onClick={confirmarComClinicorp}>
+              <Button size="sm" variant="outline" className="h-7 bg-white px-2 text-xs text-slate-900 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800" disabled={disabled} onClick={confirmarComClinicorp}>
                 Confirmar agenda do Clinicorp
               </Button>
             ) : null}
@@ -467,7 +516,7 @@ function TrabalhoCard({ item, hoje, emitidoEm, recepcaoSomente, disabled, onDist
 
       <div className="mt-4 grid gap-2 rounded-xl bg-slate-50 p-3 text-xs dark:bg-white/5 sm:grid-cols-2">
         <p><span className="font-semibold text-slate-500">Etapa:</span> {item.etapa}</p>
-        <p><span className="font-semibold text-slate-500">Finalidade:</span> {item.finalidade ? FINALIDADES[item.finalidade] : 'A definir na distribuição'}</p>
+        <p><span className="font-semibold text-slate-500">Finalidade:</span> {item.finalidade ? (FINALIDADES[item.finalidade] || item.finalidade) : 'A definir na distribuição'}</p>
         <p><span className="font-semibold text-slate-500">Dentista:</span> {item.dentista || 'Ainda não definido'}</p>
         <p><span className="font-semibold text-slate-500">Agendamento:</span> {item.agendamentoConfirmado ? `Confirmado · ${formatarData(item.agendamento, true)} · ${item.agendamentoDentista || 'Dentista não informado'}` : item.agendamento ? `Histórico não confirmado · ${formatarData(item.agendamento, true)}` : 'Não confirmado'}</p>
         <p><span className="font-semibold text-slate-500">Entrega prevista:</span> {formatarData(item.entregaPrevista)}</p>
@@ -528,8 +577,8 @@ function DistribuirModal({ item, dentistas, disabled, onClose, onConfirm }: {
     <Modal isOpen onClose={onClose} title={corrigindo ? 'Corrigir distribuição' : 'Entregar ao dentista'} description={`${item.origem === 'externo' ? 'Externo' : 'OS'} #${item.id} · ${item.paciente}`} size="md" mobileFullscreen dismissible={!disabled}>
       <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); onConfirm({ dentista, finalidade, observacao: observacao || undefined }) }}>
         <div><label htmlFor="dentista-recepcao" className="mb-1 block text-sm font-semibold">Dentista responsável *</label><Input id="dentista-recepcao" list="dentistas-recepcao" value={dentista} onChange={(event) => setDentista(event.target.value)} placeholder="Nome do dentista" required maxLength={255} /><datalist id="dentistas-recepcao">{dentistas.map((nome) => <option key={nome} value={nome} />)}</datalist></div>
-        <div><label htmlFor="finalidade-recepcao" className="mb-1 block text-sm font-semibold">Finalidade *</label><select id="finalidade-recepcao" value={finalidade} onChange={(event) => setFinalidade(event.target.value as FinalidadeClinica)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="prova">Prova clínica</option><option value="instalacao">Instalação</option><option value="entrega">Entrega ao paciente</option></select></div>
-        {corrigindo ? <div><label htmlFor="motivo-correcao" className="mb-1 block text-sm font-semibold">Motivo da correção *</label><textarea id="motivo-correcao" value={observacao} onChange={(event) => setObservacao(event.target.value)} required minLength={motivoMinimo} rows={3} maxLength={500} className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={motivoMinimo ? 'Explique por que a distribuição está sendo alterada (mínimo 5 caracteres).' : 'Explique por que a distribuição está sendo alterada.'} /></div> : null}
+        <div><label htmlFor="finalidade-recepcao" className="mb-1 block text-sm font-semibold">Finalidade *</label><select id="finalidade-recepcao" value={finalidade} onChange={(event) => setFinalidade(event.target.value as FinalidadeClinica)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"><option value="prova">Prova clínica</option><option value="instalacao">Instalação</option><option value="entrega">Entrega ao paciente</option></select></div>
+        {corrigindo ? <div><label htmlFor="motivo-correcao" className="mb-1 block text-sm font-semibold">Motivo da correção *</label><textarea id="motivo-correcao" value={observacao} onChange={(event) => setObservacao(event.target.value)} required minLength={motivoMinimo} rows={3} maxLength={500} className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100" placeholder={motivoMinimo ? 'Explique por que a distribuição está sendo alterada (mínimo 5 caracteres).' : 'Explique por que a distribuição está sendo alterada.'} /></div> : null}
         <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={onClose} disabled={disabled}>Cancelar</Button><Button type="submit" disabled={disabled || !dentista.trim()}>{disabled ? 'Salvando...' : corrigindo ? 'Salvar correção' : <><ChevronRight className="h-4 w-4" />Confirmar entrega</>}</Button></div>
       </form>
     </Modal>
@@ -572,20 +621,27 @@ function AgendamentoModal({ item, dentistas, hoje, disabled, onClose, onConfirm 
   onClose: () => void
   onConfirm: (agendado: boolean, dentista?: string, agendamento?: string) => void
 }) {
+  const podeSalvar = ['aguardando_distribuicao', 'com_dentista'].includes(item.situacao)
   const [dentista, setDentista] = useState(item.agendamentoConfirmado ? item.agendamentoDentista || '' : '')
   const [data, setData] = useState(item.agendamentoConfirmado ? dataHoraMaceio(item.agendamento) : '')
   const consultaClinicorp = item.clinicorp?.proximaConsulta ?? null
   return <Modal isOpen onClose={onClose} title={item.agendamentoConfirmado ? 'Editar agendamento' : 'Registrar agendamento'} description={`${item.paciente} · ${item.origem} #${item.id}`} size="md" mobileFullscreen dismissible={!disabled}>
-    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!disabled) onConfirm(true, dentista, data ? instanteMaceio(data) : undefined) }}>
+    <form className="space-y-4" onSubmit={event => {
+      event.preventDefault()
+      if (!disabled && podeSalvar) {
+        onConfirm(true, dentista, data ? (instanteMaceio(data) || undefined) : undefined)
+      }
+    }}>
       <p className="text-sm">O agendamento não altera a localização física nem registra resultado clínico.</p>
-      <label className="block text-sm">Dentista (opcional)<Input list="dentistas-agendamento-recepcao" value={dentista} onChange={event => setDentista(event.target.value)} maxLength={255} /></label>
-      <label className="block text-sm">Data e hora em Maceió (opcional)<Input type="datetime-local" value={data} onChange={event => setData(event.target.value)} /></label>
-      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={disabled} onClick={onClose}>Fechar</Button>{item.agendamentoConfirmado ? <Button type="button" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Cancelar este agendamento? A localização física não será alterada.')) onConfirm(false) }}>Cancelar agendamento</Button> : null}{['aguardando_distribuicao', 'com_dentista'].includes(item.situacao) ? <Button type="submit" disabled={disabled}>{disabled ? 'Salvando...' : 'Salvar agendamento'}</Button> : null}</div>
-      {consultaClinicorp ? (
+      <label className="block text-sm">Dentista (opcional)<Input list="dentistas-agendamento-recepcao" value={dentista} disabled={disabled || !podeSalvar} onChange={event => setDentista(event.target.value)} maxLength={255} /></label>
+      <label className="block text-sm">Data e hora em Maceió (opcional)<Input type="datetime-local" value={data} disabled={disabled || !podeSalvar} onChange={event => setData(event.target.value)} /></label>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={disabled} onClick={onClose}>Fechar</Button>{item.agendamentoConfirmado ? <Button type="button" variant="outline" disabled={disabled} onClick={() => { if (window.confirm('Cancelar este agendamento? A localização física não será alterada.')) onConfirm(false) }}>Cancelar agendamento</Button> : null}{podeSalvar ? <Button type="submit" disabled={disabled}>{disabled ? 'Salvando...' : 'Salvar agendamento'}</Button> : null}</div>
+      {!podeSalvar ? <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">Na situação atual só é possível cancelar o agendamento ativo.</p> : null}
+      {consultaClinicorp && podeSalvar ? (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-950">
           <p className="font-semibold">Consulta encontrada no Clinicorp</p>
           <p className="mt-0.5">{formatarDataDiaClinicorp(consultaClinicorp.data, hoje || '')}{consultaClinicorp.horaInicio ? ` às ${consultaClinicorp.horaInicio}` : ''} · {consultaClinicorp.dentistaNome || 'Profissional não informado'}</p>
-          <Button type="button" size="sm" variant="outline" className="mt-2 h-7 bg-white text-xs" onClick={() => {
+          <Button type="button" size="sm" variant="outline" className="mt-2 h-7 bg-white text-xs text-slate-900 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800" onClick={() => {
             if (consultaClinicorp.dentistaNome) setDentista(consultaClinicorp.dentistaNome)
             setData(dataHoraInputClinicorp(consultaClinicorp.data, consultaClinicorp.horaInicio))
           }}>Preencher com Clinicorp</Button>
